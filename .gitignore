@@ -15,9 +15,6 @@
 # Environment files
 /.env
 
-# Angular CLI and build artefacts
-/.angular-cli.json
-/.ng/
 
 # TypeScript cache
 *.tsbuildinfo
@@ -26,3 +23,10 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# no publishing.md
+PUBLISHING.md
+
+# no cursor files  
+.cursor/
+

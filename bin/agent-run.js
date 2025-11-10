@@ -30,6 +30,8 @@ program
   .option('-s, --src_dir <dir>', 'Project source code directory for code review agent - default to "src"')
   .option('-o, --output_file <file>', 'Output file - default to "code_review_report.md"', 'code_review_report.md')
   .option('-f, --output_format <format>', 'Output format - default to "markdown"', 'markdown')
+  .option('-k, --anthropic-api-key <key>', 'Anthropic API key (overrides ANTHROPIC_API_KEY environment variable)')
+  .option('-u, --anthropic-base-url <url>', 'Anthropic API base URL (overrides ANTHROPIC_BASE_URL environment variable)')
   .option('-l, --list_roles', 'List all available roles')
   .option('-v, --version', 'Program version')
   .option('-V, --verbose', 'Verbose mode');
@@ -62,6 +64,14 @@ if (options.list_roles) {
   console.log('Listing all available AppSec AI agent roles');
   listRoles(confDict, options.environment);
   process.exit(0);
+}
+
+// Set Anthropic API environment variables if provided via command line
+if (options.anthropicApiKey) {
+  process.env.ANTHROPIC_API_KEY = options.anthropicApiKey;
+}
+if (options.anthropicBaseUrl) {
+  process.env.ANTHROPIC_BASE_URL = options.anthropicBaseUrl;
 }
 
 // Prepare args

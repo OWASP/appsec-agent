@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.0.2] - 2024-XX-XX
+### Added
+- Command-line arguments `-k/--anthropic-api-key` and `-u/--anthropic-base-url` to pass Anthropic API credentials via the command line
+- Tests for CLI environment variable handling
+
+## [0.0.2] - 2024-11-10
 
 ### Added
 - Initial publishing of the AppSec Agent TypeScript package
@@ -19,8 +23,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configuration support via YAML files and environment variables
 - Comprehensive test suite
 
-### Changed
-- TypeScript reimplementation of the Python AppSec AI Agent toolkit
 
 ## [0.0.1] - 2024-11-04
 

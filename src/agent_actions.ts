@@ -17,10 +17,16 @@ export interface AgentArgs {
   verbose?: boolean;
 }
 
+interface ConversationEntry {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export class AgentActions {
   private confDict: ConfigDict;
   private environment: string;
   private args: AgentArgs;
+  private conversationHistory: ConversationEntry[] = []; // Store conversation history for simple_query_agent
 
   constructor(confDict: ConfigDict, environment: string, args: AgentArgs) {
     this.confDict = confDict;
@@ -35,13 +41,32 @@ export class AgentActions {
     const agentOptions = new AgentOptions(this.confDict, this.environment);
     const options = agentOptions.getSimpleQueryAgentOptions(this.args.role);
 
+    // Build prompt with conversation history
+    let fullPrompt: string;
+    if (this.conversationHistory.length > 0) {
+      // Include previous conversation context
+      let contextPrompt = 'Previous conversation:\n';
+      for (const entry of this.conversationHistory) {
+        if (entry.role === 'user') {
+          contextPrompt += `User: ${entry.content}\n`;
+        } else {
+          contextPrompt += `Assistant: ${entry.content}\n`;
+        }
+      }
+      fullPrompt = `${contextPrompt}\nUser: ${yourPrompt}`;
+    } else {
+      fullPrompt = yourPrompt;
+    }
+
     try {
       let accumulatedText = '';
       let hasPrintedHeader = false;
       let hasSeenStreamEvents = false;
       let messageCount = 0;
+      let assistantResponseText = '';
+      let finalResult: SDKResultMessage | null = null;
       
-      for await (const msg of query({ prompt: yourPrompt, options })) {
+      for await (const msg of query({ prompt: fullPrompt, options })) {
         messageCount++;
         
         // Debug logging (remove in production)
@@ -63,6 +88,7 @@ export class AgentActions {
               }
               // Accumulate and write streaming deltas directly
               accumulatedText += deltaText;
+              assistantResponseText += deltaText;
               process.stdout.write(deltaText);
             }
           }
@@ -73,54 +99,79 @@ export class AgentActions {
               console.log(`\nClaude:\n`);
               hasPrintedHeader = true;
             }
-            // Reset accumulated text for new content block
-            accumulatedText = '';
+            // Don't reset accumulatedText here - we want to accumulate ALL text across all blocks
+            // Only reset if this is truly a new message (but we can't tell that here)
+            // Actually, we should keep accumulating to get the full response
           }
-          // Handle message stop (streaming is complete)
+          // Handle message stop (one message/turn is complete, but stream may continue)
           else if (streamMsg.event?.type === 'message_stop') {
-            // Message is complete - ensure we have a newline
+            // One message is complete, but the stream may continue with more messages
+            // (e.g., after tools execute). Don't treat this as stream end.
             if (hasPrintedHeader && accumulatedText) {
-              // Stream is done, newline will be added by result handler
+              // This message is done, but more may come
             }
+          }
+          // Handle other stream event types we might not be handling
+          else if (this.args.verbose) {
+            console.error(`[DEBUG] Unhandled stream event type: ${streamMsg.event?.type}`);
           }
         }
         // Handle assistant messages (complete messages) - only use if no stream events
         // Note: If we've seen stream events, the content was already printed incrementally
-        else if (msg.type === 'assistant' && !hasSeenStreamEvents) {
+        // BUT: When tools are used, there may be more assistant messages after tools complete
+        // So we need to handle both cases
+        else if (msg.type === 'assistant') {
           const assistantMsg = msg as SDKAssistantMessage;
           if (assistantMsg.message.content) {
             for (const block of assistantMsg.message.content) {
               if (block.type === 'text') {
                 const currentText = block.text || '';
-                if (currentText.length > 0 && currentText !== accumulatedText) {
-                  if (!hasPrintedHeader) {
-                    console.log(`\nClaude:\n`);
-                    hasPrintedHeader = true;
+                if (currentText && currentText.length > 0) {
+                  // If we haven't seen stream events, print the complete message
+                  if (!hasSeenStreamEvents) {
+                    if (!hasPrintedHeader) {
+                      console.log(`\nClaude:\n`);
+                      hasPrintedHeader = true;
+                    }
+                    console.log(currentText);
+                    accumulatedText = currentText;
+                    assistantResponseText = currentText;
+                  } else {
+                    // If we've seen stream events, this might be additional content after tools
+                    // Check if this is new content not already accumulated
+                    if (!currentText.startsWith(accumulatedText) && currentText !== accumulatedText) {
+                      // This is additional content (e.g., after tools complete)
+                      const newText = currentText.slice(accumulatedText.length);
+                      if (newText) {
+                        process.stdout.write(newText);
+                        accumulatedText = currentText;
+                        assistantResponseText = currentText;
+                      }
+                    } else if (currentText.length > accumulatedText.length) {
+                      // More content than we've accumulated
+                      const newText = currentText.slice(accumulatedText.length);
+                      if (newText) {
+                        process.stdout.write(newText);
+                        accumulatedText = currentText;
+                        assistantResponseText = currentText;
+                      }
+                    }
                   }
-                  // Print the complete text only if it's different from what we've accumulated
-                  console.log(currentText);
-                  accumulatedText = currentText;
                 }
               }
             }
           }
         }
-        // If we see assistant message after stream events, ignore it (already printed)
-        else if (msg.type === 'assistant' && hasSeenStreamEvents) {
-          // Already printed via stream events, skip
-          if (this.args.verbose) {
-            console.error(`[DEBUG] Skipping assistant message (already printed via stream events)`);
-          }
-        }
-        // Handle result messages
+        // Handle result messages - collect but don't display until stream completes
+        // IMPORTANT: The stream may continue after a result message if tools are being used
+        // We must continue processing until the stream is truly exhausted
         else if (msg.type === 'result') {
           const resultMsg = msg as SDKResultMessage;
-          // Ensure we flush any partial output and add newline
-          if (hasPrintedHeader) {
-            console.log(); // New line after final output
-          }
+          // Always update finalResult with the latest result message
+          // (there may be multiple result messages if tools are used)
+          finalResult = resultMsg;
           
-          // Check for errors in result messages
+          // Check for errors in result messages - display errors immediately
           if (resultMsg.is_error) {
             const errorMsg = (resultMsg as any).errors?.[0] || (resultMsg as any).error_message || 'Unknown error occurred';
             console.error(`\nError: ${errorMsg}`);
@@ -132,13 +183,12 @@ export class AgentActions {
               console.error(`\nNote: The conversation stopped because max_turns (${options.maxTurns || 1}) was reached.`);
               console.error(`To allow the agent to use tools and continue, increase max_turns in the configuration or use the code_reviewer role.`);
             }
-          } else if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
-            console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);
           }
           
-          // Debug: log turn count
+          // Debug: log turn count and continue processing (stream may not be done yet)
           if (this.args.verbose) {
             console.error(`[DEBUG] Result: num_turns=${resultMsg.num_turns}, is_error=${resultMsg.is_error}`);
+            console.error(`[DEBUG] Continuing to process stream (may have more messages after tools)`);
           }
         }
         // Handle tool progress messages (agent might be using tools)
@@ -149,9 +199,13 @@ export class AgentActions {
             console.log(`[Tool Progress] ${toolMsg.tool_name}: ${toolMsg.elapsed_time_seconds}s`);
           }
         }
-        // Log other message types for debugging
-        else if (this.args.verbose) {
-          console.log(`[DEBUG] Received message type: ${(msg as any).type}`);
+        // Log other message types - always log to help debug issues
+        else {
+          // Unknown message type - log it to help debug
+          if (this.args.verbose) {
+            console.error(`[DEBUG] Received unknown message type: ${(msg as any).type}`);
+            console.error(`[DEBUG] Message content:`, JSON.stringify(msg, null, 2));
+          }
         }
       }
       
@@ -159,10 +213,39 @@ export class AgentActions {
       if (this.args.verbose) {
         console.error(`[DEBUG] Total messages processed: ${messageCount}`);
       }
+      
+      // Now that the stream is complete, ensure all stdout writes are flushed
+      // Use multiple setImmediate calls to ensure the event loop processes all pending writes
+      // This is critical when using process.stdout.write() for streaming
+      await new Promise<void>(resolve => setImmediate(resolve));
+      await new Promise<void>(resolve => setImmediate(resolve));
+      
+      // Now that the stream is complete, display the final result (cost, etc.)
+      if (finalResult) {
+        // Ensure we flush any partial output and add newline
+        if (hasPrintedHeader) {
+          console.log(); // New line after final output
+        }
+        
+        // Display cost only after stream is completely done
+        if (!finalResult.is_error && finalResult.total_cost_usd && finalResult.total_cost_usd > 0) {
+          console.log(`\nCost: $${finalResult.total_cost_usd.toFixed(4)}`);
+        }
+      }
+      
+      // One more flush to ensure cost is written before returning
+      await new Promise<void>(resolve => setImmediate(resolve));
+      
+      // Store the current exchange in conversation history
+      this.conversationHistory.push({ role: 'user', content: yourPrompt });
+      if (assistantResponseText) {
+        this.conversationHistory.push({ role: 'assistant', content: assistantResponseText });
+      }
     } catch (error) {
       console.error('Error during query:', error);
       throw error;
     }
+    // Add newline for spacing after response (matching Python version)
     console.log();
     return '';
   }

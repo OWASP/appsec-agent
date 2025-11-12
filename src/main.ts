@@ -15,20 +15,44 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
 
   if (args.role === 'simple_query_agent') {
     console.log('Running Simple Query Agent');
+    console.log("(Type '/end' to exit the conversation)\n");
+    
     const readline = require('readline');
     const rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout
     });
 
-    const yourPrompt = await new Promise<string>((resolve) => {
-      rl.question('Please enter your query: ', (answer: string) => {
-        rl.close();
-        resolve(answer);
+    // Continuous conversation loop
+    while (true) {
+      // Wait for Claude's response to complete before showing next prompt
+      const yourPrompt = await new Promise<string>((resolve) => {
+        rl.question("Your turn (enter '/end' to exit the conversation): ", (answer: string) => {
+          resolve(answer);
+        });
       });
-    });
 
-    await agentActions.simpleQueryClaudeWithOptions(yourPrompt);
+      // Check for exit command
+      if (yourPrompt.trim().toLowerCase() === '/end') {
+        console.log('\nExiting Simple Query Agent. Goodbye!');
+        rl.close();
+        break;
+      }
+
+      // Skip empty prompts
+      if (!yourPrompt.trim()) {
+        continue;
+      }
+
+      // Process the query and wait for complete response
+      // The method will add proper spacing after the response completes
+      await agentActions.simpleQueryClaudeWithOptions(yourPrompt);
+      
+      // Ensure stdout is fully flushed and event loop processes all writes
+      // before showing next prompt. This prevents the prompt from appearing
+      // before streaming output completes.
+      await new Promise<void>(resolve => setImmediate(resolve));
+    }
   } else if (args.role === 'code_reviewer') {
     console.log('Running Code Review Agent');
     let userPrompt: string;

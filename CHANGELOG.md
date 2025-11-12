@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Command-line arguments `-k/--anthropic-api-key` and `-u/--anthropic-base-url` to pass Anthropic API credentials via the command line
 - Tests for CLI environment variable handling
 
+### Changed
+- **simple_query_agent**: Retrofitted to match Python implementation with continuous conversation loop
+  - Added conversation history tracking to maintain context across multiple queries
+  - Implemented continuous conversation loop with `/end` command to exit
+  - Improved stream event handling to properly process all messages including tool results
+  - Fixed cost display timing to only show after stream completely finishes (including tool execution)
+  - Enhanced assistant message processing to handle content that arrives after tools complete
+  - Added proper stdout flushing to ensure all streaming output is displayed before showing cost and next prompt
+
 ## [0.0.2] - 2024-11-10
 
 ### Added

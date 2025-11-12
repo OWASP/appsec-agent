@@ -7,7 +7,7 @@ default: &default
   simple_query_agent:
     options: 
       system_prompt: "You are an AppSec expert assistant. You are responsible for providing security advice and guidance to the user."
-      max_turns: 1
+      max_turns: 100
     output_format: "stdout"
     verbose: True
   code_reviewer:

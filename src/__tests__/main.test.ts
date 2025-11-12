@@ -22,11 +22,12 @@ jest.mock('../utils', () => ({
 // Mock readline
 const mockQuestion = jest.fn();
 const mockClose = jest.fn();
+const mockReadlineInterface = {
+  question: mockQuestion,
+  close: mockClose
+};
 jest.mock('readline', () => ({
-  createInterface: jest.fn(() => ({
-    question: mockQuestion,
-    close: mockClose
-  }))
+  createInterface: jest.fn(() => mockReadlineInterface)
 }));
 
 describe('main', () => {
@@ -58,9 +59,8 @@ describe('main', () => {
     });
 
     // Reset readline mock
-    mockQuestion.mockImplementation((query: string, callback: (answer: string) => void) => {
-      callback('test query');
-    });
+    mockQuestion.mockReset();
+    mockClose.mockReset();
   });
 
   afterEach(() => {
@@ -71,12 +71,23 @@ describe('main', () => {
   });
 
   describe('simple_query_agent', () => {
-    it('should run simple query agent', async () => {
+    it('should run simple query agent and exit on /end', async () => {
       const originalExit = process.exit;
       const exitMock = jest.fn((code?: number) => {
         // Prevent actual exit in tests
       }) as any;
       process.exit = exitMock;
+
+      // Mock readline to first return a query, then /end
+      let callCount = 0;
+      mockQuestion.mockImplementation((query: string, callback: (answer: string) => void) => {
+        callCount++;
+        if (callCount === 1) {
+          callback('test query');
+        } else {
+          callback('/end');
+        }
+      });
 
       const args: AgentArgs = {
         role: 'simple_query_agent',
@@ -86,15 +97,31 @@ describe('main', () => {
       await main(mockConfDict, args);
 
       expect(mockAgentActions.simpleQueryClaudeWithOptions).toHaveBeenCalledWith('test query');
+      expect(mockClose).toHaveBeenCalled();
       expect(exitMock).toHaveBeenCalledWith(0);
 
       process.exit = originalExit;
     });
 
-    it('should exit with code 0 after completion', async () => {
+    it('should skip empty prompts and continue', async () => {
       const originalExit = process.exit;
-      const exitMock = jest.fn() as any;
+      const exitMock = jest.fn((code?: number) => {
+        // Prevent actual exit in tests
+      }) as any;
       process.exit = exitMock;
+
+      // Mock readline to return empty string, then a query, then /end
+      let callCount = 0;
+      mockQuestion.mockImplementation((query: string, callback: (answer: string) => void) => {
+        callCount++;
+        if (callCount === 1) {
+          callback('   '); // Empty/whitespace only
+        } else if (callCount === 2) {
+          callback('test query');
+        } else {
+          callback('/end');
+        }
+      });
 
       const args: AgentArgs = {
         role: 'simple_query_agent',
@@ -103,6 +130,36 @@ describe('main', () => {
 
       await main(mockConfDict, args);
 
+      // Should only call with the non-empty query
+      expect(mockAgentActions.simpleQueryClaudeWithOptions).toHaveBeenCalledTimes(1);
+      expect(mockAgentActions.simpleQueryClaudeWithOptions).toHaveBeenCalledWith('test query');
+      expect(mockClose).toHaveBeenCalled();
+      expect(exitMock).toHaveBeenCalledWith(0);
+
+      process.exit = originalExit;
+    });
+
+    it('should handle case-insensitive /end command', async () => {
+      const originalExit = process.exit;
+      const exitMock = jest.fn((code?: number) => {
+        // Prevent actual exit in tests
+      }) as any;
+      process.exit = exitMock;
+
+      // Mock readline to return /END (uppercase)
+      mockQuestion.mockImplementation((query: string, callback: (answer: string) => void) => {
+        callback('/END');
+      });
+
+      const args: AgentArgs = {
+        role: 'simple_query_agent',
+        environment: 'default'
+      };
+
+      await main(mockConfDict, args);
+
+      expect(mockAgentActions.simpleQueryClaudeWithOptions).not.toHaveBeenCalled();
+      expect(mockClose).toHaveBeenCalled();
       expect(exitMock).toHaveBeenCalledWith(0);
 
       process.exit = originalExit;

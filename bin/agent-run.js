@@ -67,7 +67,12 @@ if (options.list_roles) {
 }
 
 // Set Anthropic API environment variables if provided via command line
+// SECURITY WARNING: Passing API keys via command line is insecure as they may be visible
+// in process lists and shell history. Prefer using environment variables.
 if (options.anthropicApiKey) {
+  console.warn('⚠️  SECURITY WARNING: API key provided via command line argument.');
+  console.warn('   Command-line arguments may be visible in process lists and shell history.');
+  console.warn('   For better security, use the ANTHROPIC_API_KEY environment variable instead.\n');
   process.env.ANTHROPIC_API_KEY = options.anthropicApiKey;
 }
 if (options.anthropicBaseUrl) {

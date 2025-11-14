@@ -18,7 +18,11 @@ import {
   getProperty,
   copyProjectSrcDir,
   listRoles,
-  printVersionInfo
+  printVersionInfo,
+  isSafePath,
+  validateAndSanitizePath,
+  validateDirectoryPath,
+  validateOutputFilePath
 } from '../utils';
 
 describe('Utils', () => {
@@ -356,6 +360,166 @@ describe('Utils', () => {
       expect(versionLine).toBeTruthy();
       
       consoleSpy.mockRestore();
+    });
+  });
+
+  describe('Security validation functions', () => {
+    describe('isSafePath', () => {
+      it('should return true for safe relative paths', () => {
+        expect(isSafePath('test.txt')).toBe(true);
+        expect(isSafePath('folder/file.txt')).toBe(true);
+        expect(isSafePath('folder/subfolder/file.txt')).toBe(true);
+      });
+
+      it('should return false for paths with directory traversal', () => {
+        expect(isSafePath('../file.txt')).toBe(false);
+        expect(isSafePath('../../file.txt')).toBe(false);
+        expect(isSafePath('folder/../file.txt')).toBe(false);
+      });
+
+      it('should return false for absolute paths when not allowed', () => {
+        expect(isSafePath('/absolute/path', false)).toBe(false);
+        expect(isSafePath('C:\\absolute\\path', false)).toBe(false);
+      });
+
+      it('should allow absolute paths when explicitly allowed', () => {
+        expect(isSafePath('/absolute/path', true)).toBe(true);
+        expect(isSafePath('C:\\absolute\\path', true)).toBe(true);
+      });
+
+      it('should return false for null bytes and control characters', () => {
+        expect(isSafePath('test\0file.txt')).toBe(false);
+        expect(isSafePath('test\nfile.txt')).toBe(false);
+        expect(isSafePath('test\tfile.txt')).toBe(false);
+      });
+
+      it('should return false for invalid input', () => {
+        expect(isSafePath('')).toBe(false);
+        expect(isSafePath(null as any)).toBe(false);
+        expect(isSafePath(undefined as any)).toBe(false);
+      });
+    });
+
+    describe('validateAndSanitizePath', () => {
+      it('should validate and normalize safe paths', () => {
+        const result = validateAndSanitizePath('folder/file.txt');
+        expect(result).toBeTruthy();
+        expect(typeof result).toBe('string');
+      });
+
+      it('should reject paths with directory traversal', () => {
+        expect(validateAndSanitizePath('../file.txt')).toBeNull();
+        expect(validateAndSanitizePath('folder/../../file.txt')).toBeNull();
+      });
+
+      it('should validate paths against base directory', () => {
+        const baseDir = testDir;
+        const result = validateAndSanitizePath('subfolder/file.txt', baseDir);
+        expect(result).toBeTruthy();
+        expect(result?.startsWith(baseDir)).toBe(true);
+      });
+
+      it('should reject paths outside base directory', () => {
+        const baseDir = testDir;
+        // This should be rejected because it would resolve outside baseDir
+        const result = validateAndSanitizePath('../../etc/passwd', baseDir);
+        expect(result).toBeNull();
+      });
+
+      it('should allow absolute paths when allowed', () => {
+        const result = validateAndSanitizePath('/tmp/test', undefined, true);
+        expect(result).toBeTruthy();
+      });
+
+      it('should reject absolute paths when not allowed', () => {
+        const result = validateAndSanitizePath('/tmp/test', undefined, false);
+        expect(result).toBeNull();
+      });
+    });
+
+    describe('validateDirectoryPath', () => {
+      it('should validate existing directories', () => {
+        expect(validateDirectoryPath(testDir, true)).toBe(true);
+      });
+
+      it('should return false for non-existent directories when mustExist is true', () => {
+        expect(validateDirectoryPath(path.join(testDir, 'nonexistent'), true)).toBe(false);
+      });
+
+      it('should return true for valid paths when mustExist is false', () => {
+        expect(validateDirectoryPath('valid/path', false)).toBe(true);
+      });
+
+      it('should return false for paths with directory traversal', () => {
+        expect(validateDirectoryPath('../invalid', false)).toBe(false);
+      });
+    });
+
+    describe('validateOutputFilePath', () => {
+      it('should validate relative output file paths', () => {
+        const result = validateOutputFilePath('output.txt', testDir);
+        expect(result).toBeTruthy();
+        expect(result?.startsWith(testDir)).toBe(true);
+      });
+
+      it('should create parent directories if needed', () => {
+        const result = validateOutputFilePath('subfolder/output.txt', testDir);
+        expect(result).toBeTruthy();
+        const parentDir = path.dirname(result!);
+        expect(fs.existsSync(parentDir)).toBe(true);
+      });
+
+      it('should reject paths with directory traversal', () => {
+        const result = validateOutputFilePath('../output.txt', testDir);
+        expect(result).toBeNull();
+      });
+
+      it('should reject absolute paths', () => {
+        const result = validateOutputFilePath('/tmp/output.txt', testDir);
+        expect(result).toBeNull();
+      });
+
+      it('should ensure output is within base directory', () => {
+        const result = validateOutputFilePath('output.txt', testDir);
+        expect(result).toBeTruthy();
+        expect(result?.startsWith(testDir)).toBe(true);
+      });
+    });
+
+    describe('runCommand security', () => {
+      it('should reject commands with command injection patterns', () => {
+        const result = runCommand('echo test; rm -rf /');
+        expect(result.code).toBe(1);
+        expect(result.stderr).toContain('dangerous characters');
+      });
+
+      it('should reject commands with backticks', () => {
+        const result = runCommand('echo `whoami`');
+        expect(result.code).toBe(1);
+        expect(result.stderr).toContain('dangerous characters');
+      });
+
+      it('should reject commands with pipe characters', () => {
+        const result = runCommand('echo test | cat');
+        expect(result.code).toBe(1);
+        expect(result.stderr).toContain('dangerous characters');
+      });
+
+      it('should reject invalid command input', () => {
+        const result1 = runCommand('');
+        expect(result1.code).toBe(1);
+        expect(result1.stderr).toContain('non-empty string');
+
+        const result2 = runCommand(null as any);
+        expect(result2.code).toBe(1);
+        expect(result2.stderr).toContain('non-empty string');
+      });
+
+      it('should execute safe commands successfully', () => {
+        const result = runCommand('echo "safe command"');
+        expect(result.code).toBe(0);
+        expect(result.stdout.trim()).toBe('safe command');
+      });
     });
   });
 });

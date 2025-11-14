@@ -5,20 +5,68 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.0.4] - 2025-11-13
 
 ### Added
 - Command-line arguments `-k/--anthropic-api-key` and `-u/--anthropic-base-url` to pass Anthropic API credentials via the command line
 - Tests for CLI environment variable handling
+- **Security**: Comprehensive security validation utilities
+  - `isSafePath()` function to detect dangerous path patterns (directory traversal, null bytes, control characters)
+  - `validateAndSanitizePath()` function to normalize and validate file paths against base directories
+  - `validateDirectoryPath()` function to validate source directory inputs
+  - `validateOutputFilePath()` function to ensure output files are written only within intended directories
+  - Path validation for all user-provided file and directory inputs
+  - Command injection protection in `runCommand()` function with pattern detection and timeout limits
+  - API key security warnings when credentials are passed via command-line arguments
+- **Security Tests**: 26 new test cases covering all security validation functions
+  - Path traversal attack prevention tests
+  - Command injection detection tests
+  - Input validation edge case tests
+  - Directory and file path security tests
 
 ### Changed
-- **simple_query_agent**: Retrofitted to match Python implementation with continuous conversation loop
+- **simple_query_agent**: 
   - Added conversation history tracking to maintain context across multiple queries
   - Implemented continuous conversation loop with `/end` command to exit
   - Improved stream event handling to properly process all messages including tool results
   - Fixed cost display timing to only show after stream completely finishes (including tool execution)
   - Enhanced assistant message processing to handle content that arrives after tools complete
   - Added proper stdout flushing to ensure all streaming output is displayed before showing cost and next prompt
+- **Security**: Enhanced `copyProjectSrcDir()` function with comprehensive path validation
+  - Validates source directory paths to prevent directory traversal attacks
+  - Ensures temporary directories are created only within the working directory
+  - Sanitizes directory names to prevent path injection
+  - Improved error handling with clear security-focused error messages
+- **Security**: Enhanced `runCommand()` function with security hardening
+  - Added validation to detect command injection patterns (`;`, `&`, `|`, backticks, etc.)
+  - Added timeout protection (30 second default)
+  - Added max buffer limit (1MB default) to prevent resource exhaustion
+  - Improved error messages for security violations
+- **Security**: Added input validation in `main()` function
+  - Validates `src_dir` parameter before use in code_reviewer and threat_modeler roles
+  - Validates `output_file` parameter to prevent writing outside intended directories
+  - Ensures all file operations are restricted to safe paths
+- **Security**: Improved temporary file cleanup
+  - Added cleanup for temporary directories in code_reviewer role
+  - Enhanced error handling for cleanup operations in threat_modeler role
+  - Better resource management to prevent temporary file accumulation
+
+### Security
+- **Fixed**: Path traversal vulnerability in `copyProjectSrcDir()` function
+  - Previously allowed directory traversal sequences that could access files outside intended directories
+  - Now validates and sanitizes all paths before file operations
+- **Fixed**: Command injection risk in `runCommand()` function
+  - Previously executed commands without validation
+  - Now validates commands for dangerous patterns before execution
+- **Fixed**: Unvalidated file path inputs
+  - Previously used user-provided paths without validation
+  - Now validates all file and directory paths before use
+- **Fixed**: Output file path security
+  - Previously allowed writing files outside the working directory
+  - Now restricts all output files to the current working directory
+- **Improved**: API key security awareness
+  - Added warnings when API keys are passed via command-line (visible in process lists)
+  - Recommends using environment variables for better security
 
 ## [0.0.2] - 2024-11-10
 

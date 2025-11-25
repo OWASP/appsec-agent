@@ -16,11 +16,26 @@ export interface ToolUsageLog {
 export class AgentOptions {
   private confDict: ConfigDict;
   private environment: string;
-  public toolUsageLog: ToolUsageLog[] = [];
+  private toolUsageLog: ToolUsageLog[] = [];
 
   constructor(confDict: ConfigDict, environment: string) {
     this.confDict = confDict;
     this.environment = environment;
+  }
+
+  /**
+   * Get a copy of the tool usage log
+   * @returns A copy of the tool usage log array
+   */
+  getToolUsageLog(): ToolUsageLog[] {
+    return [...this.toolUsageLog];
+  }
+
+  /**
+   * Clear the tool usage log
+   */
+  clearToolUsageLog(): void {
+    this.toolUsageLog = [];
   }
 
   /**

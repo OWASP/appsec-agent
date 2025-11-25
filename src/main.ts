@@ -11,6 +11,9 @@ import { AgentActions, AgentArgs } from './agent_actions';
 import { copyProjectSrcDir, validateOutputFilePath, validateDirectoryPath } from './utils';
 
 export async function main(confDict: any, args: AgentArgs): Promise<void> {
+  // Capture working directory once at the start to avoid race conditions
+  // in concurrent contexts (e.g., web applications)
+  const currentWorkingDir = process.cwd();
   const agentActions = new AgentActions(confDict, args.environment, args);
 
   if (args.role === 'simple_query_agent') {
@@ -57,7 +60,7 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
     console.log('Running Code Review Agent');
     
     // Validate output file path
-    const validatedOutputFile = validateOutputFilePath(args.output_file || 'code_review_report.md');
+    const validatedOutputFile = validateOutputFilePath(args.output_file || 'code_review_report.md', currentWorkingDir);
     if (!validatedOutputFile) {
       console.error(`Error: Invalid output file path: ${args.output_file}`);
       console.error('Output file path must be relative to the current working directory and cannot contain directory traversal sequences.');
@@ -75,7 +78,6 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
         process.exit(1);
       }
       
-      const currentWorkingDir = process.cwd();
       tmpSrcDir = copyProjectSrcDir(currentWorkingDir, args.src_dir);
       userPrompt = `Review the code in the current working directory ${tmpSrcDir}, then provide a report of the potential security and privacy issues found in the code. Please write the review report in the ${validatedOutputFile} file under current working directory in ${args.output_format} format.`;
     } else {
@@ -96,7 +98,7 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
     console.log('Running Threat Modeler');
     
     // Validate output file path
-    const validatedOutputFile = validateOutputFilePath(args.output_file || 'threat_model_report.md');
+    const validatedOutputFile = validateOutputFilePath(args.output_file || 'threat_model_report.md', currentWorkingDir);
     if (!validatedOutputFile) {
       console.error(`Error: Invalid output file path: ${args.output_file}`);
       console.error('Output file path must be relative to the current working directory and cannot contain directory traversal sequences.');
@@ -116,7 +118,6 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
         process.exit(1);
       }
       
-      const currentWorkingDir = process.cwd();
       tmpSrcDir = copyProjectSrcDir(currentWorkingDir, args.src_dir);
       userPrompt = `Review the code in the ${tmpSrcDir} directory. ${userPrompt0}`;
     } else {

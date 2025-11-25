@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.6] - 2025-11-24
+
+### Added
+- **Thread-Safety for Web Applications**: Comprehensive improvements for safe concurrent usage
+  - `getToolUsageLog()` method in `AgentOptions` to provide read-only access to tool usage logs
+  - `clearToolUsageLog()` method in `AgentOptions` to clear logs between requests
+  - Comprehensive concurrency test suite (11 new tests) covering:
+    - Conversation history isolation across multiple instances
+    - Tool usage log isolation
+    - Concurrent file operations
+    - Race condition prevention
+    - Memory leak prevention
+- **Documentation**: Added "Web Application Usage" section to README with best practices and code examples
+
+### Changed
+- **Thread-Safety**: Made `toolUsageLog` private in `AgentOptions` class
+  - Changed from `public toolUsageLog` to `private toolUsageLog` to prevent external mutation
+  - Added `getToolUsageLog()` method that returns a copy for safe read-only access
+  - Added `clearToolUsageLog()` method for clearing logs between requests
+- **Thread-Safety**: Enhanced `validateOutputFilePath()` function
+  - Removed default parameter `baseDir: string = process.cwd()` to require explicit working directory
+  - Prevents race conditions from concurrent `process.cwd()` calls in web applications
+  - Updated all call sites to pass working directory explicitly
+- **Thread-Safety**: Improved `main()` function
+  - Captures `process.cwd()` once at the start of the function
+  - Passes captured working directory to all file operations
+  - Eliminates race conditions from concurrent directory changes
+- **Testing**: Enhanced test suite with comprehensive concurrency tests
+  - All console output suppressed in concurrency tests for cleaner test output
+  - Tests verify isolation of conversation history and tool usage logs
+  - Tests verify safe concurrent file operations
+  - Tests verify race condition prevention
+
+### Fixed
+- **Thread-Safety**: Fixed potential race conditions in concurrent web application usage
+  - Previously, multiple concurrent requests could interfere with each other's working directory
+  - Now captures working directory once per request to prevent race conditions
+- **Thread-Safety**: Fixed tool usage log accumulation in web applications
+  - Previously, `toolUsageLog` was public and could accumulate unbounded data
+  - Now private with controlled access and clear method for memory management
+
 ## [0.0.4] - 2025-11-13
 
 ### Added

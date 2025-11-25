@@ -136,10 +136,10 @@ export function validateDirectoryPath(dirPath: string, mustExist: boolean = true
 /**
  * Validate output file path to prevent writing outside intended directories
  * @param filePath The output file path (must be relative, not absolute)
- * @param baseDir The base directory (usually current working directory)
+ * @param baseDir The base directory (must be provided explicitly to avoid race conditions in concurrent contexts)
  * @returns The validated absolute path, or null if invalid
  */
-export function validateOutputFilePath(filePath: string, baseDir: string = process.cwd()): string | null {
+export function validateOutputFilePath(filePath: string, baseDir: string): string | null {
   if (!filePath || typeof filePath !== 'string') {
     return null;
   }

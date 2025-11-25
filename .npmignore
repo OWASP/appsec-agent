@@ -1,8 +1,22 @@
+# Source files
 src/
 *.ts
 !bin/*.js
 tsconfig.json
+
+# Test files and config
+**/__tests__/
+**/*.test.ts
+jest.config.js
+coverage/
+
+# Development files
 .gitignore
 *.log
 .DS_Store
+.env
+*.tsbuildinfo
+
+# Documentation (if not needed in package)
+PUBLISHING.md
 

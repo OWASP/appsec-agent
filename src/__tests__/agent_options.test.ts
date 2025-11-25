@@ -36,7 +36,7 @@ describe('AgentOptions', () => {
     it('should initialize with config dict and environment', () => {
       const agentOptions = new AgentOptions(mockConfDict, environment);
       expect(agentOptions).toBeInstanceOf(AgentOptions);
-      expect(agentOptions.toolUsageLog).toEqual([]);
+      expect(agentOptions.getToolUsageLog()).toEqual([]);
     });
   });
 
@@ -58,9 +58,9 @@ describe('AgentOptions', () => {
         behavior: 'allow',
         updatedInput: inputData
       });
-      expect(agentOptions.toolUsageLog).toHaveLength(1);
-      expect(agentOptions.toolUsageLog[0].tool).toBe(toolName);
-      expect(agentOptions.toolUsageLog[0].input).toEqual(inputData);
+      expect(agentOptions.getToolUsageLog()).toHaveLength(1);
+      expect(agentOptions.getToolUsageLog()[0].tool).toBe(toolName);
+      expect(agentOptions.getToolUsageLog()[0].input).toEqual(inputData);
       expect(consoleSpy).toHaveBeenCalled();
       
       consoleSpy.mockRestore();
@@ -78,7 +78,7 @@ describe('AgentOptions', () => {
       const result = await agentOptions.toolPermissionCallback(toolName, inputData, options);
 
       expect(result.behavior).toBe('allow');
-      expect(agentOptions.toolUsageLog[0].suggestions).toBe('');
+      expect(agentOptions.getToolUsageLog()[0].suggestions).toBe('');
     });
 
     it('should accumulate multiple tool usage logs', async () => {
@@ -92,8 +92,47 @@ describe('AgentOptions', () => {
       await agentOptions.toolPermissionCallback('Write', { path: '2' }, baseOptions);
       await agentOptions.toolPermissionCallback('Grep', { path: '3' }, baseOptions);
 
-      expect(agentOptions.toolUsageLog).toHaveLength(3);
-      expect(agentOptions.toolUsageLog.map(log => log.tool)).toEqual(['Read', 'Write', 'Grep']);
+      expect(agentOptions.getToolUsageLog()).toHaveLength(3);
+      expect(agentOptions.getToolUsageLog().map(log => log.tool)).toEqual(['Read', 'Write', 'Grep']);
+    });
+  });
+
+  describe('getToolUsageLog', () => {
+    it('should return a copy of the tool usage log', async () => {
+      const agentOptions = new AgentOptions(mockConfDict, environment);
+      const baseOptions = {
+        signal: new AbortController().signal,
+        toolUseID: 'test-tool-use-id'
+      };
+      
+      await agentOptions.toolPermissionCallback('Read', { path: '1' }, baseOptions);
+      
+      const log1 = agentOptions.getToolUsageLog();
+      const log2 = agentOptions.getToolUsageLog();
+      
+      // Should return copies, not the same reference
+      expect(log1).not.toBe(log2);
+      expect(log1).toEqual(log2);
+    });
+  });
+
+  describe('clearToolUsageLog', () => {
+    it('should clear the tool usage log', async () => {
+      const agentOptions = new AgentOptions(mockConfDict, environment);
+      const baseOptions = {
+        signal: new AbortController().signal,
+        toolUseID: 'test-tool-use-id'
+      };
+      
+      await agentOptions.toolPermissionCallback('Read', { path: '1' }, baseOptions);
+      await agentOptions.toolPermissionCallback('Write', { path: '2' }, baseOptions);
+      
+      expect(agentOptions.getToolUsageLog()).toHaveLength(2);
+      
+      agentOptions.clearToolUsageLog();
+      
+      expect(agentOptions.getToolUsageLog()).toHaveLength(0);
+      expect(agentOptions.getToolUsageLog()).toEqual([]);
     });
   });
 

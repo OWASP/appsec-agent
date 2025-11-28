@@ -32,7 +32,7 @@
     "typescript"
   ],
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.1.1",
+    "@anthropic-ai/claude-agent-sdk": "^0.1.10",
     "yaml": "^2.4.0",
     "commander": "^11.1.0",
     "fs-extra": "^11.2.0"

@@ -1,6 +1,6 @@
 {
   "name": "appsec-agent",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "TypeScript package for AppSec AI Agent management",
   "author": "Sam Li",
   "license": "MIT",
@@ -50,4 +50,3 @@
     "node": ">=18.0.0"
   }
 }
-

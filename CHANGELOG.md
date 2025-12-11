@@ -5,7 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.0.8] - 2025-01-XX
+## [0.1.0] - 2025-12-10
+
+### Added
+- **simple_query_agent**: Added `--src_dir` command line argument support
+  - Allows copying source code directories to a hidden folder for agent context
+  - Agent can search and read files within the copied directory to answer questions
+  - Automatically cleans up temporary directory when user exits
+  - Works similarly to `code_reviewer` role's `--src_dir` functionality
+  - Updated CLI help text to indicate `--src_dir` works with both `simple_query_agent` and `code_reviewer`
+
+### Changed
+- **Path Validation**: Enhanced `validateDirectoryPath()` to allow relative paths with directory traversal sequences
+  - Relative paths like `../sast-ai-app/backend/` are now allowed and get resolved to absolute paths
+  - Maintains security by resolving paths before validation
+  - Updated `copyProjectSrcDir()` to handle relative paths properly
+- **Documentation**: Updated README with `--src_dir` usage examples for `simple_query_agent`
+
+## [0.0.8] - 2025-12-10
 
 ### Added
 - Peer dependency `@anthropic-ai/claude-code@2.0.58` for compatibility with Claude Code integration

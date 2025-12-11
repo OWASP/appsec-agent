@@ -96,7 +96,7 @@ describe('main', () => {
 
       await main(mockConfDict, args);
 
-      expect(mockAgentActions.simpleQueryClaudeWithOptions).toHaveBeenCalledWith('test query');
+      expect(mockAgentActions.simpleQueryClaudeWithOptions).toHaveBeenCalledWith('test query', null);
       expect(mockClose).toHaveBeenCalled();
       expect(exitMock).toHaveBeenCalledWith(0);
 
@@ -132,7 +132,7 @@ describe('main', () => {
 
       // Should only call with the non-empty query
       expect(mockAgentActions.simpleQueryClaudeWithOptions).toHaveBeenCalledTimes(1);
-      expect(mockAgentActions.simpleQueryClaudeWithOptions).toHaveBeenCalledWith('test query');
+      expect(mockAgentActions.simpleQueryClaudeWithOptions).toHaveBeenCalledWith('test query', null);
       expect(mockClose).toHaveBeenCalled();
       expect(exitMock).toHaveBeenCalledWith(0);
 
@@ -159,6 +159,46 @@ describe('main', () => {
       await main(mockConfDict, args);
 
       expect(mockAgentActions.simpleQueryClaudeWithOptions).not.toHaveBeenCalled();
+      expect(mockClose).toHaveBeenCalled();
+      expect(exitMock).toHaveBeenCalledWith(0);
+
+      process.exit = originalExit;
+    });
+
+    it('should run simple query agent with src_dir', async () => {
+      const originalExit = process.exit;
+      const exitMock = jest.fn((code?: number) => {
+        // Prevent actual exit in tests
+      }) as any;
+      process.exit = exitMock;
+
+      const sourceDir = path.join(testDir, 'source');
+      fs.ensureDirSync(sourceDir);
+      const tmpDir = path.join(testDir, '.source');
+
+      (copyProjectSrcDir as jest.Mock).mockReturnValue(tmpDir);
+
+      // Mock readline to first return a query, then /end
+      let callCount = 0;
+      mockQuestion.mockImplementation((query: string, callback: (answer: string) => void) => {
+        callCount++;
+        if (callCount === 1) {
+          callback('test query');
+        } else {
+          callback('/end');
+        }
+      });
+
+      const args: AgentArgs = {
+        role: 'simple_query_agent',
+        environment: 'default',
+        src_dir: sourceDir
+      };
+
+      await main(mockConfDict, args);
+
+      expect(copyProjectSrcDir).toHaveBeenCalled();
+      expect(mockAgentActions.simpleQueryClaudeWithOptions).toHaveBeenCalledWith('test query', tmpDir);
       expect(mockClose).toHaveBeenCalled();
       expect(exitMock).toHaveBeenCalledWith(0);
 

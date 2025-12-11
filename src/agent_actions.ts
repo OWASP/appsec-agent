@@ -37,12 +37,19 @@ export class AgentActions {
   /**
    * Simple query agent with options
    */
-  async simpleQueryClaudeWithOptions(yourPrompt: string): Promise<string> {
+  async simpleQueryClaudeWithOptions(yourPrompt: string, srcDir?: string | null): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment);
-    const options = agentOptions.getSimpleQueryAgentOptions(this.args.role);
+    const options = agentOptions.getSimpleQueryAgentOptions(this.args.role, srcDir);
 
-    // Build prompt with conversation history
+    // Build prompt with conversation history and source directory context
     let fullPrompt: string;
+    let sourceDirContext = '';
+    
+    // Add source directory context if provided
+    if (srcDir) {
+      sourceDirContext = `\n\nContext: There is a source code directory available at ${srcDir}. You can search and read files within this directory to answer questions. The directory is located in the current working directory.\n`;
+    }
+    
     if (this.conversationHistory.length > 0) {
       // Include previous conversation context
       let contextPrompt = 'Previous conversation:\n';
@@ -53,9 +60,9 @@ export class AgentActions {
           contextPrompt += `Assistant: ${entry.content}\n`;
         }
       }
-      fullPrompt = `${contextPrompt}\nUser: ${yourPrompt}`;
+      fullPrompt = `${contextPrompt}${sourceDirContext}User: ${yourPrompt}`;
     } else {
-      fullPrompt = yourPrompt;
+      fullPrompt = `${sourceDirContext}${yourPrompt}`;
     }
 
     try {

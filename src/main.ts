@@ -20,6 +20,21 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
     console.log('Running Simple Query Agent');
     console.log("(Type '/end' to exit the conversation)\n");
     
+    let tmpSrcDir: string | null = null;
+    
+    if (args.src_dir) {
+      // Validate source directory path
+      if (!validateDirectoryPath(args.src_dir, true)) {
+        console.error(`Error: Invalid source directory path: ${args.src_dir}`);
+        console.error('Source directory path must be valid and cannot contain directory traversal sequences.');
+        process.exit(1);
+      }
+      
+      tmpSrcDir = copyProjectSrcDir(currentWorkingDir, args.src_dir);
+      console.log(`Source code directory copied to: ${tmpSrcDir}`);
+      console.log('The agent can search files within this directory to answer your questions.\n');
+    }
+    
     const readline = require('readline');
     const rl = readline.createInterface({
       input: process.stdin,
@@ -49,12 +64,22 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
 
       // Process the query and wait for complete response
       // The method will add proper spacing after the response completes
-      await agentActions.simpleQueryClaudeWithOptions(yourPrompt);
+      await agentActions.simpleQueryClaudeWithOptions(yourPrompt, tmpSrcDir);
       
       // Ensure stdout is fully flushed and event loop processes all writes
       // before showing next prompt. This prevents the prompt from appearing
       // before streaming output completes.
       await new Promise<void>(resolve => setImmediate(resolve));
+    }
+    
+    // Clean up temporary source code directory if it was created
+    if (tmpSrcDir && fs.existsSync(tmpSrcDir)) {
+      try {
+        fs.removeSync(tmpSrcDir);
+        console.log(`Cleaned up temporary directory: ${tmpSrcDir}`);
+      } catch (error) {
+        console.warn(`Warning: Could not clean up temporary directory ${tmpSrcDir}:`, error);
+      }
     }
   } else if (args.role === 'code_reviewer') {
     console.log('Running Code Review Agent');

@@ -2,6 +2,8 @@
 
 A TypeScript package that provides AI-powered agents for Application Security (AppSec) tasks, built on top of the Claude Agent SDK. This is a TypeScript reimplementation of the Python AppSec AI Agent toolkit that helps automate mundane security operations and streamline AppSec workflows.
 
+**📦 Available on npm**: Install with `npm install appsec-agent`
+
 ## 🚀 Features
 
 - **AI-Powered AppSec Automation**: Leverage Claude's capabilities for security operations
@@ -41,18 +43,20 @@ Our agent toolkit is built on top of Claude Agent SDK (v0.1.58). And the Claude 
 $ npm install -g @anthropic-ai/claude-code@2.0.58
 ```
 
-### Step 2: Install Dependencies
+### Step 2: Install appsec-agent
+Install the package from npm:
+
 ```bash
-$ cd appsec-agent
-$ npm install
+$ npm install appsec-agent
 ```
 
-### Step 3: Build the Project
+Or if you prefer global installation (to use the CLI command directly):
+
 ```bash
-$ npm run build
+$ npm install -g appsec-agent
 ```
 
-This will compile the TypeScript source files to JavaScript in the `dist/` directory.
+The package includes pre-built JavaScript files, so no build step is required for usage.
 
 ## ⚡ Quick Start
 
@@ -68,21 +72,17 @@ export ANTHROPIC_BASE_URL="https://api.anthropic.com"
 
 ### 2. Run Your First Agent
 
-**Important**: Make sure to build the project first:
+You can run the agent using the CLI command:
+
 ```bash
-$ npm run build
-```
+# If installed globally
+$ agent-run
 
-Then you can run the agent:
-```bash
-# Run the basic agent using npm script
-$ npm start
+# If installed locally, use npx
+$ npx agent-run
 
-# Or use the CLI directly (after building)
-$ node bin/agent-run
-
-# Or use ts-node for development (no build needed)
-$ npx ts-node bin/agent-run.ts
+# Or run with specific options
+$ npx agent-run -r simple_query_agent
 ```
 
 ## 🔧 Configuration
@@ -103,6 +103,7 @@ A general-purpose AppSec assistant that can:
 - Help with security analysis tasks
 - Provide guidance on security best practices
 - Interactive query processing
+- Search and analyze file directories (with `--src_dir` option)
 
 ### Code Review Agent (`code_reviewer`)
 A specialized agent for automated code analysis that can:
@@ -125,39 +126,45 @@ A specialized agent for comprehensive threat modeling that can:
 
 ### Basic Query
 ```bash
-$ node bin/agent-run
+# Interactive query agent
+$ npx agent-run
+
+# Query agent with source code directory context
+$ npx agent-run -r simple_query_agent -s /path/to/source
 ```
 
 ### Code Review Example
 ```bash
 # Review code in current directory
-$ node bin/agent-run -r code_reviewer
+$ npx agent-run -r code_reviewer
 
 # Review specific source directory
-$ node bin/agent-run -r code_reviewer -s /path/to/source
+$ npx agent-run -r code_reviewer -s /path/to/source
 
 # Custom output file and format
-$ node bin/agent-run -r code_reviewer -o security_report.html -f html
+$ npx agent-run -r code_reviewer -o security_report.html -f html
 ```
 
 ### Threat Modeler Example
 ```bash
 # Run threat modeler on current directory
-$ node bin/agent-run -r threat_modeler
+$ npx agent-run -r threat_modeler
 
 # Run threat modeler on specific source directory
-$ node bin/agent-run -r threat_modeler -s /path/to/source
+$ npx agent-run -r threat_modeler -s /path/to/source
 ```
 
 ### List Available Roles
 ```bash
-$ node bin/agent-run -l
+$ npx agent-run -l
 ```
 
 ### Version Information
 ```bash
-$ node bin/agent-run -v
+$ npx agent-run -v
 ```
+
+**Note**: If you installed the package globally, you can use `agent-run` directly instead of `npx agent-run`.
 
 ## 🌐 Web Application Usage
 
@@ -266,10 +273,13 @@ appsec-agent/
 
 ## 🛠 Development
 
+This section is for developers who want to contribute to the package or modify it locally.
+
 ### Setting Up Development Environment
 
-1. Clone the repository and navigate to the TypeScript directory:
+1. Clone the repository:
 ```bash
+$ git clone <repository-url>
 $ cd appsec-agent
 ```
 
@@ -283,6 +293,8 @@ $ npm install
 $ npm run build
 ```
 
+This will compile the TypeScript source files to JavaScript in the `dist/` directory.
+
 ### Building the Package
 
 ```bash
@@ -291,6 +303,19 @@ $ npm run build
 
 # Clean build artifacts
 $ npm run clean
+```
+
+### Running from Source
+
+During development, you can run the agent directly from source:
+
+```bash
+# Using ts-node (no build needed)
+$ npx ts-node bin/agent-run.ts
+
+# Or build first, then run
+$ npm run build
+$ node bin/agent-run.js
 ```
 
 ## 🧪 Testing

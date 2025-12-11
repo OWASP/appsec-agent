@@ -450,8 +450,10 @@ describe('Utils', () => {
         expect(validateDirectoryPath('valid/path', false)).toBe(true);
       });
 
-      it('should return false for paths with directory traversal', () => {
-        expect(validateDirectoryPath('../invalid', false)).toBe(false);
+      it('should allow relative paths with directory traversal (they get resolved)', () => {
+        // Relative paths with .. are now allowed and get resolved to absolute paths
+        // The path will resolve based on current working directory
+        expect(validateDirectoryPath('../invalid', false)).toBe(true);
       });
     });
 

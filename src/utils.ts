@@ -114,23 +114,25 @@ export function validateDirectoryPath(dirPath: string, mustExist: boolean = true
     return false;
   }
   
-  // Check if path is safe (allow absolute paths for source directories)
-  const sanitized = validateAndSanitizePath(dirPath, undefined, true);
-  if (!sanitized) {
+  // Check for null bytes and control characters
+  if (/\0/.test(dirPath) || /[\x00-\x1f]/.test(dirPath)) {
     return false;
   }
   
-  // Check if directory exists if required
-  if (mustExist) {
-    try {
-      const stats = fs.statSync(sanitized);
+  try {
+    // Resolve the path to an absolute path (handles relative paths with ..)
+    const resolvedPath = path.resolve(dirPath);
+    
+    // Check if directory exists if required
+    if (mustExist) {
+      const stats = fs.statSync(resolvedPath);
       return stats.isDirectory();
-    } catch {
-      return false;
     }
+    
+    return true;
+  } catch {
+    return false;
   }
-  
-  return true;
 }
 
 /**
@@ -439,10 +441,18 @@ export function copyProjectSrcDir(currentWorkingDir: string, srcDir: string): st
     process.exit(1);
   }
   
-  // Validate that the source directory path is safe (allow absolute paths for source dirs)
-  const sanitizedSrcDir = validateAndSanitizePath(srcDir, undefined, true);
-  if (!sanitizedSrcDir) {
+  // Check for null bytes and control characters
+  if (/\0/.test(srcDir) || /[\x00-\x1f]/.test(srcDir)) {
     console.error(`Error: Source directory path contains invalid or dangerous characters: ${srcDir}`);
+    process.exit(1);
+  }
+  
+  // Resolve the path to an absolute path (handles relative paths with ..)
+  let sanitizedSrcDir: string;
+  try {
+    sanitizedSrcDir = path.resolve(srcDir);
+  } catch (error) {
+    console.error(`Error: Invalid source directory path: ${srcDir}`);
     process.exit(1);
   }
   

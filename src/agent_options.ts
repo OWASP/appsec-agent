@@ -67,10 +67,17 @@ export class AgentOptions {
   /**
    * Get options for simple query agent
    */
-  getSimpleQueryAgentOptions(role: string = 'simple_query_agent'): Options {
+  getSimpleQueryAgentOptions(role: string = 'simple_query_agent', srcDir?: string | null): Options {
     const roleConfig = this.confDict[this.environment]?.[role];
+    let systemPrompt = roleConfig?.options?.system_prompt || 'You are an AppSec expert assistant.';
+    
+    // Add source directory context to system prompt if provided
+    if (srcDir) {
+      systemPrompt += ` You have access to a source code directory at ${srcDir} that you can search and read files from to answer questions.`;
+    }
+    
     return {
-      systemPrompt: roleConfig?.options?.system_prompt || 'You are an AppSec expert assistant.',
+      systemPrompt: systemPrompt,
       maxTurns: roleConfig?.options?.max_turns || 1
     };
   }

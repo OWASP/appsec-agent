@@ -301,8 +301,10 @@ describe('Utils', () => {
         copyProjectSrcDir(destDir, nonexistentPath);
       }).toThrow('process.exit(1) called');
       
+      // Error message now uses sanitized path (basename only for security)
+      const basename = path.basename(nonexistentPath);
       expect(consoleErrorSpy).toHaveBeenCalledWith(
-        expect.stringContaining(`Error: Source directory ${nonexistentPath} does not exist`)
+        expect.stringContaining(`Error: Source directory does not exist: ${basename}`)
       );
       expect(exitMock).toHaveBeenCalledWith(1);
       

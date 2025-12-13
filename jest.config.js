@@ -17,10 +17,10 @@ module.exports = {
     'node_modules/(?!@anthropic-ai)'
   ],
   extensionsToTreatAsEsm: ['.ts'],
-  globals: {
-    'ts-jest': {
+  transform: {
+    '^.+\\.ts$': ['ts-jest', {
       useESM: false
-    }
+    }]
   }
 };
 

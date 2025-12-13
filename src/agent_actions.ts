@@ -7,6 +7,7 @@
 import { query, SDKAssistantMessage, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
 import { AgentOptions } from './agent_options';
 import { ConfigDict } from './utils';
+import { BlinkingCursor } from './blinking_cursor';
 
 export interface AgentArgs {
   role: string;
@@ -65,6 +66,9 @@ export class AgentActions {
       fullPrompt = `${sourceDirContext}${yourPrompt}`;
     }
 
+    // Declare cursor outside try block so it's accessible in catch
+    let cursor: BlinkingCursor | null = null;
+    
     try {
       let accumulatedText = '';
       let hasPrintedHeader = false;
@@ -73,8 +77,13 @@ export class AgentActions {
       let assistantResponseText = '';
       let finalResult: SDKResultMessage | null = null;
       
-      for await (const msg of query({ prompt: fullPrompt, options })) {
-        messageCount++;
+      // Start blinking cursor to show we're waiting for Claude's response
+      cursor = new BlinkingCursor();
+      cursor.start();
+      
+      try {
+        for await (const msg of query({ prompt: fullPrompt, options })) {
+          messageCount++;
         
         // Debug logging (remove in production)
         if (this.args.verbose) {
@@ -84,6 +93,9 @@ export class AgentActions {
         if (msg.type === 'stream_event') {
           hasSeenStreamEvents = true;
           const streamMsg = msg as any;
+          
+          // Stop blinking cursor when we receive the first stream event
+          if (cursor) cursor.stop();
           
           // Handle content block deltas (streaming text)
           if (streamMsg.event?.type === 'content_block_delta' && streamMsg.event.delta?.type === 'text_delta') {
@@ -101,6 +113,8 @@ export class AgentActions {
           }
           // Handle content block start (beginning of new content block)
           else if (streamMsg.event?.type === 'content_block_start') {
+            // Stop cursor when content block starts
+            if (cursor) cursor.stop();
             // Content block is starting - ensure header is printed
             if (!hasPrintedHeader) {
               console.log(`\nClaude:\n`);
@@ -128,6 +142,8 @@ export class AgentActions {
         // BUT: When tools are used, there may be more assistant messages after tools complete
         // So we need to handle both cases
         else if (msg.type === 'assistant') {
+          // Stop cursor when we receive assistant message
+          if (cursor) cursor.stop();
           const assistantMsg = msg as SDKAssistantMessage;
           if (assistantMsg.message.content) {
             for (const block of assistantMsg.message.content) {
@@ -173,6 +189,8 @@ export class AgentActions {
         // IMPORTANT: The stream may continue after a result message if tools are being used
         // We must continue processing until the stream is truly exhausted
         else if (msg.type === 'result') {
+          // Stop cursor when we receive result (in case no content was received)
+          if (cursor) cursor.stop();
           const resultMsg = msg as SDKResultMessage;
           // Always update finalResult with the latest result message
           // (there may be multiple result messages if tools are used)
@@ -214,6 +232,10 @@ export class AgentActions {
             console.error(`[DEBUG] Message content:`, JSON.stringify(msg, null, 2));
           }
         }
+        }
+      } finally {
+        // Always stop the cursor when done, even if there's an error
+        if (cursor) cursor.stop();
       }
       
       // Debug: log total messages processed
@@ -249,6 +271,14 @@ export class AgentActions {
         this.conversationHistory.push({ role: 'assistant', content: assistantResponseText });
       }
     } catch (error) {
+      // Ensure cursor is stopped on error
+      if (cursor) {
+        try {
+          cursor.stop();
+        } catch {
+          // Ignore if cursor cleanup fails
+        }
+      }
       console.error('Error during query:', error);
       throw error;
     }
@@ -264,25 +294,60 @@ export class AgentActions {
     const agentOptions = new AgentOptions(this.confDict, this.environment);
     const options = agentOptions.getCodeReviewerOptions(this.args.role);
 
+    // Declare cursor outside try block so it's accessible in catch
+    let cursor: BlinkingCursor | null = null;
+
     try {
-      for await (const message of query({ prompt: userPrompt, options })) {
-        if (message.type === 'assistant') {
-          const assistantMsg = message as SDKAssistantMessage;
-          if (assistantMsg.message.content) {
-            for (const block of assistantMsg.message.content) {
-              if (block.type === 'text') {
-                console.log(`Claude: ${block.text}`);
+      // Start blinking cursor to show we're waiting for Claude's response
+      cursor = new BlinkingCursor();
+      cursor.start();
+
+      try {
+        for await (const message of query({ prompt: userPrompt, options })) {
+          if (message.type === 'stream_event') {
+            // Stop cursor when we receive stream events
+            if (cursor) cursor.stop();
+            const streamMsg = message as any;
+            // Handle content block deltas (streaming text)
+            if (streamMsg.event?.type === 'content_block_delta' && streamMsg.event.delta?.type === 'text_delta') {
+              const deltaText = streamMsg.event.delta.text || '';
+              if (deltaText) {
+                process.stdout.write(deltaText);
               }
             }
-          }
-        } else if (message.type === 'result') {
-          const resultMsg = message as SDKResultMessage;
-          if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
-            console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);
+          } else if (message.type === 'assistant') {
+            // Stop cursor when we receive assistant message
+            if (cursor) cursor.stop();
+            const assistantMsg = message as SDKAssistantMessage;
+            if (assistantMsg.message.content) {
+              for (const block of assistantMsg.message.content) {
+                if (block.type === 'text') {
+                  console.log(`Claude: ${block.text}`);
+                }
+              }
+            }
+          } else if (message.type === 'result') {
+            // Stop cursor when we receive result (in case no content was received)
+            if (cursor) cursor.stop();
+            const resultMsg = message as SDKResultMessage;
+            if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
+              console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);
+            }
           }
         }
+      } finally {
+        // Always stop the cursor when done, even if there's an error
+        if (cursor) cursor.stop();
       }
     } catch (error) {
+      // Ensure cursor is stopped on error
+      if (cursor) {
+        try {
+          cursor.stop();
+        } catch {
+          // Ignore if cursor cleanup fails
+        }
+      }
       console.error('Error during code review:', error);
       throw error;
     }
@@ -297,25 +362,60 @@ export class AgentActions {
     const agentOptions = new AgentOptions(this.confDict, this.environment);
     const options = agentOptions.getThreatModelerOptions(this.args.role);
 
+    // Declare cursor outside try block so it's accessible in catch
+    let cursor: BlinkingCursor | null = null;
+
     try {
-      for await (const message of query({ prompt: userPrompt, options })) {
-        if (message.type === 'assistant') {
-          const assistantMsg = message as SDKAssistantMessage;
-          if (assistantMsg.message.content) {
-            for (const block of assistantMsg.message.content) {
-              if (block.type === 'text') {
-                console.log(`Claude: ${block.text}`);
+      // Start blinking cursor to show we're waiting for Claude's response
+      cursor = new BlinkingCursor();
+      cursor.start();
+
+      try {
+        for await (const message of query({ prompt: userPrompt, options })) {
+          if (message.type === 'stream_event') {
+            // Stop cursor when we receive stream events
+            if (cursor) cursor.stop();
+            const streamMsg = message as any;
+            // Handle content block deltas (streaming text)
+            if (streamMsg.event?.type === 'content_block_delta' && streamMsg.event.delta?.type === 'text_delta') {
+              const deltaText = streamMsg.event.delta.text || '';
+              if (deltaText) {
+                process.stdout.write(deltaText);
               }
             }
-          }
-        } else if (message.type === 'result') {
-          const resultMsg = message as SDKResultMessage;
-          if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
-            console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);
+          } else if (message.type === 'assistant') {
+            // Stop cursor when we receive assistant message
+            if (cursor) cursor.stop();
+            const assistantMsg = message as SDKAssistantMessage;
+            if (assistantMsg.message.content) {
+              for (const block of assistantMsg.message.content) {
+                if (block.type === 'text') {
+                  console.log(`Claude: ${block.text}`);
+                }
+              }
+            }
+          } else if (message.type === 'result') {
+            // Stop cursor when we receive result (in case no content was received)
+            if (cursor) cursor.stop();
+            const resultMsg = message as SDKResultMessage;
+            if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
+              console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);
+            }
           }
         }
+      } finally {
+        // Always stop the cursor when done, even if there's an error
+        if (cursor) cursor.stop();
       }
     } catch (error) {
+      // Ensure cursor is stopped on error
+      if (cursor) {
+        try {
+          cursor.stop();
+        } catch {
+          // Ignore if cursor cleanup fails
+        }
+      }
       console.error('Error during threat modeling:', error);
       throw error;
     }

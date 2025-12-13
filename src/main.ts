@@ -6,7 +6,7 @@
 
 import * as fs from 'fs-extra';
 import { AgentActions, AgentArgs } from './agent_actions';
-import { copyProjectSrcDir, validateOutputFilePath, validateDirectoryPath } from './utils';
+import { copyProjectSrcDir, validateOutputFilePath, validateDirectoryPath, sanitizePathForError } from './utils';
 
 export async function main(confDict: any, args: AgentArgs): Promise<void> {
   // Capture working directory once at the start to avoid race conditions
@@ -23,13 +23,15 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
     if (args.src_dir) {
       // Validate source directory path
       if (!validateDirectoryPath(args.src_dir, true)) {
-        console.error(`Error: Invalid source directory path: ${args.src_dir}`);
+        const safePath = sanitizePathForError(args.src_dir);
+        console.error(`Error: Invalid source directory path: ${safePath}`);
         console.error('Source directory path must be valid and cannot contain directory traversal sequences.');
         process.exit(1);
       }
       
       tmpSrcDir = copyProjectSrcDir(currentWorkingDir, args.src_dir);
-      console.log(`Source code directory copied to: ${tmpSrcDir}`);
+      const safeTmpPath = sanitizePathForError(tmpSrcDir);
+      console.log(`Source code directory copied to: ${safeTmpPath}`);
       console.log('The agent can search files within this directory to answer your questions.\n');
     }
     
@@ -74,9 +76,12 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
     if (tmpSrcDir && fs.existsSync(tmpSrcDir)) {
       try {
         fs.removeSync(tmpSrcDir);
-        console.log(`Cleaned up temporary directory: ${tmpSrcDir}`);
-      } catch (error) {
-        console.warn(`Warning: Could not clean up temporary directory ${tmpSrcDir}:`, error);
+        const safePath = sanitizePathForError(tmpSrcDir);
+        console.log(`Cleaned up temporary directory: ${safePath}`);
+      } catch (error: any) {
+        const safePath = sanitizePathForError(tmpSrcDir);
+        const errorMessage = error?.message || 'Unknown error';
+        console.warn(`Warning: Could not clean up temporary directory ${safePath}: ${errorMessage}`);
       }
     }
   } else if (args.role === 'code_reviewer') {
@@ -85,7 +90,8 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
     // Validate output file path
     const validatedOutputFile = validateOutputFilePath(args.output_file || 'code_review_report.md', currentWorkingDir);
     if (!validatedOutputFile) {
-      console.error(`Error: Invalid output file path: ${args.output_file}`);
+      const safePath = sanitizePathForError(args.output_file || 'code_review_report.md');
+      console.error(`Error: Invalid output file path: ${safePath}`);
       console.error('Output file path must be relative to the current working directory and cannot contain directory traversal sequences.');
       process.exit(1);
     }
@@ -96,7 +102,8 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
     if (args.src_dir) {
       // Validate source directory path
       if (!validateDirectoryPath(args.src_dir, true)) {
-        console.error(`Error: Invalid source directory path: ${args.src_dir}`);
+        const safePath = sanitizePathForError(args.src_dir);
+        console.error(`Error: Invalid source directory path: ${safePath}`);
         console.error('Source directory path must be valid and cannot contain directory traversal sequences.');
         process.exit(1);
       }
@@ -113,8 +120,10 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
     if (tmpSrcDir && fs.existsSync(tmpSrcDir)) {
       try {
         fs.removeSync(tmpSrcDir);
-      } catch (error) {
-        console.warn(`Warning: Could not clean up temporary directory ${tmpSrcDir}:`, error);
+      } catch (error: any) {
+        const safePath = sanitizePathForError(tmpSrcDir);
+        const errorMessage = error?.message || 'Unknown error';
+        console.warn(`Warning: Could not clean up temporary directory ${safePath}: ${errorMessage}`);
       }
     }
   } else if (args.role === 'threat_modeler') {
@@ -123,7 +132,8 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
     // Validate output file path
     const validatedOutputFile = validateOutputFilePath(args.output_file || 'threat_model_report.md', currentWorkingDir);
     if (!validatedOutputFile) {
-      console.error(`Error: Invalid output file path: ${args.output_file}`);
+      const safePath = sanitizePathForError(args.output_file || 'threat_model_report.md');
+      console.error(`Error: Invalid output file path: ${safePath}`);
       console.error('Output file path must be relative to the current working directory and cannot contain directory traversal sequences.');
       process.exit(1);
     }
@@ -136,7 +146,8 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
     if (args.src_dir) {
       // Validate source directory path
       if (!validateDirectoryPath(args.src_dir, true)) {
-        console.error(`Error: Invalid source directory path: ${args.src_dir}`);
+        const safePath = sanitizePathForError(args.src_dir);
+        console.error(`Error: Invalid source directory path: ${safePath}`);
         console.error('Source directory path must be valid and cannot contain directory traversal sequences.');
         process.exit(1);
       }
@@ -153,8 +164,10 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
     if (tmpSrcDir && fs.existsSync(tmpSrcDir)) {
       try {
         fs.removeSync(tmpSrcDir);
-      } catch (error) {
-        console.warn(`Warning: Could not clean up temporary directory ${tmpSrcDir}:`, error);
+      } catch (error: any) {
+        const safePath = sanitizePathForError(tmpSrcDir);
+        const errorMessage = error?.message || 'Unknown error';
+        console.warn(`Warning: Could not clean up temporary directory ${safePath}: ${errorMessage}`);
       }
     }
   } else {

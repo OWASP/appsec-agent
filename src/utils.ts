@@ -18,6 +18,39 @@ export interface ConfigDict {
  */
 
 /**
+ * Sanitize file path for error messages to prevent information disclosure
+ * Returns only the filename or a sanitized version of the path
+ * @param filePath The full file path to sanitize
+ * @param verbose If true, shows more path information (for debug mode)
+ * @returns Sanitized path string safe for error messages
+ */
+export function sanitizePathForError(filePath: string, verbose: boolean = false): string {
+  if (!filePath || typeof filePath !== 'string') {
+    return '[invalid path]';
+  }
+  
+  try {
+    // In verbose mode, show relative path from home directory if possible
+    if (verbose) {
+      const homeDir = process.env.HOME || process.env.USERPROFILE || '';
+      if (homeDir && filePath.startsWith(homeDir)) {
+        return '~' + filePath.slice(homeDir.length);
+      }
+      // Show last 2 path segments for context
+      const parts = filePath.split(path.sep).filter(p => p);
+      if (parts.length > 2) {
+        return '...' + path.sep + parts.slice(-2).join(path.sep);
+      }
+    }
+    
+    // Default: show only basename
+    return path.basename(filePath) || '[unknown file]';
+  } catch {
+    return '[invalid path]';
+  }
+}
+
+/**
  * Validate that a path is safe and doesn't contain directory traversal sequences
  * @param filePath The path to validate
  * @param allowAbsolute Whether to allow absolute paths (default: false for output files)
@@ -215,8 +248,10 @@ export function fileToList(file: string): string[] {
         myList.push(trimmed);
       }
     }
-  } catch (error) {
-    console.error(`Error reading file ${file}:`, error);
+  } catch (error: any) {
+    const safePath = sanitizePathForError(file);
+    const errorMessage = error?.message || 'Unknown error';
+    console.error(`Error reading file ${safePath}: ${errorMessage}`);
   }
   
   return myList;
@@ -242,8 +277,10 @@ export function fileToJson(file: string): any {
   try {
     const content = fs.readFileSync(file, 'utf-8').replace(/\n/g, '');
     return JSON.parse(content);
-  } catch (error) {
-    console.error(`Error reading JSON file ${file}:`, error);
+  } catch (error: any) {
+    const safePath = sanitizePathForError(file);
+    const errorMessage = error?.message || 'Unknown error';
+    console.error(`Error reading JSON file ${safePath}: ${errorMessage}`);
     return {};
   }
 }
@@ -389,16 +426,37 @@ function expandMergeKeys(obj: any): any {
 }
 
 export function loadYaml(confFile: string, verbose: boolean = false): ConfigDict | null {
-  console.log(`Loading yaml configuration file: ${confFile}`);
+  const safePath = sanitizePathForError(confFile, verbose);
+  console.log(`Loading yaml configuration file: ${safePath}`);
   
   if (!isFile(confFile)) {
-    console.error(`Error file not exist: ${confFile}`);
+    console.error(`Error: Configuration file does not exist: ${safePath}`);
+    if (verbose) {
+      console.error(`Full path: ${confFile}`);
+    }
     return null;
   }
   
   try {
     const content = fs.readFileSync(confFile, 'utf-8');
-    const parsed = yaml.parse(content);
+    
+    // SECURITY: Use safe YAML parsing to prevent code execution
+    // Parse with 'core' schema to disable unsafe features like custom tags
+    // that could lead to code execution or object injection
+    let parsed: any;
+    try {
+      // Try parsing with safe schema first
+      parsed = yaml.parse(content, { schema: 'core' });
+    } catch (schemaError) {
+      // If core schema fails, try default but validate structure
+      // This allows YAML merge keys and anchors while still being safer
+      parsed = yaml.parse(content);
+      
+      // Validate that parsed result is a plain object/array (not a function or other dangerous type)
+      if (typeof parsed === 'function' || (typeof parsed === 'object' && parsed !== null && parsed.constructor !== Object && !Array.isArray(parsed))) {
+        throw new Error('Invalid YAML structure: contains unsafe object types');
+      }
+    }
     
     // Expand YAML merge keys first
     const withMerges = expandMergeKeys(parsed);
@@ -411,8 +469,13 @@ export function loadYaml(confFile: string, verbose: boolean = false): ConfigDict
     }
     
     return processed;
-  } catch (error) {
-    console.error(`Error loading YAML file ${confFile}:`, error);
+  } catch (error: any) {
+    const errorMessage = error?.message || 'Unknown error';
+    console.error(`Error loading YAML file ${safePath}: ${errorMessage}`);
+    if (verbose) {
+      console.error(`Full error details:`, error);
+      console.error(`Full path: ${confFile}`);
+    }
     return null;
   }
 }
@@ -443,7 +506,8 @@ export function copyProjectSrcDir(currentWorkingDir: string, srcDir: string): st
   
   // Check for null bytes and control characters
   if (/\0/.test(srcDir) || /[\x00-\x1f]/.test(srcDir)) {
-    console.error(`Error: Source directory path contains invalid or dangerous characters: ${srcDir}`);
+    const safePath = sanitizePathForError(srcDir);
+    console.error(`Error: Source directory path contains invalid or dangerous characters: ${safePath}`);
     process.exit(1);
   }
   
@@ -451,14 +515,17 @@ export function copyProjectSrcDir(currentWorkingDir: string, srcDir: string): st
   let sanitizedSrcDir: string;
   try {
     sanitizedSrcDir = path.resolve(srcDir);
-  } catch (error) {
-    console.error(`Error: Invalid source directory path: ${srcDir}`);
+  } catch (error: any) {
+    const safePath = sanitizePathForError(srcDir);
+    const errorMessage = error?.message || 'Invalid path';
+    console.error(`Error: Invalid source directory path: ${safePath} (${errorMessage})`);
     process.exit(1);
   }
   
   // Check if source directory exists
   if (!fs.existsSync(sanitizedSrcDir)) {
-    console.error(`Error: Source directory ${sanitizedSrcDir} does not exist`);
+    const safePath = sanitizePathForError(sanitizedSrcDir);
+    console.error(`Error: Source directory does not exist: ${safePath}`);
     process.exit(1);
   }
   
@@ -466,18 +533,22 @@ export function copyProjectSrcDir(currentWorkingDir: string, srcDir: string): st
   try {
     const stats = fs.statSync(sanitizedSrcDir);
     if (!stats.isDirectory()) {
-      console.error(`Error: Source path ${sanitizedSrcDir} is not a directory`);
+      const safePath = sanitizePathForError(sanitizedSrcDir);
+      console.error(`Error: Source path is not a directory: ${safePath}`);
       process.exit(1);
     }
-  } catch (error) {
-    console.error(`Error: Cannot access source directory ${sanitizedSrcDir}:`, error);
+  } catch (error: any) {
+    const safePath = sanitizePathForError(sanitizedSrcDir);
+    const errorMessage = error?.message || 'Access denied';
+    console.error(`Error: Cannot access source directory ${safePath}: ${errorMessage}`);
     process.exit(1);
   }
   
   // Validate current working directory
   const sanitizedCwd = path.resolve(currentWorkingDir);
   if (!fs.existsSync(sanitizedCwd)) {
-    console.error(`Error: Current working directory ${sanitizedCwd} does not exist`);
+    const safePath = sanitizePathForError(sanitizedCwd);
+    console.error(`Error: Current working directory does not exist: ${safePath}`);
     process.exit(1);
   }
   
@@ -503,17 +574,22 @@ export function copyProjectSrcDir(currentWorkingDir: string, srcDir: string): st
   if (fs.existsSync(tmpSrcDirResolved) && fs.statSync(tmpSrcDirResolved).isDirectory()) {
     try {
       fs.removeSync(tmpSrcDirResolved);
-    } catch (error) {
-      console.error(`Error: Cannot remove existing temporary directory ${tmpSrcDirResolved}:`, error);
+    } catch (error: any) {
+      const safePath = sanitizePathForError(tmpSrcDirResolved);
+      const errorMessage = error?.message || 'Unknown error';
+      console.error(`Error: Cannot remove existing temporary directory ${safePath}: ${errorMessage}`);
       process.exit(1);
     }
   }
   
-  console.log(`Copying project source code directory from ${sanitizedSrcDir} to ${tmpSrcDirResolved}`);
+  const safeSrcPath = sanitizePathForError(sanitizedSrcDir);
+  const safeTmpPath = sanitizePathForError(tmpSrcDirResolved);
+  console.log(`Copying project source code directory from ${safeSrcPath} to ${safeTmpPath}`);
   try {
     fs.copySync(sanitizedSrcDir, tmpSrcDirResolved);
-  } catch (error) {
-    console.error(`Error: Failed to copy directory:`, error);
+  } catch (error: any) {
+    const errorMessage = error?.message || 'Unknown error';
+    console.error(`Error: Failed to copy directory: ${errorMessage}`);
     process.exit(1);
   }
   

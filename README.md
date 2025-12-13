@@ -1,6 +1,6 @@
 # AppSec Agent (TypeScript)
 
-A TypeScript package that provides AI-powered agents for Application Security (AppSec) tasks, built on top of the Claude Agent SDK. This is a TypeScript reimplementation of the Python AppSec AI Agent toolkit that helps automate mundane security operations and streamline AppSec workflows.
+A TypeScript package that provides AI-powered agents for Application Security (AppSec) tasks, built on top of the Claude Agent SDK. It helps automate mundane application security operations and streamline workflows.
 
 **📦 Available on npm**: Install with `npm install appsec-agent`
 
@@ -37,7 +37,7 @@ A TypeScript package that provides AI-powered agents for Application Security (A
 - Anthropic API key
 
 ### Step 1: Install Claude Code
-Our agent toolkit is built on top of Claude Agent SDK (v0.1.58). And the Claude Agent SDK is built on top of Claude Code. So in order to install our toolkit, you would need to start with Claude Code. You may want to install it in the global user space:
+Our agent toolkit is built on top of Claude Agent SDK (v0.1.58), which in turn is built on top of Claude Code. To install our toolkit, you need to start with Claude Code. You may want to install it in the global user space:
 
 ```bash
 $ npm install -g @anthropic-ai/claude-code@2.0.58
@@ -182,8 +182,7 @@ This package is designed to be thread-safe for use in web applications where mul
 1. **Create New Instances Per Request**: Always create a new `AgentActions` instance for each HTTP request:
 
 ```typescript
-import { AgentActions, AgentArgs } from 'appsec-agent';
-import { loadYaml } from 'appsec-agent';
+import { AgentActions, AgentArgs, loadYaml } from 'appsec-agent';
 
 app.post('/api/query', async (req, res) => {
   const confDict = loadYaml('conf/appsec_agent.yaml');
@@ -252,7 +251,8 @@ appsec-agent/
 │       ├── concurrency.test.ts  # Concurrency and thread-safety tests
 │       └── ...                # Other test files
 ├── bin/
-│   └── agent-run             # Main CLI script
+│   ├── agent-run.js          # Main CLI script (compiled)
+│   └── agent-run.ts          # Main CLI script (source)
 ├── conf/
 │   └── appsec_agent.yaml   # General configuration file
 ├── package.json

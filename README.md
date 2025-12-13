@@ -6,7 +6,7 @@ A TypeScript package that provides AI-powered agents for Application Security (A
 
 ## 🚀 Features
 
-- **AI-Powered AppSec Automation**: Leverage Claude's capabilities for security operations
+- **AI-Powered AppSec Automation**: Leverage Claude's capabilities for application security
 - **Multiple Agent Types**: Simple query agent, code review agent, and threat modeler for different use cases
 - **Tool Permission Management**: Advanced tool permission callbacks with bypass mode for trusted operations
 - **Code Review Capabilities**: Automated security and privacy issue detection in code

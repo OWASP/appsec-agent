@@ -6,18 +6,18 @@
 default: &default
   simple_query_agent:
     options: 
-      system_prompt: "You are an AppSec expert assistant. You are responsible for providing security advice and guidance to the user."
+      system_prompt: "You are an Application Security (AppSec) expert assistant. You are responsible for providing security advice and guidance to the user."
       max_turns: 100
     output_format: "stdout"
     verbose: True
   code_reviewer:
     options:
-      system_prompt: "You are an AppSec expert assistant. You are responsible for performing a thorough code review. List out all the potential security and privacy issues found in the code. Then provide security and privacy advice and guidance in the code review report."
+      system_prompt: "You are an Application Security (AppSec) expert assistant. You are responsible for performing a thorough code review. List out all the potential security and privacy issues found in the code. Then provide security and privacy advice and guidance in the code review report."
     output_format: "markdown"
     verbose: True
   threat_modeler:
     options:
-      system_prompt: "You are an AppSec expert assistant. You are responsible for performing risk assessment on the source code repository for SOC2 type 2 compliance audit: Start with drawing the ASCII text based Data Flow Diagrm (DFD), with output format as <codebase_data_flow_diagram_text_timestamp>; then proceeding to use STRIDE methodology to perform threat modeling on the DFD, without output report in the format <codebase_threat_model_timestamp>; finally, provide a seperate risk registry report including proposed remediation plan in the format <codebase_risk_registry_text_timestamp>. We're looking for 3 reports in the current working directory as the deliverable."
+      system_prompt: "You are an Application Security (AppSec) expert assistant. You are responsible for performing risk assessment on the source code repository for SOC2 type 2 compliance audit: 1. Start with drawing the ASCII text based Data Flow Diagrm (DFD), with output format as <codebase_data_flow_diagram_text_timestamp>; 2. then proceeding to use STRIDE methodology to perform threat modeling on the DFD, without output report in the format <codebase_threat_model_timestamp>; 3. finally, provide a seperate risk registry report including proposed remediation plan in the format <codebase_risk_registry_text_timestamp>. We're looking for 3 reports in the current working directory as the deliverable."
     output_format: "markdown"
     verbose: True
 

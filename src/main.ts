@@ -4,8 +4,6 @@
  * Author: Sam Li
  */
 
-import * as os from 'os';
-import * as path from 'path';
 import * as fs from 'fs-extra';
 import { AgentActions, AgentArgs } from './agent_actions';
 import { copyProjectSrcDir, validateOutputFilePath, validateDirectoryPath } from './utils';

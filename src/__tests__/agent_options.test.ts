@@ -150,7 +150,7 @@ describe('AgentOptions', () => {
       const agentOptions = new AgentOptions(emptyConfDict, environment);
       const options = agentOptions.getSimpleQueryAgentOptions('simple_query_agent');
 
-      expect(options.systemPrompt).toBe('You are an AppSec expert assistant.');
+      expect(options.systemPrompt).toBe('You are an Application Security (AppSec) expert assistant. You are responsible for providing security advice and guidance to the user.');
       expect(options.maxTurns).toBe(1);
     });
 
@@ -181,7 +181,7 @@ describe('AgentOptions', () => {
       const options = agentOptions.getCodeReviewerOptions('code_reviewer');
 
       expect(options.agents?.['code-reviewer'].prompt).toBe(
-        'You are a code reviewer assistant. Review code for security and privacy issues.'
+        'You are an Application Security (AppSec) expert assistant. You are responsible for performing a thorough code review. List out all the potential security and privacy issues found in the code.'
       );
     });
 
@@ -199,11 +199,11 @@ describe('AgentOptions', () => {
       const options = agentOptions.getThreatModelerOptions('threat_modeler');
 
       expect(options.agents).toBeDefined();
-      expect(options.agents?.['code-reviewer']).toBeDefined();
-      expect(options.agents?.['code-reviewer'].prompt).toBe('Threat modeler system prompt');
-      expect(options.agents?.['code-reviewer'].description).toBe('Threat modeler agent');
-      expect(options.agents?.['code-reviewer'].tools).toEqual(['Read', 'Grep', 'Write', 'Graphviz']);
-      expect(options.agents?.['code-reviewer'].model).toBe('sonnet');
+      expect(options.agents?.['threat-modeler']).toBeDefined();
+      expect(options.agents?.['threat-modeler'].prompt).toBe('Threat modeler system prompt');
+      expect(options.agents?.['threat-modeler'].description).toBe('Performs threat modeling and risk assessment using STRIDE methodology');
+      expect(options.agents?.['threat-modeler'].tools).toEqual(['Read', 'Grep', 'Write', 'Graphviz']);
+      expect(options.agents?.['threat-modeler'].model).toBe('sonnet');
       expect(options.permissionMode).toBe('bypassPermissions');
     });
 
@@ -212,8 +212,8 @@ describe('AgentOptions', () => {
       const agentOptions = new AgentOptions(emptyConfDict, environment);
       const options = agentOptions.getThreatModelerOptions('threat_modeler');
 
-      expect(options.agents?.['code-reviewer'].prompt).toBe(
-        'You are a code reviewer assistant. Perform risk assessment on source code for SOC2 type 2 compliance audit.'
+      expect(options.agents?.['threat-modeler'].prompt).toBe(
+        'You are an Application Security (AppSec) expert assistant. You are responsible for performing risk assessment on the source code repository for SOC2 type 2 compliance audit using the STRIDE methodology.'
       );
     });
 
@@ -221,7 +221,7 @@ describe('AgentOptions', () => {
       const agentOptions = new AgentOptions(mockConfDict, environment);
       const options = agentOptions.getThreatModelerOptions();
 
-      expect(options.agents?.['code-reviewer'].prompt).toBe('Threat modeler system prompt');
+      expect(options.agents?.['threat-modeler'].prompt).toBe('Threat modeler system prompt');
     });
   });
 });

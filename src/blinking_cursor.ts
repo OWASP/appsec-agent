@@ -29,10 +29,10 @@ export class BlinkingCursor {
     
     this.intervalId = setInterval(() => {
       if (this.isVisible) {
-        process.stdout.write(`\r${this.cursorChar} Thinking...`);
+        process.stdout.write(`\rClaude is thinking ... ${this.cursorChar}`);
         this.isVisible = false;
       } else {
-        process.stdout.write(`\r  Thinking...`);
+        process.stdout.write(`\rClaude is thinking ...  `);
         this.isVisible = true;
       }
     }, this.blinkInterval);

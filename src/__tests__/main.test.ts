@@ -34,6 +34,8 @@ describe('main', () => {
   let mockConfDict: any;
   let mockAgentActions: jest.Mocked<AgentActions>;
   let testDir: string;
+  let exitMock: jest.Mock;
+  let originalExit: typeof process.exit;
 
   beforeEach(() => {
     testDir = path.join(os.tmpdir(), `appsec-agent-main-test-${Date.now()}`);
@@ -47,181 +49,101 @@ describe('main', () => {
       }
     };
 
-    // Create mock AgentActions instance
     mockAgentActions = {
       simpleQueryClaudeWithOptions: jest.fn().mockResolvedValue(''),
       codeReviewerWithOptions: jest.fn().mockResolvedValue(''),
       threatModelerAgentWithOptions: jest.fn().mockResolvedValue('')
     } as any;
 
-    (AgentActions as jest.MockedClass<typeof AgentActions>).mockImplementation(() => {
-      return mockAgentActions;
-    });
+    (AgentActions as jest.MockedClass<typeof AgentActions>).mockImplementation(() => mockAgentActions);
 
-    // Reset readline mock
+    // Mock process.exit to prevent actual exit in tests
+    originalExit = process.exit;
+    exitMock = jest.fn();
+    process.exit = exitMock as unknown as typeof process.exit;
+
     mockQuestion.mockReset();
     mockClose.mockReset();
   });
 
   afterEach(() => {
+    process.exit = originalExit;
     jest.clearAllMocks();
     if (fs.existsSync(testDir)) {
       fs.removeSync(testDir);
     }
   });
 
+  // Helper to mock readline responses
+  const mockReadlineResponses = (...responses: string[]) => {
+    let callCount = 0;
+    mockQuestion.mockImplementation((_query: string, callback: (answer: string) => void) => {
+      callback(responses[callCount++] || '/end');
+    });
+  };
+
+  // Helper to create source and tmp directories
+  const setupSourceDirs = () => {
+    const sourceDir = path.join(testDir, 'source');
+    const tmpDir = path.join(testDir, '.source');
+    fs.ensureDirSync(sourceDir);
+    (copyProjectSrcDir as jest.Mock).mockReturnValue(tmpDir);
+    return { sourceDir, tmpDir };
+  };
+
   describe('simple_query_agent', () => {
     it('should run simple query agent and exit on /end', async () => {
-      const originalExit = process.exit;
-      const exitMock = jest.fn((code?: number) => {
-        // Prevent actual exit in tests
-      }) as any;
-      process.exit = exitMock;
+      mockReadlineResponses('test query', '/end');
 
-      // Mock readline to first return a query, then /end
-      let callCount = 0;
-      mockQuestion.mockImplementation((query: string, callback: (answer: string) => void) => {
-        callCount++;
-        if (callCount === 1) {
-          callback('test query');
-        } else {
-          callback('/end');
-        }
-      });
-
-      const args: AgentArgs = {
-        role: 'simple_query_agent',
-        environment: 'default'
-      };
-
-      await main(mockConfDict, args);
+      await main(mockConfDict, { role: 'simple_query_agent', environment: 'default' });
 
       expect(mockAgentActions.simpleQueryClaudeWithOptions).toHaveBeenCalledWith('test query', null);
       expect(mockClose).toHaveBeenCalled();
       expect(exitMock).toHaveBeenCalledWith(0);
-
-      process.exit = originalExit;
     });
 
     it('should skip empty prompts and continue', async () => {
-      const originalExit = process.exit;
-      const exitMock = jest.fn((code?: number) => {
-        // Prevent actual exit in tests
-      }) as any;
-      process.exit = exitMock;
+      mockReadlineResponses('   ', 'test query', '/end');
 
-      // Mock readline to return empty string, then a query, then /end
-      let callCount = 0;
-      mockQuestion.mockImplementation((query: string, callback: (answer: string) => void) => {
-        callCount++;
-        if (callCount === 1) {
-          callback('   '); // Empty/whitespace only
-        } else if (callCount === 2) {
-          callback('test query');
-        } else {
-          callback('/end');
-        }
-      });
+      await main(mockConfDict, { role: 'simple_query_agent', environment: 'default' });
 
-      const args: AgentArgs = {
-        role: 'simple_query_agent',
-        environment: 'default'
-      };
-
-      await main(mockConfDict, args);
-
-      // Should only call with the non-empty query
       expect(mockAgentActions.simpleQueryClaudeWithOptions).toHaveBeenCalledTimes(1);
       expect(mockAgentActions.simpleQueryClaudeWithOptions).toHaveBeenCalledWith('test query', null);
-      expect(mockClose).toHaveBeenCalled();
       expect(exitMock).toHaveBeenCalledWith(0);
-
-      process.exit = originalExit;
     });
 
     it('should handle case-insensitive /end command', async () => {
-      const originalExit = process.exit;
-      const exitMock = jest.fn((code?: number) => {
-        // Prevent actual exit in tests
-      }) as any;
-      process.exit = exitMock;
+      mockReadlineResponses('/END');
 
-      // Mock readline to return /END (uppercase)
-      mockQuestion.mockImplementation((query: string, callback: (answer: string) => void) => {
-        callback('/END');
-      });
-
-      const args: AgentArgs = {
-        role: 'simple_query_agent',
-        environment: 'default'
-      };
-
-      await main(mockConfDict, args);
+      await main(mockConfDict, { role: 'simple_query_agent', environment: 'default' });
 
       expect(mockAgentActions.simpleQueryClaudeWithOptions).not.toHaveBeenCalled();
       expect(mockClose).toHaveBeenCalled();
       expect(exitMock).toHaveBeenCalledWith(0);
-
-      process.exit = originalExit;
     });
 
     it('should run simple query agent with src_dir', async () => {
-      const originalExit = process.exit;
-      const exitMock = jest.fn((code?: number) => {
-        // Prevent actual exit in tests
-      }) as any;
-      process.exit = exitMock;
+      const { sourceDir, tmpDir } = setupSourceDirs();
+      mockReadlineResponses('test query', '/end');
 
-      const sourceDir = path.join(testDir, 'source');
-      fs.ensureDirSync(sourceDir);
-      const tmpDir = path.join(testDir, '.source');
-
-      (copyProjectSrcDir as jest.Mock).mockReturnValue(tmpDir);
-
-      // Mock readline to first return a query, then /end
-      let callCount = 0;
-      mockQuestion.mockImplementation((query: string, callback: (answer: string) => void) => {
-        callCount++;
-        if (callCount === 1) {
-          callback('test query');
-        } else {
-          callback('/end');
-        }
-      });
-
-      const args: AgentArgs = {
-        role: 'simple_query_agent',
-        environment: 'default',
-        src_dir: sourceDir
-      };
-
-      await main(mockConfDict, args);
+      await main(mockConfDict, { role: 'simple_query_agent', environment: 'default', src_dir: sourceDir });
 
       expect(copyProjectSrcDir).toHaveBeenCalled();
       expect(mockAgentActions.simpleQueryClaudeWithOptions).toHaveBeenCalledWith('test query', tmpDir);
-      expect(mockClose).toHaveBeenCalled();
       expect(exitMock).toHaveBeenCalledWith(0);
-
-      process.exit = originalExit;
     });
   });
 
   describe('code_reviewer', () => {
+    const codeReviewerArgs: AgentArgs = {
+      role: 'code_reviewer',
+      environment: 'default',
+      output_file: 'report.md',
+      output_format: 'markdown'
+    };
+
     it('should run code review agent without src_dir', async () => {
-      const originalExit = process.exit;
-      const exitMock = jest.fn((code?: number) => {
-        // Prevent actual exit in tests
-      }) as any;
-      process.exit = exitMock;
-
-      const args: AgentArgs = {
-        role: 'code_reviewer',
-        environment: 'default',
-        output_file: 'report.md',
-        output_format: 'markdown'
-      };
-
-      await main(mockConfDict, args);
+      await main(mockConfDict, codeReviewerArgs);
 
       expect(mockAgentActions.codeReviewerWithOptions).toHaveBeenCalled();
       const callArg = mockAgentActions.codeReviewerWithOptions.mock.calls[0][0];
@@ -229,59 +151,30 @@ describe('main', () => {
       expect(callArg).toContain('report.md');
       expect(callArg).toContain('markdown');
       expect(exitMock).toHaveBeenCalledWith(0);
-
-      process.exit = originalExit;
     });
 
     it('should run code review agent with src_dir', async () => {
-      const originalExit = process.exit;
-      const exitMock = jest.fn((code?: number) => {
-        // Prevent actual exit in tests
-      }) as any;
-      process.exit = exitMock;
+      const { sourceDir, tmpDir } = setupSourceDirs();
 
-      const sourceDir = path.join(testDir, 'source');
-      fs.ensureDirSync(sourceDir);
-      const tmpDir = path.join(testDir, '.source');
-
-      (copyProjectSrcDir as jest.Mock).mockReturnValue(tmpDir);
-
-      const args: AgentArgs = {
-        role: 'code_reviewer',
-        environment: 'default',
-        src_dir: sourceDir,
-        output_file: 'report.md',
-        output_format: 'markdown'
-      };
-
-      await main(mockConfDict, args);
+      await main(mockConfDict, { ...codeReviewerArgs, src_dir: sourceDir });
 
       expect(copyProjectSrcDir).toHaveBeenCalled();
-      expect(mockAgentActions.codeReviewerWithOptions).toHaveBeenCalled();
       const callArg = mockAgentActions.codeReviewerWithOptions.mock.calls[0][0];
       expect(callArg).toContain(tmpDir);
       expect(exitMock).toHaveBeenCalledWith(0);
-
-      process.exit = originalExit;
     });
   });
 
   describe('threat_modeler', () => {
+    const threatModelerArgs: AgentArgs = {
+      role: 'threat_modeler',
+      environment: 'default',
+      output_file: 'report.md',
+      output_format: 'markdown'
+    };
+
     it('should run threat modeler without src_dir', async () => {
-      const originalExit = process.exit;
-      const exitMock = jest.fn((code?: number) => {
-        // Prevent actual exit in tests
-      }) as any;
-      process.exit = exitMock;
-
-      const args: AgentArgs = {
-        role: 'threat_modeler',
-        environment: 'default',
-        output_file: 'report.md',
-        output_format: 'markdown'
-      };
-
-      await main(mockConfDict, args);
+      await main(mockConfDict, threatModelerArgs);
 
       expect(mockAgentActions.threatModelerAgentWithOptions).toHaveBeenCalled();
       const callArg = mockAgentActions.threatModelerAgentWithOptions.mock.calls[0][0];
@@ -289,102 +182,41 @@ describe('main', () => {
       expect(callArg).toContain('Data Flow Diagram');
       expect(callArg).toContain('STRIDE');
       expect(exitMock).toHaveBeenCalledWith(0);
-
-      process.exit = originalExit;
     });
 
     it('should run threat modeler with src_dir and clean up', async () => {
-      const originalExit = process.exit;
-      const exitMock = jest.fn((code?: number) => {
-        // Prevent actual exit in tests
-      }) as any;
-      process.exit = exitMock;
-
-      const sourceDir = path.join(testDir, 'source');
-      fs.ensureDirSync(sourceDir);
-      const tmpDir = path.join(testDir, '.source');
+      const { sourceDir, tmpDir } = setupSourceDirs();
       fs.ensureDirSync(tmpDir);
 
-      (copyProjectSrcDir as jest.Mock).mockReturnValue(tmpDir);
-
-      const args: AgentArgs = {
-        role: 'threat_modeler',
-        environment: 'default',
-        src_dir: sourceDir,
-        output_file: 'report.md',
-        output_format: 'markdown'
-      };
-
-      await main(mockConfDict, args);
+      await main(mockConfDict, { ...threatModelerArgs, src_dir: sourceDir });
 
       expect(copyProjectSrcDir).toHaveBeenCalled();
-      expect(mockAgentActions.threatModelerAgentWithOptions).toHaveBeenCalled();
       const callArg = mockAgentActions.threatModelerAgentWithOptions.mock.calls[0][0];
       expect(callArg).toContain(tmpDir);
       expect(exitMock).toHaveBeenCalledWith(0);
-
-      process.exit = originalExit;
     });
 
     it('should clean up temporary directory after threat modeler', async () => {
-      const originalExit = process.exit;
-      const exitMock = jest.fn((code?: number) => {
-        // Prevent actual exit in tests
-      }) as any;
-      process.exit = exitMock;
-
-      const sourceDir = path.join(testDir, 'source');
-      fs.ensureDirSync(sourceDir);
-      const tmpDir = path.join(testDir, '.source');
+      const { sourceDir, tmpDir } = setupSourceDirs();
       fs.ensureDirSync(tmpDir);
-      
-      // Verify tmpDir exists before running
       expect(fs.existsSync(tmpDir)).toBe(true);
 
-      (copyProjectSrcDir as jest.Mock).mockReturnValue(tmpDir);
+      await main(mockConfDict, { ...threatModelerArgs, src_dir: sourceDir });
 
-      const args: AgentArgs = {
-        role: 'threat_modeler',
-        environment: 'default',
-        src_dir: sourceDir,
-        output_file: 'report.md',
-        output_format: 'markdown'
-      };
-
-      await main(mockConfDict, args);
-
-      // Verify that removeSync was attempted (tmpDir should be removed or attempted to be removed)
-      // Since we can't spy on fs.removeSync directly, we verify the behavior:
-      // The main function should attempt cleanup, but since we're mocking copyProjectSrcDir,
-      // the actual cleanup may not happen. Instead, we verify the function completes successfully.
       expect(exitMock).toHaveBeenCalledWith(0);
-      
-      process.exit = originalExit;
     });
   });
 
   describe('invalid role', () => {
     it('should exit with error for invalid role', async () => {
-      const originalExit = process.exit;
-      const exitMock = jest.fn() as any;
-      process.exit = exitMock;
-
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
 
-      const args: AgentArgs = {
-        role: 'invalid_role',
-        environment: 'default'
-      };
+      await main(mockConfDict, { role: 'invalid_role', environment: 'default' });
 
-      await main(mockConfDict, args);
-
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Invalid appsec AI agent role')
-      );
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('Invalid appsec AI agent role'));
       expect(exitMock).toHaveBeenCalledWith(1);
 
       consoleErrorSpy.mockRestore();
-      process.exit = originalExit;
     });
   });
 });

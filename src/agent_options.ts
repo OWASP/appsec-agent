@@ -69,7 +69,8 @@ export class AgentOptions {
    */
   getSimpleQueryAgentOptions(role: string = 'simple_query_agent', srcDir?: string | null): Options {
     const roleConfig = this.confDict[this.environment]?.[role];
-    let systemPrompt = roleConfig?.options?.system_prompt || 'You are an AppSec expert assistant.';
+    let systemPrompt = roleConfig?.options?.system_prompt || 
+      'You are an Application Security (AppSec) expert assistant. You are responsible for providing security advice and guidance to the user.';
     
     // Add source directory context to system prompt if provided
     if (srcDir) {
@@ -83,17 +84,17 @@ export class AgentOptions {
   }
 
   /**
-   * Get options for code reviewer
+   * Get options for security code reviewer
    */
   getCodeReviewerOptions(role: string = 'code_reviewer'): Options {
     const roleConfig = this.confDict[this.environment]?.[role];
     const systemPrompt = roleConfig?.options?.system_prompt || 
-      'You are a code reviewer assistant. Review code for security and privacy issues.';
+      'You are an Application Security (AppSec) expert assistant. You are responsible for performing a thorough code review. List out all the potential security and privacy issues found in the code.';
 
     return {
       agents: {
         'code-reviewer': {
-          description: 'Reviews code for best practices and potential security and privacy issues',
+          description: 'Reviews code for best practices and potential security issues only',
           prompt: systemPrompt,
           tools: ['Read', 'Grep', 'Write'],
           model: 'sonnet'
@@ -109,18 +110,18 @@ export class AgentOptions {
   getThreatModelerOptions(role: string = 'threat_modeler'): Options {
     const roleConfig = this.confDict[this.environment]?.[role];
     const systemPrompt = roleConfig?.options?.system_prompt || 
-      'You are a code reviewer assistant. Perform risk assessment on source code for SOC2 type 2 compliance audit.';
+      'You are an Application Security (AppSec) expert assistant. You are responsible for performing risk assessment on the source code repository for SOC2 type 2 compliance audit using the STRIDE methodology.';
 
     return {
       agents: {
-        'code-reviewer': {
-          description: 'Threat modeler agent',
+        'threat-modeler': {
+          description: 'Performs threat modeling and risk assessment using STRIDE methodology',
           prompt: systemPrompt,
           tools: ['Read', 'Grep', 'Write', 'Graphviz'],
           model: 'sonnet'
         } as AgentDefinition
       },
-      permissionMode: 'bypassPermissions' // Skip all approval prompts - tools are pre-approved
+      permissionMode: 'bypassPermissions'
     };
   }
 }

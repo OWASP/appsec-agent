@@ -28,7 +28,6 @@ export class AgentActions {
   private environment: string;
   private args: AgentArgs;
   private conversationHistory: ConversationEntry[] = []; // Store conversation history for simple_query_agent
-
   constructor(confDict: ConfigDict, environment: string, args: AgentArgs) {
     this.confDict = confDict;
     this.environment = environment;
@@ -41,248 +40,144 @@ export class AgentActions {
   async simpleQueryClaudeWithOptions(yourPrompt: string, srcDir?: string | null): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment);
     const options = agentOptions.getSimpleQueryAgentOptions(this.args.role, srcDir);
-
+    
     // Build prompt with conversation history and source directory context
+    const sourceDirContext = srcDir 
+      ? `\n\nContext: There is a source code directory available at ${srcDir}. You can search and read files within this directory to answer questions. The directory is located in the current working directory.\n`
+      : '';
+    
     let fullPrompt: string;
-    let sourceDirContext = '';
-    
-    // Add source directory context if provided
-    if (srcDir) {
-      sourceDirContext = `\n\nContext: There is a source code directory available at ${srcDir}. You can search and read files within this directory to answer questions. The directory is located in the current working directory.\n`;
-    }
-    
     if (this.conversationHistory.length > 0) {
-      // Include previous conversation context
-      let contextPrompt = 'Previous conversation:\n';
-      for (const entry of this.conversationHistory) {
-        if (entry.role === 'user') {
-          contextPrompt += `User: ${entry.content}\n`;
-        } else {
-          contextPrompt += `Assistant: ${entry.content}\n`;
-        }
-      }
-      fullPrompt = `${contextPrompt}${sourceDirContext}User: ${yourPrompt}`;
+      const contextPrompt = this.conversationHistory
+        .map(entry => `${entry.role === 'user' ? 'User' : 'Assistant'}: ${entry.content}`)
+        .join('\n');
+      fullPrompt = `Previous conversation:\n${contextPrompt}${sourceDirContext}User: ${yourPrompt}`;
     } else {
       fullPrompt = `${sourceDirContext}${yourPrompt}`;
     }
 
-    // Declare cursor outside try block so it's accessible in catch
-    let cursor: BlinkingCursor | null = null;
-    
+    const cursor = new BlinkingCursor();
+    let cursorStopped = false;
+    const stopCursor = () => {
+      if (!cursorStopped) {
+        cursor.stop();
+        cursorStopped = true;
+      }
+    };
+
+    let accumulatedText = '';
+    let hasPrintedHeader = false;
+    let hasSeenStreamEvents = false;
+    let assistantResponseText = '';
+    let finalResult: SDKResultMessage | null = null;
+
+    const printHeader = () => {
+      if (!hasPrintedHeader) {
+        console.log(`\nClaude:\n`);
+        hasPrintedHeader = true;
+      }
+    };
+
     try {
-      let accumulatedText = '';
-      let hasPrintedHeader = false;
-      let hasSeenStreamEvents = false;
-      let messageCount = 0;
-      let assistantResponseText = '';
-      let finalResult: SDKResultMessage | null = null;
-      
-      // Start blinking cursor to show we're waiting for Claude's response
-      cursor = new BlinkingCursor();
       cursor.start();
-      
-      try {
-        for await (const msg of query({ prompt: fullPrompt, options })) {
-          messageCount++;
-        
-        // Debug logging (remove in production)
+
+      for await (const msg of query({ prompt: fullPrompt, options })) {
         if (this.args.verbose) {
-          console.error(`[DEBUG] Message #${messageCount}: type=${(msg as any).type}`);
+          console.error(`[DEBUG] Message type: ${(msg as any).type}`);
         }
-        // Handle stream events (streaming deltas) - these come first
+
         if (msg.type === 'stream_event') {
           hasSeenStreamEvents = true;
+          stopCursor();
           const streamMsg = msg as any;
           
-          // Stop blinking cursor when we receive the first stream event
-          if (cursor) cursor.stop();
-          
-          // Handle content block deltas (streaming text)
           if (streamMsg.event?.type === 'content_block_delta' && streamMsg.event.delta?.type === 'text_delta') {
             const deltaText = streamMsg.event.delta.text || '';
             if (deltaText) {
-              if (!hasPrintedHeader) {
-                console.log(`\nClaude:\n`);
-                hasPrintedHeader = true;
-              }
-              // Accumulate and write streaming deltas directly
+              printHeader();
               accumulatedText += deltaText;
               assistantResponseText += deltaText;
               process.stdout.write(deltaText);
             }
-          }
-          // Handle content block start (beginning of new content block)
-          else if (streamMsg.event?.type === 'content_block_start') {
-            // Stop cursor when content block starts
-            if (cursor) cursor.stop();
-            // Content block is starting - ensure header is printed
-            if (!hasPrintedHeader) {
-              console.log(`\nClaude:\n`);
-              hasPrintedHeader = true;
-            }
-            // Don't reset accumulatedText here - we want to accumulate ALL text across all blocks
-            // Only reset if this is truly a new message (but we can't tell that here)
-            // Actually, we should keep accumulating to get the full response
-          }
-          // Handle message stop (one message/turn is complete, but stream may continue)
-          else if (streamMsg.event?.type === 'message_stop') {
-            // One message is complete, but the stream may continue with more messages
-            // (e.g., after tools execute). Don't treat this as stream end.
-            if (hasPrintedHeader && accumulatedText) {
-              // This message is done, but more may come
-            }
-          }
-          // Handle other stream event types we might not be handling
-          else if (this.args.verbose) {
+          } else if (streamMsg.event?.type === 'content_block_start') {
+            printHeader();
+          } else if (this.args.verbose && streamMsg.event?.type !== 'message_stop') {
             console.error(`[DEBUG] Unhandled stream event type: ${streamMsg.event?.type}`);
           }
-        }
-        // Handle assistant messages (complete messages) - only use if no stream events
-        // Note: If we've seen stream events, the content was already printed incrementally
-        // BUT: When tools are used, there may be more assistant messages after tools complete
-        // So we need to handle both cases
-        else if (msg.type === 'assistant') {
-          // Stop cursor when we receive assistant message
-          if (cursor) cursor.stop();
+        } else if (msg.type === 'assistant') {
+          stopCursor();
           const assistantMsg = msg as SDKAssistantMessage;
-          if (assistantMsg.message.content) {
-            for (const block of assistantMsg.message.content) {
-              if (block.type === 'text') {
-                const currentText = block.text || '';
-                if (currentText && currentText.length > 0) {
-                  // If we haven't seen stream events, print the complete message
-                  if (!hasSeenStreamEvents) {
-                    if (!hasPrintedHeader) {
-                      console.log(`\nClaude:\n`);
-                      hasPrintedHeader = true;
-                    }
-                    console.log(currentText);
-                    accumulatedText = currentText;
-                    assistantResponseText = currentText;
-                  } else {
-                    // If we've seen stream events, this might be additional content after tools
-                    // Check if this is new content not already accumulated
-                    if (!currentText.startsWith(accumulatedText) && currentText !== accumulatedText) {
-                      // This is additional content (e.g., after tools complete)
-                      const newText = currentText.slice(accumulatedText.length);
-                      if (newText) {
-                        process.stdout.write(newText);
-                        accumulatedText = currentText;
-                        assistantResponseText = currentText;
-                      }
-                    } else if (currentText.length > accumulatedText.length) {
-                      // More content than we've accumulated
-                      const newText = currentText.slice(accumulatedText.length);
-                      if (newText) {
-                        process.stdout.write(newText);
-                        accumulatedText = currentText;
-                        assistantResponseText = currentText;
-                      }
-                    }
-                  }
+          for (const block of assistantMsg.message.content || []) {
+            if (block.type === 'text' && block.text) {
+              const currentText = block.text;
+              if (!hasSeenStreamEvents) {
+                // No streaming - print the complete message
+                printHeader();
+                console.log(currentText);
+                accumulatedText = currentText;
+                assistantResponseText = currentText;
+              } else if (currentText.length > accumulatedText.length) {
+                // Print only new content not yet streamed
+                const newText = currentText.startsWith(accumulatedText)
+                  ? currentText.slice(accumulatedText.length)
+                  : currentText; // Fallback: print entire text if mismatch
+                if (newText) {
+                  process.stdout.write(newText);
+                  accumulatedText = currentText;
+                  assistantResponseText = currentText;
                 }
               }
             }
           }
-        }
-        // Handle result messages - collect but don't display until stream completes
-        // IMPORTANT: The stream may continue after a result message if tools are being used
-        // We must continue processing until the stream is truly exhausted
-        else if (msg.type === 'result') {
-          // Stop cursor when we receive result (in case no content was received)
-          if (cursor) cursor.stop();
-          const resultMsg = msg as SDKResultMessage;
-          // Always update finalResult with the latest result message
-          // (there may be multiple result messages if tools are used)
-          finalResult = resultMsg;
-          
-          // Check for errors in result messages - display errors immediately
-          if (resultMsg.is_error) {
-            const errorMsg = (resultMsg as any).errors?.[0] || (resultMsg as any).error_message || 'Unknown error occurred';
+        } else if (msg.type === 'result') {
+          stopCursor();
+          finalResult = msg as SDKResultMessage;
+          if (finalResult.is_error) {
+            const errorMsg = (finalResult as any).errors?.[0] || (finalResult as any).error_message || 'Unknown error occurred';
             console.error(`\nError: ${errorMsg}`);
-            if (resultMsg.subtype) {
-              console.error(`Error subtype: ${resultMsg.subtype}`);
+            if (finalResult.subtype) {
+              console.error(`Error subtype: ${finalResult.subtype}`);
             }
-            // Log max_turns error specifically
-            if (resultMsg.subtype === 'error_max_turns') {
+            if (finalResult.subtype === 'error_max_turns') {
               console.error(`\nNote: The conversation stopped because max_turns (${options.maxTurns || 1}) was reached.`);
               console.error(`To allow the agent to use tools and continue, increase max_turns in the configuration or use the code_reviewer role.`);
             }
           }
-          
-          // Debug: log turn count and continue processing (stream may not be done yet)
           if (this.args.verbose) {
-            console.error(`[DEBUG] Result: num_turns=${resultMsg.num_turns}, is_error=${resultMsg.is_error}`);
-            console.error(`[DEBUG] Continuing to process stream (may have more messages after tools)`);
+            console.error(`[DEBUG] Result: num_turns=${finalResult.num_turns}, is_error=${finalResult.is_error}`);
           }
-        }
-        // Handle tool progress messages (agent might be using tools)
-        else if (msg.type === 'tool_progress') {
-          // Tool is being executed - this is normal, just continue
+        } else if (msg.type === 'tool_progress') {
           if (this.args.verbose) {
             const toolMsg = msg as any;
             console.log(`[Tool Progress] ${toolMsg.tool_name}: ${toolMsg.elapsed_time_seconds}s`);
           }
-        }
-        // Log other message types - always log to help debug issues
-        else {
-          // Unknown message type - log it to help debug
-          if (this.args.verbose) {
-            console.error(`[DEBUG] Received unknown message type: ${(msg as any).type}`);
-            console.error(`[DEBUG] Message content:`, JSON.stringify(msg, null, 2));
-          }
-        }
-        }
-      } finally {
-        // Always stop the cursor when done, even if there's an error
-        if (cursor) cursor.stop();
-      }
-      
-      // Debug: log total messages processed
-      if (this.args.verbose) {
-        console.error(`[DEBUG] Total messages processed: ${messageCount}`);
-      }
-      
-      // Now that the stream is complete, ensure all stdout writes are flushed
-      // Use multiple setImmediate calls to ensure the event loop processes all pending writes
-      // This is critical when using process.stdout.write() for streaming
-      await new Promise<void>(resolve => setImmediate(resolve));
-      await new Promise<void>(resolve => setImmediate(resolve));
-      
-      // Now that the stream is complete, display the final result (cost, etc.)
-      if (finalResult) {
-        // Ensure we flush any partial output and add newline
-        if (hasPrintedHeader) {
-          console.log(); // New line after final output
-        }
-        
-        // Display cost only after stream is completely done
-        if (!finalResult.is_error && finalResult.total_cost_usd && finalResult.total_cost_usd > 0) {
-          console.log(`\nCost: $${finalResult.total_cost_usd.toFixed(4)}`);
+        } else if (this.args.verbose) {
+          console.error(`[DEBUG] Unknown message type: ${(msg as any).type}`);
         }
       }
-      
-      // One more flush to ensure cost is written before returning
-      await new Promise<void>(resolve => setImmediate(resolve));
-      
-      // Store the current exchange in conversation history
-      this.conversationHistory.push({ role: 'user', content: yourPrompt });
-      if (assistantResponseText) {
-        this.conversationHistory.push({ role: 'assistant', content: assistantResponseText });
-      }
-    } catch (error) {
-      // Ensure cursor is stopped on error
-      if (cursor) {
-        try {
-          cursor.stop();
-        } catch {
-          // Ignore if cursor cleanup fails
-        }
-      }
-      console.error('Error during query:', error);
-      throw error;
+    } finally {
+      stopCursor();
     }
-    // Add newline for spacing after response (matching Python version)
+
+    // Flush stdout writes
+    await new Promise<void>(resolve => setImmediate(resolve));
+    
+    // Display final result
+    if (finalResult) {
+      if (hasPrintedHeader) {
+        console.log();
+      }
+      if (!finalResult.is_error && finalResult.total_cost_usd && finalResult.total_cost_usd > 0) {
+        console.log(`\nCost: $${finalResult.total_cost_usd.toFixed(4)}`);
+      }
+    }
+
+    // Store conversation history
+    this.conversationHistory.push({ role: 'user', content: yourPrompt });
+    if (assistantResponseText) {
+      this.conversationHistory.push({ role: 'assistant', content: assistantResponseText });
+    }
+
     console.log();
     return '';
   }
@@ -361,15 +256,12 @@ export class AgentActions {
   async threatModelerAgentWithOptions(userPrompt: string): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment);
     const options = agentOptions.getThreatModelerOptions(this.args.role);
-
     // Declare cursor outside try block so it's accessible in catch
     let cursor: BlinkingCursor | null = null;
-
     try {
       // Start blinking cursor to show we're waiting for Claude's response
       cursor = new BlinkingCursor();
       cursor.start();
-
       try {
         for await (const message of query({ prompt: userPrompt, options })) {
           if (message.type === 'stream_event') {

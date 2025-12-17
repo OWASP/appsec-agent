@@ -168,13 +168,9 @@ describe('AgentActions', () => {
         }
       });
 
-      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
       const agentActions = new AgentActions(mockConfDict, environment, mockArgs);
       
       await expect(agentActions.simpleQueryClaudeWithOptions('Test prompt')).rejects.toThrow('Test error');
-      expect(consoleErrorSpy).toHaveBeenCalledWith('Error during query:', error);
-      
-      consoleErrorSpy.mockRestore();
     });
   });
 

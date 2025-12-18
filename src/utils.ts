@@ -621,3 +621,25 @@ export function printVersionInfo(): void {
   console.log();
 }
 
+/**
+ * Mapping of output formats to file extensions.
+ * Add new formats here to extend support.
+ */
+export const FORMAT_TO_EXTENSION: Record<string, string> = {
+  markdown: 'md',
+  md: 'md',
+  json: 'json',
+  xml: 'xml',
+  xlsx: 'xlsx',
+  csv: 'csv',
+};
+
+/**
+ * Get file extension for a given output format.
+ * Falls back to 'md' for unknown formats.
+ */
+export function getExtensionForFormat(format: string | undefined): string {
+  if (!format) return 'md';
+  return FORMAT_TO_EXTENSION[format.toLowerCase()] || 'md';
+}
+

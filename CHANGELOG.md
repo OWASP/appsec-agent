@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2025-12-18
+
+### Added
+- **Multiple Output Formats**: Support for additional output formats beyond markdown
+  - Added `json`, `xml`, `csv`, and `xlsx` format options via `-f/--output_format` flag
+  - New `getExtensionForFormat()` utility function to map formats to file extensions
+  - New `FORMAT_TO_EXTENSION` mapping for extensible format support
+
+### Changed
+- **Dynamic Output File Naming**: Output files now default based on role and format
+  - `code_reviewer` defaults to `code_review_report.<ext>` where `<ext>` matches the output format
+  - `threat_modeler` defaults to `threat_model_report.<ext>` where `<ext>` matches the output format
+  - Removed hardcoded `.md` extension default from `-o/--output_file` option
+- **CLI Help Text**: Updated to show all available output formats (markdown, json, xml, csv, xlsx)
+
 ## [0.1.0] - 2025-12-10
 
 ### Added
@@ -152,7 +167,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Core agent architecture and infrastructure
 - Basic agent interaction capabilities
 
-[Unreleased]: https://github.com/yourusername/appsec-agent/compare/v0.0.2...HEAD
+[Unreleased]: https://github.com/yourusername/appsec-agent/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/yourusername/appsec-agent/compare/v0.1.0...v0.2.1
+[0.1.0]: https://github.com/yourusername/appsec-agent/compare/v0.0.8...v0.1.0
+[0.0.8]: https://github.com/yourusername/appsec-agent/compare/v0.0.6...v0.0.8
+[0.0.6]: https://github.com/yourusername/appsec-agent/compare/v0.0.4...v0.0.6
+[0.0.4]: https://github.com/yourusername/appsec-agent/compare/v0.0.2...v0.0.4
 [0.0.2]: https://github.com/yourusername/appsec-agent/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/yourusername/appsec-agent/compare/v0.0.0...v0.0.1
 

@@ -6,7 +6,7 @@
 
 import * as fs from 'fs-extra';
 import { AgentActions, AgentArgs } from './agent_actions';
-import { copyProjectSrcDir, validateOutputFilePath, validateDirectoryPath, sanitizePathForError } from './utils';
+import { copyProjectSrcDir, validateOutputFilePath, validateDirectoryPath, sanitizePathForError, getExtensionForFormat } from './utils';
 
 /**
  * Validate and copy source directory, exiting on validation failure
@@ -97,7 +97,8 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
   } else if (args.role === 'code_reviewer') {
     console.log('Running Code Review Agent');
     
-    const outputFile = validateOutputFile(args.output_file || 'code_review_report.md', currentWorkingDir);
+    const extension = getExtensionForFormat(args.output_format);
+    const outputFile = validateOutputFile(args.output_file || `code_review_report.${extension}`, currentWorkingDir);
     const tmpSrcDir = args.src_dir ? validateAndCopySrcDir(args.src_dir, currentWorkingDir) : null;
     const srcLocation = tmpSrcDir ? `current working directory ${tmpSrcDir}` : 'current working directory';
     
@@ -109,7 +110,8 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
   } else if (args.role === 'threat_modeler') {
     console.log('Running Threat Modeler');
     
-    const outputFile = validateOutputFile(args.output_file || 'threat_model_report.md', currentWorkingDir);
+    const extension = getExtensionForFormat(args.output_format);
+    const outputFile = validateOutputFile(args.output_file || `threat_model_report.${extension}`, currentWorkingDir);
     const tmpSrcDir = args.src_dir ? validateAndCopySrcDir(args.src_dir, currentWorkingDir) : null;
     const srcLocation = tmpSrcDir ? `the ${tmpSrcDir} directory` : 'the current working directory';
     

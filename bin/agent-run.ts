@@ -6,16 +6,12 @@
  */
 
 import * as path from 'path';
-import * as fs from 'fs';
 import { Command } from 'commander';
 
-// Check if we're running from source or compiled
-const isCompiled = fs.existsSync(path.join(__dirname, '..', 'dist'));
-const basePath = isCompiled ? '../dist' : '../src';
-
 // Use require for CommonJS compatibility
-const { loadYaml, listRoles, printVersionInfo, getProjectRoot } = require(path.join(__dirname, basePath, 'utils'));
-const { main } = require(path.join(__dirname, basePath, 'main'));
+// Both compiled (dist/bin/ → dist/src/) and source (bin/ → src/) use ../src relative path
+const { loadYaml, listRoles, printVersionInfo, getProjectRoot } = require(path.join(__dirname, '../src/utils'));
+const { main } = require(path.join(__dirname, '../src/main'));
 
 const program = new Command();
 
@@ -90,7 +86,7 @@ const args = {
 };
 
 // Run main function
-main(confDict, args).catch((error) => {
+main(confDict, args).catch((error: Error) => {
   console.error('Error running agent:', error);
   process.exit(1);
 });

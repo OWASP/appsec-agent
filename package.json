@@ -1,23 +1,22 @@
 {
   "name": "appsec-agent",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "TypeScript package for AppSec AI Agent management",
   "author": "Sam Li",
   "date": "Dec 22 2025",
   "license": "MIT",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
   "files": [
     "dist",
-    "bin",
     "conf"
   ],
   "bin": {
-    "agent-run": "./bin/agent-run.js"
+    "agent-run": "./dist/bin/agent-run.js"
   },
   "scripts": {
     "build": "tsc",
-    "start": "node dist/main.js",
+    "start": "node dist/src/main.js",
     "dev": "ts-node src/main.ts",
     "clean": "rm -rf dist",
     "test": "jest",

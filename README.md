@@ -110,9 +110,10 @@ A specialized agent for automated code analysis that can:
 - Review code for security vulnerabilities
 - Detect privacy issues in codebases
 - Generate comprehensive security reports
-- Support multiple output formats (Markdown, etc.)
+- Support multiple output formats (Markdown, JSON, XML, CSV, XLSX)
 - Analyze entire project directories
 - Use advanced tools: Read, Grep, and Write capabilities
+- Accept deployment context via `-c/--context` for environment-specific analysis
 
 ### Threat Modeler (`threat_modeler`)
 A specialized agent for comprehensive threat modeling that can:
@@ -269,8 +270,11 @@ appsec-agent/
 │       ├── concurrency.test.ts  # Concurrency and thread-safety tests
 │       └── ...                # Other test files
 ├── bin/
-│   ├── agent-run.js          # Main CLI script (compiled)
-│   └── agent-run.ts          # Main CLI script (source)
+│   └── agent-run.ts          # CLI script (TypeScript source)
+├── dist/                      # Compiled output (generated)
+│   ├── src/                   # Compiled library code
+│   └── bin/
+│       └── agent-run.js       # Compiled CLI entry point
 ├── conf/
 │   └── appsec_agent.yaml   # General configuration file
 ├── package.json
@@ -333,7 +337,7 @@ $ npx ts-node bin/agent-run.ts
 
 # Or build first, then run
 $ npm run build
-$ node bin/agent-run.js
+$ node dist/bin/agent-run.js
 ```
 
 ## 🧪 Testing
@@ -370,7 +374,7 @@ $ npm test -- concurrency.test.ts
 ### Test Results
 
 All tests pass including:
-- ✅ 115 total tests
+- ✅ 120 total tests
 - ✅ 11 concurrency tests
 - ✅ Full coverage of core functionality
 

@@ -204,5 +204,106 @@ describe('agent-run CLI', () => {
       expect(process.env.ANTHROPIC_BASE_URL).toBe('https://existing-url.com');
     });
   });
+
+  describe('Context parameter', () => {
+    it('should accept context via -c flag', () => {
+      const { Command } = require('commander');
+      const mockCommand = Command();
+      
+      // Simulate command line parsing with -c flag
+      mockCommand.opts.mockReturnValue({
+        role: 'code_reviewer',
+        environment: 'development',
+        context: 'AWS Lambda function in production VPC'
+      });
+
+      const options = mockCommand.opts();
+      const args = {
+        role: options.role,
+        environment: options.environment,
+        context: options.context
+      };
+
+      expect(args.context).toBe('AWS Lambda function in production VPC');
+    });
+
+    it('should accept context via --context flag', () => {
+      const { Command } = require('commander');
+      const mockCommand = Command();
+      
+      // Simulate command line parsing with --context flag
+      mockCommand.opts.mockReturnValue({
+        role: 'code_reviewer',
+        environment: 'development',
+        context: 'Kubernetes microservice on GKE, PCI-DSS compliant'
+      });
+
+      const options = mockCommand.opts();
+      const args = {
+        role: options.role,
+        environment: options.environment,
+        context: options.context
+      };
+
+      expect(args.context).toBe('Kubernetes microservice on GKE, PCI-DSS compliant');
+    });
+
+    it('should work without context (optional parameter)', () => {
+      const { Command } = require('commander');
+      const mockCommand = Command();
+      
+      // Simulate command line parsing without context
+      mockCommand.opts.mockReturnValue({
+        role: 'code_reviewer',
+        environment: 'development'
+      });
+
+      const options = mockCommand.opts();
+      const args = {
+        role: options.role,
+        environment: options.environment,
+        context: options.context
+      };
+
+      expect(args.context).toBeUndefined();
+    });
+
+    it('should include context in args object passed to main', () => {
+      const { Command } = require('commander');
+      const mockCommand = Command();
+      
+      // Simulate full args object with context
+      mockCommand.opts.mockReturnValue({
+        role: 'code_reviewer',
+        environment: 'production',
+        src_dir: './src',
+        output_file: 'report.md',
+        output_format: 'markdown',
+        verbose: true,
+        context: 'Internal CLI tool, VPN access required, elevated AWS IAM permissions'
+      });
+
+      const options = mockCommand.opts();
+      const args = {
+        role: options.role,
+        environment: options.environment,
+        src_dir: options.src_dir,
+        output_file: options.output_file,
+        output_format: options.output_format,
+        verbose: options.verbose,
+        context: options.context
+      };
+
+      expect(args).toEqual({
+        role: 'code_reviewer',
+        environment: 'production',
+        src_dir: './src',
+        output_file: 'report.md',
+        output_format: 'markdown',
+        verbose: true,
+        context: 'Internal CLI tool, VPN access required, elevated AWS IAM permissions'
+      });
+    });
+  });
 });
 

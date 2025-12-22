@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2025-12-22
+
+### Added
+- **Context Parameter for Code Reviews**: New `-c/--context` CLI option for code_reviewer role
+  - Allows users to provide deployment and environment context for more targeted security analysis
+  - Supports describing deployment type (AWS Lambda, Kubernetes, Docker, etc.)
+  - Supports specifying compliance requirements (SOC2, HIPAA, PCI-DSS, GDPR)
+  - Supports describing data sensitivity (PII, PHI, payment data)
+  - Context is injected into the user prompt to help the agent focus on environment-specific vulnerabilities
+  - Fully backward compatible - context is optional
+
+### Changed
+- **Enhanced Code Review Prompts**: Code reviewer now generates more comprehensive prompts
+  - When context is provided, prompts include guidance to focus on environment-specific issues
+  - Prompts encourage consideration of infrastructure mitigations and threat models
+
 ## [0.2.1] - 2025-12-18
 
 ### Added

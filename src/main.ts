@@ -102,7 +102,25 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
     const tmpSrcDir = args.src_dir ? validateAndCopySrcDir(args.src_dir, currentWorkingDir) : null;
     const srcLocation = tmpSrcDir ? `current working directory ${tmpSrcDir}` : 'current working directory';
     
-    const userPrompt = `Review the code in the ${srcLocation}, then provide a report of the potential security issues found in the code. Please write the review report in the ${outputFile} file under current working directory in ${args.output_format} format.`;
+    // Build context section if provided
+    let contextSection = '';
+    if (args.context) {
+      contextSection = `
+
+IMPORTANT DEPLOYMENT & ENVIRONMENT CONTEXT:
+${args.context}
+
+Please consider this context when analyzing the code. Focus on:
+- Security issues specific to this deployment environment
+- Vulnerabilities that may be mitigated or exacerbated by this context
+- Best practices relevant to the stated architecture and compliance requirements
+- Environment-specific attack vectors and threat models
+
+`;
+    }
+    
+    const userPrompt = `Review the code in the ${srcLocation}.${contextSection}.
+Provide a comprehensive security review report identifying potential security issues found in the code. Please write the review report in the ${outputFile} file under current working directory in ${args.output_format} format.`;
     
     await agentActions.codeReviewerWithOptions(userPrompt);
     cleanupTmpDir(tmpSrcDir);

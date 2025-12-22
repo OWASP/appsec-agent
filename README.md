@@ -143,7 +143,25 @@ $ npx agent-run -r code_reviewer -s /path/to/source
 
 # Custom output file and format
 $ npx agent-run -r code_reviewer -o security_report.html -f html
+
+# Review with deployment context for more targeted analysis
+$ npx agent-run -r code_reviewer -s ./src \
+  -c "AWS Lambda function in production VPC, handles user authentication via API Gateway, processes PII data"
+
+# Kubernetes microservice with compliance context
+$ npx agent-run -r code_reviewer -s ./payment-service \
+  -c "Kubernetes microservice on GKE, PCI-DSS compliant environment, internal service mesh only"
+
+# Internal tool with access context
+$ npx agent-run -r code_reviewer -s ./admin-cli \
+  -c "Internal CLI tool run by DevOps, requires VPN access, elevated AWS IAM permissions"
 ```
+
+The `-c/--context` option provides deployment and environment information that helps the agent:
+- Focus on environment-specific vulnerabilities (e.g., Lambda event injection, K8s secrets exposure)
+- Consider infrastructure mitigations already in place
+- Prioritize findings based on actual threat landscape
+- Recommend best practices appropriate for the stated architecture
 
 ### Threat Modeler Example
 ```bash

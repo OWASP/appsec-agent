@@ -30,6 +30,7 @@ program
   .option('-f, --output_format <format>', 'Output format: markdown, json, xml, csv, xlsx - default to "markdown"', 'markdown')
   .option('-k, --anthropic-api-key <key>', 'Anthropic API key (overrides ANTHROPIC_API_KEY environment variable)')
   .option('-u, --anthropic-base-url <url>', 'Anthropic API base URL (overrides ANTHROPIC_BASE_URL environment variable)')
+  .option('-c, --context <context>', 'Additional context for the code review (e.g., deployment environment, architecture, compliance requirements)')
   .option('-l, --list_roles', 'List all available roles')
   .option('-v, --version', 'Program version')
   .option('-V, --verbose', 'Verbose mode');
@@ -84,7 +85,8 @@ const args = {
   src_dir: options.src_dir,
   output_file: options.output_file,
   output_format: options.output_format,
-  verbose: options.verbose
+  verbose: options.verbose,
+  context: options.context
 };
 
 // Run main function

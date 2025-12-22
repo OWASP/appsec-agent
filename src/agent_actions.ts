@@ -16,6 +16,7 @@ export interface AgentArgs {
   output_file?: string;
   output_format?: string;
   verbose?: boolean;
+  context?: string;  // User-provided context for code review
 }
 
 interface ConversationEntry {

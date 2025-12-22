@@ -105,6 +105,7 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
     // Build context section if provided
     let contextSection = '';
     if (args.context) {
+      console.log('Using context:', args.context?.substring(0, 50) + (args.context.length > 50 ? '...' : ''));
       contextSection = `
 
 IMPORTANT DEPLOYMENT & ENVIRONMENT CONTEXT:

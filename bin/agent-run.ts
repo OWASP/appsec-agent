@@ -85,6 +85,11 @@ const args = {
   context: options.context
 };
 
+// Log context if provided
+if (args.context) {
+  console.log('Using context:', args.context.substring(0, 50) + (args.context.length > 50 ? '...' : ''));
+}
+
 // Run main function
 main(confDict, args).catch((error: Error) => {
   console.error('Error running agent:', error);

@@ -1,6 +1,6 @@
 {
   "name": "appsec-agent",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "TypeScript package for AppSec AI Agent management",
   "author": "Sam Li",
   "date": "Dec 22 2025",
@@ -15,7 +15,7 @@
     "agent-run": "./dist/bin/agent-run.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp -r conf dist/",
     "start": "node dist/src/main.js",
     "dev": "ts-node src/main.ts",
     "clean": "rm -rf dist",

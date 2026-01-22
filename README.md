@@ -114,6 +114,7 @@ A specialized agent for automated code analysis that can:
 - Analyze entire project directories
 - Use advanced tools: Read, Grep, and Write capabilities
 - Accept deployment context via `-c/--context` for environment-specific analysis
+- **PR-focused review mode** via `-d/--diff-context` for optimized token usage
 
 ### Threat Modeler (`threat_modeler`)
 A specialized agent for comprehensive threat modeling that can:
@@ -163,6 +164,57 @@ The `-c/--context` option provides deployment and environment information that h
 - Consider infrastructure mitigations already in place
 - Prioritize findings based on actual threat landscape
 - Recommend best practices appropriate for the stated architecture
+
+### PR-Focused Code Review (Diff Context Mode)
+
+For Pull Request reviews, use the `-d/--diff-context` option to provide a JSON file containing only the changed code. This significantly reduces token usage by focusing the review on actual changes rather than the entire codebase.
+
+```bash
+# Review a PR using diff context
+$ npx agent-run -r code_reviewer -d pr-diff.json
+
+# Combine with source directory for full file access when needed
+$ npx agent-run -r code_reviewer -d pr-diff.json -s ./src
+
+# With additional deployment context
+$ npx agent-run -r code_reviewer -d pr-diff.json -c "Production API, handles PII"
+```
+
+The diff context JSON file should follow this structure:
+
+```json
+{
+  "prNumber": 123,
+  "baseBranch": "main",
+  "headBranch": "feature/auth",
+  "headSha": "abc123def456",
+  "owner": "your-org",
+  "repo": "your-repo",
+  "files": [
+    {
+      "filePath": "src/auth/login.ts",
+      "language": "typescript",
+      "fileType": "modified",
+      "imports": "import bcrypt from 'bcrypt';",
+      "hunks": [
+        {
+          "startLine": 42,
+          "endLine": 55,
+          "beforeContext": "// Previous context",
+          "changedCode": "+const password = req.body.password;",
+          "afterContext": "// Following context",
+          "containingFunction": "async function login(req, res)"
+        }
+      ]
+    }
+  ],
+  "totalFilesChanged": 1,
+  "totalLinesAdded": 10,
+  "totalLinesRemoved": 5
+}
+```
+
+**Note:** If `--diff-context` is provided without the `code_reviewer` role, a warning will be displayed as the option is only applicable to code reviews.
 
 ### Threat Modeler Example
 ```bash
@@ -292,6 +344,18 @@ appsec-agent/
 - `getSimpleQueryAgentOptions()`: Gets options for simple query agent
 - `getCodeReviewerOptions()`: Gets options for code reviewer
 - `getThreatModelerOptions()`: Gets options for threat modeler
+- `getDiffReviewerOptions()`: Gets options for PR diff-focused code reviewer
+
+#### Diff Context Functions
+
+- `validateDiffContext(data)`: Validates diff context JSON structure with comprehensive field validation
+- `formatDiffContextForPrompt(context)`: Formats diff context into a prompt for AI analysis
+
+#### Path Validation Functions
+
+- `validateInputFilePath(filePath, baseDir)`: Validates input file paths for security concerns
+- `validateOutputFilePath(filePath, baseDir)`: Validates output file paths to prevent directory traversal
+- `isSafePath(filePath, allowAbsolute)`: Checks if a path is safe from traversal attacks
 
 ## 🛠 Development
 
@@ -374,8 +438,9 @@ $ npm test -- concurrency.test.ts
 ### Test Results
 
 All tests pass including:
-- ✅ 120 total tests
+- ✅ 187 total tests
 - ✅ 11 concurrency tests
+- ✅ 51 diff context validation tests
 - ✅ Full coverage of core functionality
 
 ## 📚 References

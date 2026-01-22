@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.5] - 2026-01-21
+
+### Added
+- **PR Diff Context Mode**: New `-d/--diff-context` CLI option for code_reviewer role
+  - Enables focused security review of Pull Request changes only
+  - Significantly reduces token usage by analyzing only changed code
+  - Supports JSON file input with PR metadata, file changes, and diff hunks
+  - Includes `DiffContext`, `DiffContextFile`, and `DiffHunk` TypeScript interfaces
+  - New `formatDiffContextForPrompt()` function to format diff context for AI analysis
+  - New `getDiffReviewerOptions()` method in AgentOptions for diff-focused reviews
+  - New `diffReviewerWithOptions()` method in AgentActions for PR-focused code review
+- **Input File Path Validation**: New `validateInputFilePath()` function
+  - Validates input file paths for security concerns
+  - Allows absolute paths while validating relative paths for directory traversal
+  - Prevents null bytes and control characters in paths
+- **Comprehensive Test Coverage**: 67 new tests (120 → 187 total)
+  - 51 tests for `validateDiffContext` covering all field types and edge cases
+  - 9 tests for `validateInputFilePath` covering path validation scenarios
+  - 7 tests for diff context code review flow in main.ts
+
+### Changed
+- **Enhanced `validateDiffContext`**: Stricter validation for diff context JSON
+  - Required string fields now reject empty strings
+  - Line numbers (`startLine`, `endLine`) must be non-negative
+  - Added validation that `startLine <= endLine`
+  - Optional fields (`imports`, `beforeContext`, `afterContext`, `containingFunction`, `previousFilename`, `deploymentContext`) now validated for correct types
+  - `fullFileAvailable` validated as boolean when present
+
+### Fixed
+- **Silent Ignore of `--diff-context`**: Now displays warning when `--diff-context` is used without `code_reviewer` role
+  - Previously the option was silently ignored with other roles
+  - Now warns users and suggests using `-r code_reviewer`
+- **Diff Context Validation Error Handling**: Fixed error handling in `loadDiffContext()`
+  - Validation errors no longer get caught by JSON parsing try-catch block
+  - Proper error messages displayed for invalid diff context format
+
 ## [0.3.0] - 2025-12-22
 
 ### Added
@@ -183,7 +219,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Core agent architecture and infrastructure
 - Basic agent interaction capabilities
 
-[Unreleased]: https://github.com/yourusername/appsec-agent/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/yourusername/appsec-agent/compare/v0.3.5...HEAD
+[0.3.5]: https://github.com/yourusername/appsec-agent/compare/v0.3.0...v0.3.5
+[0.3.0]: https://github.com/yourusername/appsec-agent/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/yourusername/appsec-agent/compare/v0.1.0...v0.2.1
 [0.1.0]: https://github.com/yourusername/appsec-agent/compare/v0.0.8...v0.1.0
 [0.0.8]: https://github.com/yourusername/appsec-agent/compare/v0.0.6...v0.0.8

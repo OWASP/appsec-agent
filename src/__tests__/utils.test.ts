@@ -22,7 +22,8 @@ import {
   isSafePath,
   validateAndSanitizePath,
   validateDirectoryPath,
-  validateOutputFilePath
+  validateOutputFilePath,
+  validateInputFilePath
 } from '../utils';
 
 describe('Utils', () => {
@@ -485,6 +486,65 @@ describe('Utils', () => {
 
       it('should ensure output is within base directory', () => {
         const result = validateOutputFilePath('output.txt', testDir);
+        expect(result).toBeTruthy();
+        expect(result?.startsWith(testDir)).toBe(true);
+      });
+    });
+
+    describe('validateInputFilePath', () => {
+      it('should validate relative input file paths', () => {
+        const testFile = path.join(testDir, 'input.json');
+        fs.writeFileSync(testFile, '{}');
+        
+        const result = validateInputFilePath('input.json', testDir);
+        expect(result).toBeTruthy();
+        expect(result).toBe(path.join(testDir, 'input.json'));
+      });
+
+      it('should allow absolute paths', () => {
+        const absolutePath = path.join(testDir, 'input.json');
+        fs.writeFileSync(absolutePath, '{}');
+        
+        const result = validateInputFilePath(absolutePath, '/some/other/dir');
+        expect(result).toBe(absolutePath);
+      });
+
+      it('should reject relative paths with directory traversal', () => {
+        const result = validateInputFilePath('../input.json', testDir);
+        expect(result).toBeNull();
+      });
+
+      it('should reject relative paths with nested directory traversal', () => {
+        const result = validateInputFilePath('folder/../../input.json', testDir);
+        expect(result).toBeNull();
+      });
+
+      it('should reject paths with null bytes', () => {
+        const result = validateInputFilePath('input\0.json', testDir);
+        expect(result).toBeNull();
+      });
+
+      it('should reject paths with control characters', () => {
+        const result = validateInputFilePath('input\n.json', testDir);
+        expect(result).toBeNull();
+      });
+
+      it('should reject empty paths', () => {
+        expect(validateInputFilePath('', testDir)).toBeNull();
+      });
+
+      it('should reject null/undefined paths', () => {
+        expect(validateInputFilePath(null as any, testDir)).toBeNull();
+        expect(validateInputFilePath(undefined as any, testDir)).toBeNull();
+      });
+
+      it('should ensure relative paths resolve within base directory', () => {
+        const subDir = path.join(testDir, 'subfolder');
+        fs.ensureDirSync(subDir);
+        const testFile = path.join(subDir, 'input.json');
+        fs.writeFileSync(testFile, '{}');
+        
+        const result = validateInputFilePath('subfolder/input.json', testDir);
         expect(result).toBeTruthy();
         expect(result?.startsWith(testDir)).toBe(true);
       });

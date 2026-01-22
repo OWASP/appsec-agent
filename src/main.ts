@@ -7,7 +7,7 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import { AgentActions, AgentArgs } from './agent_actions';
-import { copyProjectSrcDir, validateOutputFilePath, validateDirectoryPath, sanitizePathForError, getExtensionForFormat } from './utils';
+import { copyProjectSrcDir, validateOutputFilePath, validateDirectoryPath, validateInputFilePath, sanitizePathForError, getExtensionForFormat } from './utils';
 import { DiffContext, formatDiffContextForPrompt, validateDiffContext } from './diff_context';
 
 /**
@@ -60,10 +60,15 @@ function cleanupTmpDir(tmpDir: string | null, verbose: boolean = false): void {
  * Load and validate diff context from JSON file
  */
 function loadDiffContext(diffContextPath: string, cwd: string): DiffContext {
-  // Resolve path relative to current working directory
-  const resolvedPath = path.isAbsolute(diffContextPath) 
-    ? diffContextPath 
-    : path.resolve(cwd, diffContextPath);
+  // Validate and resolve the path
+  const resolvedPath = validateInputFilePath(diffContextPath, cwd);
+  
+  if (!resolvedPath) {
+    const safePath = sanitizePathForError(diffContextPath);
+    console.error(`Error: Invalid diff context file path: ${safePath}`);
+    console.error('The path must be valid and relative paths cannot contain directory traversal sequences.');
+    process.exit(1);
+  }
   
   const safePath = sanitizePathForError(resolvedPath);
   
@@ -72,22 +77,25 @@ function loadDiffContext(diffContextPath: string, cwd: string): DiffContext {
     process.exit(1);
   }
   
+  // Read and parse the file
+  let data: unknown;
   try {
     const content = fs.readFileSync(resolvedPath, 'utf-8');
-    const data = JSON.parse(content);
-    
-    if (!validateDiffContext(data)) {
-      console.error(`Error: Invalid diff context format in: ${safePath}`);
-      console.error('The diff context file must contain valid DiffContext JSON structure.');
-      process.exit(1);
-    }
-    
-    return data;
+    data = JSON.parse(content);
   } catch (error: any) {
     const errorMessage = error?.message || 'Unknown error';
     console.error(`Error: Failed to read diff context file ${safePath}: ${errorMessage}`);
     process.exit(1);
   }
+  
+  // Validate the parsed data (outside try-catch to avoid catching process.exit mock errors in tests)
+  if (!validateDiffContext(data)) {
+    console.error(`Error: Invalid diff context format in: ${safePath}`);
+    console.error('The diff context file must contain valid DiffContext JSON structure.');
+    process.exit(1);
+  }
+  
+  return data;
 }
 
 /**

@@ -4,7 +4,7 @@
 
 import { main } from '../main';
 import { AgentActions, AgentArgs } from '../agent_actions';
-import { copyProjectSrcDir } from '../utils';
+import { copyProjectSrcDir, validateInputFilePath } from '../utils';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import * as os from 'os';
@@ -52,7 +52,8 @@ describe('main', () => {
     mockAgentActions = {
       simpleQueryClaudeWithOptions: jest.fn().mockResolvedValue(''),
       codeReviewerWithOptions: jest.fn().mockResolvedValue(''),
-      threatModelerAgentWithOptions: jest.fn().mockResolvedValue('')
+      threatModelerAgentWithOptions: jest.fn().mockResolvedValue(''),
+      diffReviewerWithOptions: jest.fn().mockResolvedValue('')
     } as any;
 
     (AgentActions as jest.MockedClass<typeof AgentActions>).mockImplementation(() => mockAgentActions);
@@ -162,6 +163,147 @@ describe('main', () => {
       const callArg = mockAgentActions.codeReviewerWithOptions.mock.calls[0][0];
       expect(callArg).toContain(tmpDir);
       expect(exitMock).toHaveBeenCalledWith(0);
+    });
+
+    describe('with diff_context', () => {
+      let diffContextFile: string;
+      const validDiffContext = {
+        prNumber: 42,
+        baseBranch: 'main',
+        headBranch: 'feature/test',
+        headSha: 'abc123def456',
+        owner: 'test-owner',
+        repo: 'test-repo',
+        files: [{
+          filePath: 'src/test.ts',
+          language: 'typescript',
+          fileType: 'modified',
+          hunks: [{
+            startLine: 10,
+            endLine: 20,
+            changedCode: '+const x = 1;'
+          }]
+        }],
+        totalFilesChanged: 1,
+        totalLinesAdded: 1,
+        totalLinesRemoved: 0
+      };
+
+      beforeEach(() => {
+        diffContextFile = path.join(testDir, 'diff-context.json');
+      });
+
+      it('should run diff reviewer when diff_context is provided', async () => {
+        fs.writeFileSync(diffContextFile, JSON.stringify(validDiffContext));
+
+        await main(mockConfDict, {
+          ...codeReviewerArgs,
+          diff_context: diffContextFile
+        });
+
+        expect(mockAgentActions.diffReviewerWithOptions).toHaveBeenCalled();
+        expect(mockAgentActions.codeReviewerWithOptions).not.toHaveBeenCalled();
+        expect(exitMock).toHaveBeenCalledWith(0);
+      });
+
+      it('should include PR info in diff reviewer prompt', async () => {
+        fs.writeFileSync(diffContextFile, JSON.stringify(validDiffContext));
+
+        await main(mockConfDict, {
+          ...codeReviewerArgs,
+          diff_context: diffContextFile
+        });
+
+        const callArg = mockAgentActions.diffReviewerWithOptions.mock.calls[0][0];
+        expect(callArg).toContain('PR #42');
+        expect(callArg).toContain('feature/test');
+        expect(callArg).toContain('test-owner/test-repo');
+      });
+
+      it('should exit with error for invalid diff context format', async () => {
+        const invalidContext = { invalid: 'data' };
+        fs.writeFileSync(diffContextFile, JSON.stringify(invalidContext));
+        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+        
+        // Make exitMock throw to simulate process.exit stopping execution
+        exitMock.mockImplementationOnce((code?: number) => {
+          throw new Error(`process.exit(${code})`);
+        });
+
+        await expect(main(mockConfDict, {
+          ...codeReviewerArgs,
+          diff_context: diffContextFile
+        })).rejects.toThrow('process.exit(1)');
+
+        expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('Invalid diff context format'));
+        consoleErrorSpy.mockRestore();
+      });
+
+      it('should exit with error for non-existent diff context file', async () => {
+        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+        
+        exitMock.mockImplementationOnce((code?: number) => {
+          throw new Error(`process.exit(${code})`);
+        });
+
+        await expect(main(mockConfDict, {
+          ...codeReviewerArgs,
+          diff_context: path.join(testDir, 'nonexistent.json')
+        })).rejects.toThrow('process.exit(1)');
+
+        expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('not found'));
+        consoleErrorSpy.mockRestore();
+      });
+
+      it('should exit with error for invalid JSON in diff context file', async () => {
+        fs.writeFileSync(diffContextFile, 'not valid json');
+        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+        
+        exitMock.mockImplementationOnce((code?: number) => {
+          throw new Error(`process.exit(${code})`);
+        });
+
+        await expect(main(mockConfDict, {
+          ...codeReviewerArgs,
+          diff_context: diffContextFile
+        })).rejects.toThrow('process.exit(1)');
+
+        expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to read diff context file'));
+        consoleErrorSpy.mockRestore();
+      });
+
+      it('should exit with error for path traversal in diff context path', async () => {
+        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+        
+        exitMock.mockImplementationOnce((code?: number) => {
+          throw new Error(`process.exit(${code})`);
+        });
+
+        await expect(main(mockConfDict, {
+          ...codeReviewerArgs,
+          diff_context: '../../../etc/passwd'
+        })).rejects.toThrow('process.exit(1)');
+
+        expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('Invalid diff context file path'));
+        consoleErrorSpy.mockRestore();
+      });
+
+      it('should pass src_dir to diff reviewer when both are provided', async () => {
+        const { sourceDir, tmpDir } = setupSourceDirs();
+        fs.writeFileSync(diffContextFile, JSON.stringify(validDiffContext));
+
+        await main(mockConfDict, {
+          ...codeReviewerArgs,
+          diff_context: diffContextFile,
+          src_dir: sourceDir
+        });
+
+        expect(copyProjectSrcDir).toHaveBeenCalled();
+        expect(mockAgentActions.diffReviewerWithOptions).toHaveBeenCalledWith(
+          expect.any(String),
+          tmpDir
+        );
+      });
     });
   });
 

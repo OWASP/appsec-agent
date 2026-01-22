@@ -92,9 +92,14 @@ if (args.context) {
   console.log('Using context:', args.context.substring(0, 50) + (args.context.length > 50 ? '...' : ''));
 }
 
-// Log diff context if provided
+// Log diff context if provided and validate role compatibility
 if (args.diff_context) {
   console.log('Using diff context file:', args.diff_context);
+  if (args.role !== 'code_reviewer') {
+    console.warn('⚠️  Warning: --diff-context is only used with the code_reviewer role.');
+    console.warn(`   Current role: ${args.role}. The diff context will be ignored.`);
+    console.warn('   Use -r code_reviewer to enable PR diff-focused code review.\n');
+  }
 }
 
 // Run main function

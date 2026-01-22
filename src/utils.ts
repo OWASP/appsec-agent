@@ -210,6 +210,50 @@ export function validateOutputFilePath(filePath: string, baseDir: string): strin
 }
 
 /**
+ * Validate an input file path for security concerns
+ * Allows absolute paths but validates relative paths for directory traversal
+ * @param filePath - The file path to validate
+ * @param baseDir - The base directory for relative path resolution
+ * @returns The resolved absolute path if valid, null otherwise
+ */
+export function validateInputFilePath(filePath: string, baseDir: string): string | null {
+  if (!filePath || typeof filePath !== 'string') {
+    return null;
+  }
+  
+  // Check for null bytes and control characters
+  if (/\0/.test(filePath) || /[\x00-\x1f]/.test(filePath)) {
+    return null;
+  }
+  
+  try {
+    // For relative paths, check for directory traversal
+    if (!path.isAbsolute(filePath)) {
+      if (!isSafePath(filePath, false)) {
+        return null;
+      }
+    }
+    
+    // Resolve the path
+    const resolvedPath = path.isAbsolute(filePath) 
+      ? filePath 
+      : path.resolve(baseDir, filePath);
+    
+    // For relative paths, ensure the resolved path stays within or at the base directory
+    if (!path.isAbsolute(filePath)) {
+      const baseDirResolved = path.resolve(baseDir);
+      if (!resolvedPath.startsWith(baseDirResolved + path.sep) && resolvedPath !== baseDirResolved) {
+        return null;
+      }
+    }
+    
+    return resolvedPath;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Check if a path is a valid directory
  */
 export function isDirectory(dirName: string): boolean {

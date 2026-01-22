@@ -154,6 +154,27 @@ export function formatDiffContextForPrompt(context: DiffContext): string {
 }
 
 /**
+ * Helper to check if a value is a non-empty string
+ */
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+/**
+ * Helper to check if an optional field is valid (undefined or correct type)
+ */
+function isOptionalString(value: unknown): boolean {
+  return value === undefined || typeof value === 'string';
+}
+
+/**
+ * Helper to check if a number is valid and non-negative (for line numbers)
+ */
+function isNonNegativeNumber(value: unknown): value is number {
+  return typeof value === 'number' && value >= 0;
+}
+
+/**
  * Validate diff context JSON structure
  */
 export function validateDiffContext(data: unknown): data is DiffContext {
@@ -163,32 +184,46 @@ export function validateDiffContext(data: unknown): data is DiffContext {
   
   const ctx = data as Record<string, unknown>;
   
-  // Required fields
-  if (typeof ctx.prNumber !== 'number') return false;
-  if (typeof ctx.baseBranch !== 'string') return false;
-  if (typeof ctx.headBranch !== 'string') return false;
-  if (typeof ctx.headSha !== 'string') return false;
-  if (typeof ctx.owner !== 'string') return false;
-  if (typeof ctx.repo !== 'string') return false;
+  // Required fields - must be non-empty strings
+  if (typeof ctx.prNumber !== 'number' || ctx.prNumber < 0) return false;
+  if (!isNonEmptyString(ctx.baseBranch)) return false;
+  if (!isNonEmptyString(ctx.headBranch)) return false;
+  if (!isNonEmptyString(ctx.headSha)) return false;
+  if (!isNonEmptyString(ctx.owner)) return false;
+  if (!isNonEmptyString(ctx.repo)) return false;
   if (!Array.isArray(ctx.files)) return false;
-  if (typeof ctx.totalFilesChanged !== 'number') return false;
-  if (typeof ctx.totalLinesAdded !== 'number') return false;
-  if (typeof ctx.totalLinesRemoved !== 'number') return false;
+  if (!isNonNegativeNumber(ctx.totalFilesChanged)) return false;
+  if (!isNonNegativeNumber(ctx.totalLinesAdded)) return false;
+  if (!isNonNegativeNumber(ctx.totalLinesRemoved)) return false;
+  
+  // Optional field validation
+  if (!isOptionalString(ctx.deploymentContext)) return false;
   
   // Validate each file
   for (const file of ctx.files) {
     if (!file || typeof file !== 'object') return false;
-    if (typeof file.filePath !== 'string') return false;
-    if (typeof file.language !== 'string') return false;
+    if (!isNonEmptyString(file.filePath)) return false;
+    if (!isNonEmptyString(file.language)) return false;
     if (!['added', 'modified', 'renamed', 'deleted'].includes(file.fileType)) return false;
     if (!Array.isArray(file.hunks)) return false;
+    
+    // Optional file field validation
+    if (!isOptionalString(file.imports)) return false;
+    if (!isOptionalString(file.previousFilename)) return false;
+    if (file.fullFileAvailable !== undefined && typeof file.fullFileAvailable !== 'boolean') return false;
     
     // Validate each hunk
     for (const hunk of file.hunks) {
       if (!hunk || typeof hunk !== 'object') return false;
-      if (typeof hunk.startLine !== 'number') return false;
-      if (typeof hunk.endLine !== 'number') return false;
-      if (typeof hunk.changedCode !== 'string') return false;
+      if (!isNonNegativeNumber(hunk.startLine)) return false;
+      if (!isNonNegativeNumber(hunk.endLine)) return false;
+      if (hunk.startLine > hunk.endLine) return false; // startLine should not exceed endLine
+      if (typeof hunk.changedCode !== 'string') return false; // changedCode can be empty for deletions
+      
+      // Optional hunk field validation
+      if (!isOptionalString(hunk.beforeContext)) return false;
+      if (!isOptionalString(hunk.afterContext)) return false;
+      if (!isOptionalString(hunk.containingFunction)) return false;
     }
   }
   

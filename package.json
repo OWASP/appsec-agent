@@ -1,9 +1,9 @@
 {
   "name": "appsec-agent",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "TypeScript package for AppSec AI Agent management",
   "author": "Sam Li",
-  "date": "Dec 22 2025",
+  "date": "Jan 21 2026",
   "license": "MIT",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
@@ -15,7 +15,7 @@
     "agent-run": "./dist/bin/agent-run.js"
   },
   "scripts": {
-    "build": "tsc && cp -r conf dist/",
+    "build": "tsc && cp -r conf dist/ && chmod +x dist/bin/agent-run.js",
     "start": "node dist/src/main.js",
     "dev": "ts-node src/main.ts",
     "clean": "rm -rf dist",
@@ -32,7 +32,7 @@
     "typescript"
   ],
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.1.58",
+    "@anthropic-ai/claude-agent-sdk": "^0.1.76",
     "yaml": "^2.4.0",
     "commander": "^11.1.0",
     "fs-extra": "^11.2.0"

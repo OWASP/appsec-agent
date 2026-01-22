@@ -124,5 +124,50 @@ export class AgentOptions {
       permissionMode: 'bypassPermissions'
     };
   }
+
+  /**
+   * Get options for PR diff-focused code reviewer
+   * This mode analyzes only the changed code from a pull request,
+   * with access to Read and Write tools for additional context if needed.
+   */
+  getDiffReviewerOptions(role: string = 'code_reviewer', srcDir?: string | null): Options {
+    const roleConfig = this.confDict[this.environment]?.[role];
+    
+    let systemPrompt = `You are an Application Security (AppSec) expert assistant specializing in Pull Request security reviews.
+
+Your task is to analyze ONLY the changed code provided in the diff context. The changes have already been extracted and formatted for you - you do not need to search for files.
+
+When reviewing PR changes:
+1. Focus exclusively on the security implications of the new or modified code
+2. Consider how the changes interact with existing code (when imports/context is provided)
+3. Identify vulnerabilities introduced by the changes
+4. Do NOT report issues in unchanged code
+5. Cite specific line numbers from the provided diff
+
+You have access to Read and Write tools if you need to:
+- Read a full file for additional context (use sparingly)
+- Write the security review report`;
+
+    if (srcDir) {
+      systemPrompt += `\n\nSource directory available at: ${srcDir}`;
+    }
+
+    // Allow role config to override the system prompt
+    if (roleConfig?.options?.diff_reviewer_system_prompt) {
+      systemPrompt = roleConfig.options.diff_reviewer_system_prompt;
+    }
+
+    return {
+      agents: {
+        'diff-reviewer': {
+          description: 'Reviews PR diff changes for security vulnerabilities',
+          prompt: systemPrompt,
+          tools: ['Read', 'Write'],
+          model: 'sonnet'
+        } as AgentDefinition
+      },
+      permissionMode: 'bypassPermissions'
+    };
+  }
 }
 

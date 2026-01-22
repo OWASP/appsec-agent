@@ -5,8 +5,10 @@
  */
 
 import * as fs from 'fs-extra';
+import * as path from 'path';
 import { AgentActions, AgentArgs } from './agent_actions';
 import { copyProjectSrcDir, validateOutputFilePath, validateDirectoryPath, sanitizePathForError, getExtensionForFormat } from './utils';
+import { DiffContext, formatDiffContextForPrompt, validateDiffContext } from './diff_context';
 
 /**
  * Validate and copy source directory, exiting on validation failure
@@ -54,6 +56,85 @@ function cleanupTmpDir(tmpDir: string | null, verbose: boolean = false): void {
   }
 }
 
+/**
+ * Load and validate diff context from JSON file
+ */
+function loadDiffContext(diffContextPath: string, cwd: string): DiffContext {
+  // Resolve path relative to current working directory
+  const resolvedPath = path.isAbsolute(diffContextPath) 
+    ? diffContextPath 
+    : path.resolve(cwd, diffContextPath);
+  
+  const safePath = sanitizePathForError(resolvedPath);
+  
+  if (!fs.existsSync(resolvedPath)) {
+    console.error(`Error: Diff context file not found: ${safePath}`);
+    process.exit(1);
+  }
+  
+  try {
+    const content = fs.readFileSync(resolvedPath, 'utf-8');
+    const data = JSON.parse(content);
+    
+    if (!validateDiffContext(data)) {
+      console.error(`Error: Invalid diff context format in: ${safePath}`);
+      console.error('The diff context file must contain valid DiffContext JSON structure.');
+      process.exit(1);
+    }
+    
+    return data;
+  } catch (error: any) {
+    const errorMessage = error?.message || 'Unknown error';
+    console.error(`Error: Failed to read diff context file ${safePath}: ${errorMessage}`);
+    process.exit(1);
+  }
+}
+
+/**
+ * Build user prompt for PR diff-focused code review
+ */
+function buildDiffReviewPrompt(
+  diffContext: DiffContext, 
+  outputFile: string, 
+  outputFormat: string,
+  additionalContext?: string
+): string {
+  const formattedDiff = formatDiffContextForPrompt(diffContext);
+  
+  let prompt = `You are reviewing a Pull Request for security vulnerabilities.
+
+${formattedDiff}
+
+## Review Instructions
+
+Analyze ONLY the changed code shown above for security issues. Focus on:
+1. **Injection vulnerabilities** (SQL, XSS, command injection, etc.)
+2. **Authentication and authorization flaws**
+3. **Sensitive data exposure**
+4. **Security misconfigurations**
+5. **Cryptographic issues**
+6. **Input validation problems**
+
+For each issue found:
+- Cite the specific file and line numbers from the changes
+- Explain the vulnerability and its potential impact
+- Provide a remediation recommendation
+
+`;
+
+  if (additionalContext) {
+    prompt += `## Additional Context
+${additionalContext}
+
+`;
+  }
+
+  prompt += `Write a comprehensive security review report to ${outputFile} in ${outputFormat} format.
+Focus only on the changed code - do not report issues in unchanged code.`;
+
+  return prompt;
+}
+
 export async function main(confDict: any, args: AgentArgs): Promise<void> {
   const currentWorkingDir = process.cwd();
   const agentActions = new AgentActions(confDict, args.environment, args);
@@ -95,18 +176,44 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
     cleanupTmpDir(tmpSrcDir, true);
 
   } else if (args.role === 'code_reviewer') {
-    console.log('Running Code Review Agent');
-    
     const extension = getExtensionForFormat(args.output_format);
     const outputFile = validateOutputFile(args.output_file || `code_review_report.${extension}`, currentWorkingDir);
-    const tmpSrcDir = args.src_dir ? validateAndCopySrcDir(args.src_dir, currentWorkingDir) : null;
-    const srcLocation = tmpSrcDir ? `current working directory ${tmpSrcDir}` : 'current working directory';
     
-    // Build context section if provided
-    let contextSection = '';
-    if (args.context) {
-      console.log('Using context:', args.context?.substring(0, 50) + (args.context.length > 50 ? '...' : ''));
-      contextSection = `
+    // Check if running in diff-context mode (PR-focused review)
+    if (args.diff_context) {
+      console.log('Running PR Diff Code Review Agent (focused context mode)');
+      
+      // Load diff context
+      const diffContext = loadDiffContext(args.diff_context, currentWorkingDir);
+      console.log(`Reviewing PR #${diffContext.prNumber}: ${diffContext.totalFilesChanged} files (+${diffContext.totalLinesAdded}/-${diffContext.totalLinesRemoved})`);
+      
+      // Copy source directory if provided (for full file access when needed)
+      const tmpSrcDir = args.src_dir ? validateAndCopySrcDir(args.src_dir, currentWorkingDir) : null;
+      
+      // Build focused prompt
+      const userPrompt = buildDiffReviewPrompt(
+        diffContext, 
+        outputFile, 
+        args.output_format || 'json',
+        args.context
+      );
+      
+      // Use diff-focused reviewer options
+      await agentActions.diffReviewerWithOptions(userPrompt, tmpSrcDir);
+      cleanupTmpDir(tmpSrcDir);
+      
+    } else {
+      // Standard full-repository code review
+      console.log('Running Code Review Agent');
+      
+      const tmpSrcDir = args.src_dir ? validateAndCopySrcDir(args.src_dir, currentWorkingDir) : null;
+      const srcLocation = tmpSrcDir ? `current working directory ${tmpSrcDir}` : 'current working directory';
+      
+      // Build context section if provided
+      let contextSection = '';
+      if (args.context) {
+        console.log('Using context:', args.context?.substring(0, 50) + (args.context.length > 50 ? '...' : ''));
+        contextSection = `
 
 IMPORTANT DEPLOYMENT & ENVIRONMENT CONTEXT:
 ${args.context}
@@ -118,13 +225,14 @@ Please consider this context when analyzing the code. Focus on:
 - Environment-specific attack vectors and threat models
 
 `;
-    }
-    
-    const userPrompt = `Review the code in the ${srcLocation}.${contextSection}.
+      }
+      
+      const userPrompt = `Review the code in the ${srcLocation}.${contextSection}.
 Provide a comprehensive security review report identifying potential security issues found in the code. Please write the review report in the ${outputFile} file under current working directory in ${args.output_format} format.`;
-    
-    await agentActions.codeReviewerWithOptions(userPrompt);
-    cleanupTmpDir(tmpSrcDir);
+      
+      await agentActions.codeReviewerWithOptions(userPrompt);
+      cleanupTmpDir(tmpSrcDir);
+    }
 
   } else if (args.role === 'threat_modeler') {
     console.log('Running Threat Modeler');

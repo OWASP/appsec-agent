@@ -17,6 +17,7 @@ export interface AgentArgs {
   output_format?: string;
   verbose?: boolean;
   context?: string;  // User-provided context for code review
+  diff_context?: string; // Path to JSON file with diff context for PR-focused review
 }
 
 interface ConversationEntry {
@@ -310,6 +311,75 @@ export class AgentActions {
         }
       }
       console.error('Error during threat modeling:', error);
+      throw error;
+    }
+    console.log();
+    return '';
+  }
+
+  /**
+   * PR diff-focused code reviewer with options
+   * Optimized for reviewing only changed code from a pull request
+   */
+  async diffReviewerWithOptions(userPrompt: string, srcDir?: string | null): Promise<string> {
+    const agentOptions = new AgentOptions(this.confDict, this.environment);
+    const options = agentOptions.getDiffReviewerOptions(this.args.role, srcDir);
+
+    // Declare cursor outside try block so it's accessible in catch
+    let cursor: BlinkingCursor | null = null;
+
+    try {
+      // Start blinking cursor to show we're waiting for Claude's response
+      cursor = new BlinkingCursor();
+      cursor.start();
+
+      try {
+        for await (const message of query({ prompt: userPrompt, options })) {
+          if (message.type === 'stream_event') {
+            // Stop cursor when we receive stream events
+            if (cursor) cursor.stop();
+            const streamMsg = message as any;
+            // Handle content block deltas (streaming text)
+            if (streamMsg.event?.type === 'content_block_delta' && streamMsg.event.delta?.type === 'text_delta') {
+              const deltaText = streamMsg.event.delta.text || '';
+              if (deltaText) {
+                process.stdout.write(deltaText);
+              }
+            }
+          } else if (message.type === 'assistant') {
+            // Stop cursor when we receive assistant message
+            if (cursor) cursor.stop();
+            const assistantMsg = message as SDKAssistantMessage;
+            if (assistantMsg.message.content) {
+              for (const block of assistantMsg.message.content) {
+                if (block.type === 'text') {
+                  console.log(`Claude: ${block.text}`);
+                }
+              }
+            }
+          } else if (message.type === 'result') {
+            // Stop cursor when we receive result (in case no content was received)
+            if (cursor) cursor.stop();
+            const resultMsg = message as SDKResultMessage;
+            if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
+              console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);
+            }
+          }
+        }
+      } finally {
+        // Always stop the cursor when done, even if there's an error
+        if (cursor) cursor.stop();
+      }
+    } catch (error) {
+      // Ensure cursor is stopped on error
+      if (cursor) {
+        try {
+          cursor.stop();
+        } catch {
+          // Ignore if cursor cleanup fails
+        }
+      }
+      console.error('Error during PR diff code review:', error);
       throw error;
     }
     console.log();

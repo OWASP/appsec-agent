@@ -27,6 +27,7 @@ program
   .option('-k, --anthropic-api-key <key>', 'Anthropic API key (overrides ANTHROPIC_API_KEY environment variable)')
   .option('-u, --anthropic-base-url <url>', 'Anthropic API base URL (overrides ANTHROPIC_BASE_URL environment variable)')
   .option('-c, --context <context>', 'Additional context for the code review (e.g., deployment environment, architecture, compliance requirements)')
+  .option('-d, --diff-context <file>', 'JSON file with diff context for PR-focused code review (optimizes token usage)')
   .option('-l, --list_roles', 'List all available roles')
   .option('-v, --version', 'Program version')
   .option('-V, --verbose', 'Verbose mode');
@@ -82,12 +83,18 @@ const args = {
   output_file: options.output_file,
   output_format: options.output_format,
   verbose: options.verbose,
-  context: options.context
+  context: options.context,
+  diff_context: options.diffContext
 };
 
 // Log context if provided
 if (args.context) {
   console.log('Using context:', args.context.substring(0, 50) + (args.context.length > 50 ? '...' : ''));
+}
+
+// Log diff context if provided
+if (args.diff_context) {
+  console.log('Using diff context file:', args.diff_context);
 }
 
 // Run main function

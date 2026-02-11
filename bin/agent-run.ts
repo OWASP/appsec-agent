@@ -28,6 +28,7 @@ program
   .option('-u, --anthropic-base-url <url>', 'Anthropic API base URL (overrides ANTHROPIC_BASE_URL environment variable)')
   .option('-c, --context <context>', 'Additional context for the code review (e.g., deployment environment, architecture, compliance requirements)')
   .option('-d, --diff-context <file>', 'JSON file with diff context for PR-focused code review (optimizes token usage)')
+  .option('-m, --model <model>', 'Claude model to use: sonnet, opus, haiku - default to "sonnet"', 'sonnet')
   .option('-l, --list_roles', 'List all available roles')
   .option('-v, --version', 'Program version')
   .option('-V, --verbose', 'Verbose mode');
@@ -75,6 +76,13 @@ if (options.anthropicBaseUrl) {
   process.env.ANTHROPIC_BASE_URL = options.anthropicBaseUrl;
 }
 
+// Validate model option
+const validModels = ['sonnet', 'opus', 'haiku'];
+if (!validModels.includes(options.model)) {
+  console.error(`Error: Invalid model "${options.model}". Valid options: ${validModels.join(', ')}`);
+  process.exit(1);
+}
+
 // Prepare args
 const args = {
   role: options.role,
@@ -84,7 +92,8 @@ const args = {
   output_format: options.output_format,
   verbose: options.verbose,
   context: options.context,
-  diff_context: options.diffContext
+  diff_context: options.diffContext,
+  model: options.model
 };
 
 // Log context if provided

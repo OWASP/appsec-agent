@@ -16,11 +16,13 @@ export interface ToolUsageLog {
 export class AgentOptions {
   private confDict: ConfigDict;
   private environment: string;
+  private model: string;
   private toolUsageLog: ToolUsageLog[] = [];
 
-  constructor(confDict: ConfigDict, environment: string) {
+  constructor(confDict: ConfigDict, environment: string, model: string = 'sonnet') {
     this.confDict = confDict;
     this.environment = environment;
+    this.model = model;
   }
 
   /**
@@ -97,7 +99,7 @@ export class AgentOptions {
           description: 'Reviews code for best practices and potential security issues only',
           prompt: systemPrompt,
           tools: ['Read', 'Grep', 'Write'],
-          model: 'sonnet'
+          model: this.model
         } as AgentDefinition
       },
       permissionMode: 'bypassPermissions'
@@ -118,7 +120,7 @@ export class AgentOptions {
           description: 'Performs threat modeling and risk assessment using STRIDE methodology',
           prompt: systemPrompt,
           tools: ['Read', 'Grep', 'Write', 'Graphviz'],
-          model: 'sonnet'
+          model: this.model
         } as AgentDefinition
       },
       permissionMode: 'bypassPermissions'
@@ -163,7 +165,7 @@ You have access to Read and Write tools if you need to:
           description: 'Reviews PR diff changes for security vulnerabilities',
           prompt: systemPrompt,
           tools: ['Read', 'Write'],
-          model: 'sonnet'
+          model: this.model
         } as AgentDefinition
       },
       permissionMode: 'bypassPermissions'

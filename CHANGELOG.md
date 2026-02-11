@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.7] - 2026-02-10
+
+### Added
+- **Model Selection CLI Option**: New `-m/--model` CLI option to select Claude model
+  - Supports `sonnet` (default), `opus`, and `haiku` models
+  - Allows users to choose between speed, cost, and capability trade-offs
+  - Validation ensures only valid model names are accepted
+  - Model selection applies to all agent roles (code_reviewer, threat_modeler, diff_reviewer)
+
 ## [0.3.5] - 2026-01-21
 
 ### Added

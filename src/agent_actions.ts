@@ -18,6 +18,7 @@ export interface AgentArgs {
   verbose?: boolean;
   context?: string;  // User-provided context for code review
   diff_context?: string; // Path to JSON file with diff context for PR-focused review
+  model?: string;  // Claude model selection: sonnet, opus, haiku
 }
 
 interface ConversationEntry {
@@ -40,7 +41,7 @@ export class AgentActions {
    * Simple query agent with options
    */
   async simpleQueryClaudeWithOptions(yourPrompt: string, srcDir?: string | null): Promise<string> {
-    const agentOptions = new AgentOptions(this.confDict, this.environment);
+    const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
     const options = agentOptions.getSimpleQueryAgentOptions(this.args.role, srcDir);
     
     // Build prompt with conversation history and source directory context
@@ -188,7 +189,7 @@ export class AgentActions {
    * Secure code reviewer with options
    */
   async codeReviewerWithOptions(userPrompt: string): Promise<string> {
-    const agentOptions = new AgentOptions(this.confDict, this.environment);
+    const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
     const options = agentOptions.getCodeReviewerOptions(this.args.role);
 
     // Declare cursor outside try block so it's accessible in catch
@@ -256,7 +257,7 @@ export class AgentActions {
    * Threat modeler agent with options
    */
   async threatModelerAgentWithOptions(userPrompt: string): Promise<string> {
-    const agentOptions = new AgentOptions(this.confDict, this.environment);
+    const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
     const options = agentOptions.getThreatModelerOptions(this.args.role);
     // Declare cursor outside try block so it's accessible in catch
     let cursor: BlinkingCursor | null = null;
@@ -322,7 +323,7 @@ export class AgentActions {
    * Optimized for reviewing only changed code from a pull request
    */
   async diffReviewerWithOptions(userPrompt: string, srcDir?: string | null): Promise<string> {
-    const agentOptions = new AgentOptions(this.confDict, this.environment);
+    const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
     const options = agentOptions.getDiffReviewerOptions(this.args.role, srcDir);
 
     // Declare cursor outside try block so it's accessible in catch

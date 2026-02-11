@@ -14,6 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Validation ensures only valid model names are accepted
   - Model selection applies to all agent roles (code_reviewer, threat_modeler, diff_reviewer)
 
+## [0.3.6] - 2026-01-21
+
+### Fixed
+- **Build Script**: Added execute permission (`chmod +x`) to CLI script in build process
+  - Fixes "permission denied" errors when running `agent-run` after npm install
+
+### Changed
+- **SDK Version**: Bumped `@anthropic-ai/claude-agent-sdk` from `^0.1.58` to `^0.1.76`
+
 ## [0.3.5] - 2026-01-21
 
 ### Added

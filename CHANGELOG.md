@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-02-11
+
+### Added
+- **Cost display in failover mode**: When using OpenAI fallback (e.g. simple query with `-F`), the end-of-turn cost is now shown. The adapter requests `stream_options: { include_usage: true }`, captures token usage from the stream, estimates USD from a per-model table (gpt-4o, gpt-4o-mini, etc.), and sets `total_cost_usd` on the result message.
+
 ## [1.0.3] - 2026-02-11
 
 ### Fixed

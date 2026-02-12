@@ -66,6 +66,30 @@ function getSystemPromptFromOptions(options: Options): string {
   return 'You are a helpful assistant.';
 }
 
+/** Approximate USD per 1M tokens (input, output) for common OpenAI models. Used for fallback cost display. */
+const OPENAI_COST_PER_1M: Record<string, { input: number; output: number }> = {
+  'gpt-4o': { input: 2.5, output: 10 },
+  'gpt-4o-mini': { input: 0.15, output: 0.6 },
+  'gpt-4o-nano': { input: 0.1, output: 0.4 },
+  'gpt-4-turbo': { input: 10, output: 30 },
+  'gpt-3.5-turbo': { input: 0.5, output: 1.5 }
+};
+
+function estimateOpenAICostUsd(
+  model: string,
+  promptTokens: number,
+  completionTokens: number
+): number {
+  const rates =
+    OPENAI_COST_PER_1M[model] ??
+    (model.includes('mini') ? OPENAI_COST_PER_1M['gpt-4o-mini'] : null) ??
+    (model.includes('nano') ? OPENAI_COST_PER_1M['gpt-4o-nano'] : null) ??
+    OPENAI_COST_PER_1M['gpt-4o'];
+  const inputCost = (promptTokens / 1_000_000) * rates.input;
+  const outputCost = (completionTokens / 1_000_000) * rates.output;
+  return inputCost + outputCost;
+}
+
 async function* openaiFallbackStream(
   prompt: string,
   systemPrompt: string,
@@ -89,11 +113,18 @@ async function* openaiFallbackStream(
   const stream = await openai.chat.completions.create({
     model,
     messages,
-    stream: true
+    stream: true,
+    stream_options: { include_usage: true }
   });
 
   let fullText = '';
+  let promptTokens = 0;
+  let completionTokens = 0;
   for await (const chunk of stream) {
+    if (chunk.usage) {
+      promptTokens = chunk.usage.prompt_tokens ?? 0;
+      completionTokens = chunk.usage.completion_tokens ?? 0;
+    }
     const delta = chunk.choices[0]?.delta?.content;
     if (typeof delta === 'string' && delta) {
       fullText += delta;
@@ -112,10 +143,16 @@ async function* openaiFallbackStream(
     message: { content: [{ type: 'text', text: fullText }] }
   } as AssistantMessage;
 
+  const totalCostUsd =
+    promptTokens + completionTokens > 0
+      ? estimateOpenAICostUsd(model, promptTokens, completionTokens)
+      : undefined;
+
   yield {
     type: 'result',
     is_error: false,
-    num_turns: 1
+    num_turns: 1,
+    ...(totalCostUsd !== undefined && { total_cost_usd: totalCostUsd })
   } as ResultMessage;
 }
 

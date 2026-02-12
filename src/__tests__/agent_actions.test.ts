@@ -7,7 +7,7 @@ import { AgentOptions } from '../agent_options';
 import { ConfigDict } from '../utils';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 
-// Mock the Claude SDK
+// Mock the Claude SDK (used by llmQuery adapter)
 jest.mock('@anthropic-ai/claude-agent-sdk', () => ({
   query: jest.fn()
 }));
@@ -18,6 +18,7 @@ describe('AgentActions', () => {
   const environment = 'default';
 
   beforeEach(() => {
+    process.env.FAILOVER_ENABLED = 'false';
     mockConfDict = {
       default: {
         simple_query_agent: {

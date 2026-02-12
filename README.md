@@ -95,6 +95,24 @@ The agents can be configured through environment variables and configuration fil
 
 Configuration file: `conf/appsec_agent.yaml`
 
+### Optional: LLM failover (Anthropic → OpenAI)
+
+**Failover is off by default.** The agent uses Anthropic only unless you enable failover. When enabled, if the Anthropic call fails (e.g. API outage or rate limit), the agent will retry using the OpenAI API so the parent app gets a single response path.
+
+To enable failover, set:
+
+- `FAILOVER_ENABLED`: set to `true` to enable (default is disabled).
+- `OPENAI_API_KEY`: your OpenAI API key (required when failover is enabled).
+- `OPENAI_BASE_URL`: (optional) custom OpenAI endpoint.
+- `OPENAI_FALLBACK_MODEL`: (optional) model to use for fallback (e.g. `gpt-4o`); default is `gpt-4o`.
+
+**CLI overrides env overrides config.** You can use:
+
+- `--failover`: enable failover for this run.
+- `--openai-api-key <key>`: OpenAI API key for this run (overrides `OPENAI_API_KEY`).
+
+When failover runs, all agents (simple query, code reviewer, threat modeler, diff reviewer) use the same prompt and system message; tooled agents do not run tools on the fallback path. The response shape is unchanged so the parent app is unaffected.
+
 ## 🤖 Available Agents
 
 ### Simple Query Agent (`simple_query_agent`)

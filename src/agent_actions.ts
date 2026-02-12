@@ -4,8 +4,9 @@
  * Author: Sam Li
  */
 
-import { query, SDKAssistantMessage, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
+import { SDKAssistantMessage, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
 import { AgentOptions } from './agent_options';
+import { llmQuery } from './llm_query';
 import { ConfigDict } from './utils';
 import { BlinkingCursor } from './blinking_cursor';
 
@@ -84,7 +85,7 @@ export class AgentActions {
     try {
       cursor.start();
 
-      for await (const msg of query({ prompt: fullPrompt, options })) {
+      for await (const msg of llmQuery({ prompt: fullPrompt, options })) {
         if (this.args.verbose) {
           console.error(`[DEBUG] Message type: ${(msg as any).type}`);
         }
@@ -201,7 +202,7 @@ export class AgentActions {
       cursor.start();
 
       try {
-        for await (const message of query({ prompt: userPrompt, options })) {
+        for await (const message of llmQuery({ prompt: userPrompt, options })) {
           if (message.type === 'stream_event') {
             // Stop cursor when we receive stream events
             if (cursor) cursor.stop();
@@ -266,7 +267,7 @@ export class AgentActions {
       cursor = new BlinkingCursor();
       cursor.start();
       try {
-        for await (const message of query({ prompt: userPrompt, options })) {
+        for await (const message of llmQuery({ prompt: userPrompt, options })) {
           if (message.type === 'stream_event') {
             // Stop cursor when we receive stream events
             if (cursor) cursor.stop();
@@ -335,7 +336,7 @@ export class AgentActions {
       cursor.start();
 
       try {
-        for await (const message of query({ prompt: userPrompt, options })) {
+        for await (const message of llmQuery({ prompt: userPrompt, options })) {
           if (message.type === 'stream_event') {
             // Stop cursor when we receive stream events
             if (cursor) cursor.stop();

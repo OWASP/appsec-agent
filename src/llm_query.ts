@@ -122,6 +122,8 @@ async function* openaiFallbackStream(
 /**
  * Run LLM query with optional failover to OpenAI when Anthropic fails.
  * Yields the same message types as the Claude SDK (stream_event, assistant, result).
+ * Treats a primary result with is_error: true as failure and runs fallback when enabled
+ * (so the caller does not see the primary error message before the fallback response).
  */
 export async function* llmQuery(params: {
   prompt: string;
@@ -131,11 +133,29 @@ export async function* llmQuery(params: {
   const { failoverEnabled, openaiApiKey, openaiBaseUrl, openaiFallbackModel } =
     getFailoverConfig();
 
+  let primaryErrorResult: QueryMessage | null = null;
+
   try {
     for await (const msg of anthropicQuery({ prompt, options })) {
+      if (msg.type === 'result' && (msg as ResultMessage).is_error) {
+        primaryErrorResult = msg as QueryMessage;
+        break;
+      }
       yield msg as QueryMessage;
     }
-    return;
+    if (primaryErrorResult === null) return;
+    if (failoverEnabled && openaiApiKey) {
+      const systemPrompt = getSystemPromptFromOptions(options);
+      yield* openaiFallbackStream(
+        prompt,
+        systemPrompt,
+        openaiFallbackModel,
+        openaiApiKey,
+        openaiBaseUrl
+      );
+      return;
+    }
+    yield primaryErrorResult;
   } catch (primaryError) {
     if (!failoverEnabled || !openaiApiKey) {
       throw primaryError;

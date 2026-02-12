@@ -84,6 +84,33 @@ describe('llmQuery', () => {
       expect((result as Error).message).toBe('Anthropic 503');
       expect(mockCreate).not.toHaveBeenCalled();
     });
+
+    it('when primary yields result with is_error true and failover enabled, runs fallback and does not yield the error result', async () => {
+      process.env.FAILOVER_ENABLED = 'true';
+      process.env.OPENAI_API_KEY = 'sk-test';
+      mockQuery.mockReturnValue({
+        [Symbol.asyncIterator]: async function* () {
+          yield { type: 'stream_event', event: { type: 'content_block_delta', delta: { type: 'text_delta', text: '' } } };
+          yield { type: 'assistant', message: { content: [] } };
+          yield { type: 'result', is_error: true, subtype: 'success' };
+        }
+      });
+      async function* mockOpenAIStream() {
+        yield { choices: [{ delta: { content: 'Fallback answer' } }] };
+      }
+      mockCreate.mockResolvedValue(mockOpenAIStream());
+
+      const out: unknown[] = [];
+      for await (const msg of llmQuery({ prompt: 'Hi', options: defaultOptions })) {
+        out.push(msg);
+      }
+
+      expect(mockCreate).toHaveBeenCalled();
+      const resultMessages = out.filter((m: any) => m.type === 'result');
+      expect(resultMessages).toHaveLength(1);
+      expect(resultMessages[0]).toMatchObject({ type: 'result', is_error: false });
+      expect(out.some((m: any) => m.type === 'assistant' && m.message?.content?.[0]?.text === 'Fallback answer')).toBe(true);
+    });
   });
 
   describe('fallback path (OpenAI)', () => {

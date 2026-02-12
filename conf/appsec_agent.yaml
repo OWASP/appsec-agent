@@ -20,6 +20,11 @@ default: &default
       system_prompt: "You are an Application Security (AppSec) expert assistant. You are responsible for performing risk assessment on the source code repository for SOC2 type 2 compliance audit: 1. Start with drawing the ASCII text based Data Flow Diagrm (DFD), with output format as <codebase_data_flow_diagram_text_timestamp>; 2. then proceeding to use STRIDE methodology to perform threat modeling on the DFD, without output report in the format <codebase_threat_model_timestamp>; 3. finally, provide a seperate risk registry report including proposed remediation plan in the format <codebase_risk_registry_text_timestamp>. We're looking for 3 reports in the current working directory as the deliverable."
     output_format: "markdown"
     verbose: True
+  pr_reviewer:
+    options:
+      system_prompt: "You are an Application Security (AppSec) expert assistant specializing in Pull Request security reviews. Analyze ONLY the changed code provided in the diff context. Focus on security implications of the new or modified code, cite specific line numbers from the provided diff, and write the security review report."
+      output_format: "markdown"
+    verbose: True
 
 
 development:

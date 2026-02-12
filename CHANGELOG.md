@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.5] - 2026-02-11
+
+### Added
+- **pr_reviewer role**: New role listed in `agent-run -l` for PR-focused security review. Use `-r pr_reviewer` with `-d/--diff-context <file>` for PR diff mode, or without `-d` for full-repo review with PR-focused prompt. Main and CLI treat `pr_reviewer` like `code_reviewer` for routing and diff-context warning.
+
 ## [1.0.4] - 2026-02-11
 
 ### Added

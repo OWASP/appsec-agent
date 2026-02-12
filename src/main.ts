@@ -183,7 +183,7 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
     
     cleanupTmpDir(tmpSrcDir, true);
 
-  } else if (args.role === 'code_reviewer') {
+  } else if (args.role === 'code_reviewer' || args.role === 'pr_reviewer') {
     const extension = getExtensionForFormat(args.output_format);
     const outputFile = validateOutputFile(args.output_file || `code_review_report.${extension}`, currentWorkingDir);
     

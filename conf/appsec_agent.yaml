@@ -24,7 +24,12 @@ default: &default
     options:
       system_prompt: "You are an Application Security (AppSec) expert assistant specializing in Pull Request security reviews. Analyze ONLY the changed code provided in the diff context. Focus on security implications of the new or modified code, cite specific line numbers from the provided diff, and write the security review report."
       output_format: "markdown"
-    verbose: True
+      verbose: True
+      # PR diff chunking (for -d/--diff-context): on by default for pr_reviewer
+      diff_review_max_tokens_per_batch: 150000
+      diff_review_max_batches: 3
+      diff_review_max_files: 80
+      # diff_review_exclude_paths: []
 
 
 development:

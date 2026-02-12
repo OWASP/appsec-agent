@@ -20,6 +20,11 @@ export interface AgentArgs {
   context?: string;  // User-provided context for code review
   diff_context?: string; // Path to JSON file with diff context for PR-focused review
   model?: string;  // Claude model selection: sonnet, opus, haiku
+  // PR diff chunking (optional; 0 or omit = no chunking)
+  diff_max_tokens_per_batch?: number;
+  diff_max_batches?: number;
+  diff_max_files?: number;
+  diff_exclude?: string[];  // Path patterns to exclude from diff review
 }
 
 interface ConversationEntry {
@@ -322,8 +327,13 @@ export class AgentActions {
   /**
    * PR diff-focused code reviewer with options
    * Optimized for reviewing only changed code from a pull request
+   * @param onResult - Optional callback to collect cost for chunked runs (e.g. aggregate total_cost_usd across batches)
    */
-  async diffReviewerWithOptions(userPrompt: string, srcDir?: string | null): Promise<string> {
+  async diffReviewerWithOptions(
+    userPrompt: string,
+    srcDir?: string | null,
+    onResult?: (result: { total_cost_usd?: number }) => void
+  ): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
     const options = agentOptions.getDiffReviewerOptions(this.args.role, srcDir);
 
@@ -366,6 +376,7 @@ export class AgentActions {
             if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
               console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);
             }
+            onResult?.({ total_cost_usd: resultMsg.total_cost_usd });
           }
         }
       } finally {

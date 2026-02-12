@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-02-11
+
+### Added
+- **PR diff chunking**: For large PRs that exceed the model context limit, the agent can split the diff into batches, review each batch, and merge reports into a single output file.
+  - Config: `diff_review_max_tokens_per_batch`, `diff_review_max_batches`, `diff_review_max_files`, `diff_review_exclude_paths` under **`pr_reviewer.options`** (chunking is **on by default** for `pr_reviewer` when using `-d/--diff-context`). For `code_reviewer`, chunking is off unless set in config or CLI.
+  - CLI: `--diff-max-tokens`, `--diff-max-batches`, `--diff-max-files`, `--diff-exclude` (repeatable). Bounded by `max_batches` (e.g. 3) so PR mode does not become a full-repo review.
+  - Cost tracking: per-batch and total API cost are logged and (for JSON) included in merged report `meta.total_cost_usd`.
+  - New modules: `src/diff_chunking.ts` (token estimation, filtering, batching), `src/diff_report_merge.ts` (merge JSON/Markdown batch reports). Main orchestrates only; feature can be reworked or disabled via config.
+  - Merged report may include a **Skipped** section when files are excluded or the batch limit is reached.
+
 ## [1.1.0] - 2026-02-11
 
 ### Added

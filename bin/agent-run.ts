@@ -27,7 +27,11 @@ program
   .option('-k, --anthropic-api-key <key>', 'Anthropic API key (overrides ANTHROPIC_API_KEY environment variable)')
   .option('-u, --anthropic-base-url <url>', 'Anthropic API base URL (overrides ANTHROPIC_BASE_URL environment variable)')
   .option('-c, --context <context>', 'Additional context for the code review (e.g., deployment environment, architecture, compliance requirements)')
-  .option('-d, --diff-context <file>', 'JSON file with diff context for PR-focused code review (optimizes token usage)')
+  .option('--diff-context <file>', 'JSON file with diff context for PR-focused code review (optimizes token usage)')
+  .option('--diff-max-tokens <n>', 'Max tokens per batch for PR chunking (0 = disabled). Overrides config.')
+  .option('--diff-max-batches <n>', 'Max batches per PR run (e.g. 3). Overrides config.')
+  .option('--diff-max-files <n>', 'Max files to include in PR review; rest skipped. Overrides config.')
+  .option('--diff-exclude <pattern>', 'Exclude path pattern (repeatable). Overrides config.', (v: string, acc: string[]) => { acc.push(v); return acc; }, [])
   .option('-m, --model <model>', 'Claude model to use: sonnet, opus, haiku - default to "sonnet"', 'sonnet')
   .option('-F, --failover', 'Enable failover to OpenAI when Anthropic fails (optional feature, off by default). Overrides FAILOVER_ENABLED env.')
   .option('-K, --openai-api-key <key>', 'OpenAI API key for failover (overrides OPENAI_API_KEY env). Only used when failover is enabled.')
@@ -99,7 +103,7 @@ if (!validModels.includes(options.model)) {
   process.exit(1);
 }
 
-// Prepare args
+// Prepare args (chunking: CLI overrides config; main will merge with conf)
 const args = {
   role: options.role,
   environment: options.environment,
@@ -109,7 +113,11 @@ const args = {
   verbose: options.verbose,
   context: options.context,
   diff_context: options.diffContext,
-  model: options.model
+  model: options.model,
+  diff_max_tokens_per_batch: options.diffMaxTokens !== undefined ? parseInt(options.diffMaxTokens, 10) : undefined,
+  diff_max_batches: options.diffMaxBatches !== undefined ? parseInt(options.diffMaxBatches, 10) : undefined,
+  diff_max_files: options.diffMaxFiles !== undefined ? parseInt(options.diffMaxFiles, 10) : undefined,
+  diff_exclude: Array.isArray(options.diffExclude) && options.diffExclude.length > 0 ? options.diffExclude : undefined
 };
 
 // Log context if provided

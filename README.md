@@ -234,6 +234,27 @@ The diff context JSON file should follow this structure:
 
 **Note:** If `--diff-context` is provided without the `code_reviewer` role, a warning will be displayed as the option is only applicable to code reviews.
 
+#### PR chunking (large PRs)
+
+When a PR diff exceeds the model's context limit, **chunking** splits the diff into batches, reviews each batch, then merges the reports into a single output file.
+
+- **Config** (in `conf/appsec_agent.yaml`): PR diff chunking options live under **`pr_reviewer.options`** and are **on by default** when you use the `pr_reviewer` role with `-d/--diff-context`. The `code_reviewer` role does not have chunking enabled by default.
+  - `diff_review_max_tokens_per_batch`: e.g. `150000` (0 or omit = no chunking)
+  - `diff_review_max_batches`: e.g. `3` (cap on number of batches per run)
+  - `diff_review_max_files`: optional cap on files reviewed; rest are skipped
+  - `diff_review_exclude_paths`: optional list of path patterns to exclude (e.g. `["src/analytics/*"]`)
+- **CLI** (override config): `--diff-max-tokens <n>`, `--diff-max-batches <n>`, `--diff-max-files <n>`, `--diff-exclude <pattern>` (repeatable)
+
+When chunking is used, the merged report may include a **Skipped** section listing files that were excluded or that exceeded the batch limit. Total API cost is logged per batch and as a total, and (for JSON reports) included in `meta.total_cost_usd`.
+
+```bash
+# pr_reviewer has chunking on by default when using -d
+$ npx agent-run -r pr_reviewer -d pr-diff.json
+
+# Or enable chunking via CLI when using code_reviewer (overrides config)
+$ npx agent-run -r code_reviewer -d pr-diff.json --diff-max-tokens 150000 --diff-max-batches 3
+```
+
 ### Threat Modeler Example
 ```bash
 # Run threat modeler on current directory

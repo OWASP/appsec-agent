@@ -9,6 +9,8 @@ import * as path from 'path';
 import { AgentActions, AgentArgs } from './agent_actions';
 import { copyProjectSrcDir, validateOutputFilePath, validateDirectoryPath, validateInputFilePath, sanitizePathForError, getExtensionForFormat, sampleDirectoryForPrompt } from './utils';
 import { DiffContext, formatDiffContextForPrompt, validateDiffContext } from './diff_context';
+import { splitIntoBatches, ChunkingOptions } from './diff_chunking';
+import { mergeBatchReports } from './diff_report_merge';
 
 /**
  * Validate and copy source directory, exiting on validation failure
@@ -96,6 +98,30 @@ function loadDiffContext(diffContextPath: string, cwd: string): DiffContext {
   }
   
   return data;
+}
+
+/** Defaults for PR chunking when not set (0 = no chunking). */
+const DEFAULT_MAX_TOKENS_PER_BATCH = 0;
+const DEFAULT_MAX_BATCHES = 3;
+
+/**
+ * Get chunking options from config and args (args override config).
+ */
+function getChunkingOptions(confDict: any, environment: string, args: AgentArgs): ChunkingOptions {
+  const role = args.role === 'pr_reviewer' || args.role === 'code_reviewer' ? args.role : 'code_reviewer';
+  const roleOpts = confDict?.[environment]?.[role]?.options ?? confDict?.default?.[role]?.options;
+  const fromConfig = {
+    maxTokensPerBatch: roleOpts?.diff_review_max_tokens_per_batch ?? DEFAULT_MAX_TOKENS_PER_BATCH,
+    maxBatches: roleOpts?.diff_review_max_batches ?? DEFAULT_MAX_BATCHES,
+    maxFiles: roleOpts?.diff_review_max_files,
+    excludePaths: Array.isArray(roleOpts?.diff_review_exclude_paths) ? roleOpts.diff_review_exclude_paths : undefined
+  };
+  return {
+    maxTokensPerBatch: args.diff_max_tokens_per_batch !== undefined ? args.diff_max_tokens_per_batch : fromConfig.maxTokensPerBatch,
+    maxBatches: args.diff_max_batches !== undefined ? args.diff_max_batches : fromConfig.maxBatches,
+    maxFiles: args.diff_max_files !== undefined ? args.diff_max_files : fromConfig.maxFiles,
+    excludePaths: args.diff_exclude && args.diff_exclude.length > 0 ? args.diff_exclude : fromConfig.excludePaths
+  };
 }
 
 /**
@@ -191,25 +217,82 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
     if (args.diff_context) {
       console.log('Running PR Diff Code Review Agent (focused context mode)');
       
-      // Load diff context
       const diffContext = loadDiffContext(args.diff_context, currentWorkingDir);
       console.log(`Reviewing PR #${diffContext.prNumber}: ${diffContext.totalFilesChanged} files (+${diffContext.totalLinesAdded}/-${diffContext.totalLinesRemoved})`);
       
-      // Copy source directory if provided (for full file access when needed)
       const tmpSrcDir = args.src_dir ? validateAndCopySrcDir(args.src_dir, currentWorkingDir) : null;
-      
-      // Build focused prompt
-      const userPrompt = buildDiffReviewPrompt(
-        diffContext, 
-        outputFile, 
-        args.output_format || 'json',
-        args.context
-      );
-      
-      // Use diff-focused reviewer options
-      await agentActions.diffReviewerWithOptions(userPrompt, tmpSrcDir);
-      cleanupTmpDir(tmpSrcDir);
-      
+      const chunkingOpts = getChunkingOptions(confDict, args.environment, args);
+      const { batches, skippedFiles, skippedDueToBatches } = splitIntoBatches(diffContext, chunkingOpts);
+
+      const singleBatchNoSkipped = batches.length === 1 && skippedFiles.length === 0 && !skippedDueToBatches;
+
+      if (singleBatchNoSkipped) {
+        const userPrompt = buildDiffReviewPrompt(
+          batches[0],
+          outputFile,
+          args.output_format || 'json',
+          args.context
+        );
+        await agentActions.diffReviewerWithOptions(userPrompt, tmpSrcDir);
+        cleanupTmpDir(tmpSrcDir);
+      } else if (batches.length > 0) {
+        const extension = getExtensionForFormat(args.output_format);
+        const tempDir = path.join(currentWorkingDir, `.pr_review_batches_${Date.now()}`);
+        fs.ensureDirSync(tempDir);
+        const batchPaths: string[] = [];
+        const batchCosts: number[] = [];
+
+        try {
+          for (let i = 0; i < batches.length; i++) {
+            const batchOutputPath = path.join(tempDir, `code_review_batch_${i + 1}.${extension}`);
+            const userPrompt = buildDiffReviewPrompt(
+              batches[i],
+              batchOutputPath,
+              args.output_format || 'json',
+              args.context
+            );
+            await agentActions.diffReviewerWithOptions(userPrompt, tmpSrcDir, (result) => {
+              if (result.total_cost_usd !== undefined && result.total_cost_usd > 0) {
+                batchCosts.push(result.total_cost_usd);
+              }
+            });
+            if (fs.existsSync(batchOutputPath)) {
+              batchPaths.push(batchOutputPath);
+            }
+          }
+
+          const totalCostUsd = batchCosts.length > 0 ? batchCosts.reduce((a, b) => a + b, 0) : undefined;
+          const skippedPaths = skippedFiles.map(f => f.filePath);
+          let skippedMessage: string | undefined;
+          if (skippedDueToBatches) {
+            skippedMessage = `PR exceeded batch limit (max ${chunkingOpts.maxBatches} batches). Only the first ${batchPaths.length} batch(es) were reviewed. Consider splitting the PR or using a full repository review.`;
+          } else if (skippedPaths.length > 0) {
+            skippedMessage = `${skippedPaths.length} file(s) excluded by config (max_files or exclude_paths).`;
+          }
+
+          mergeBatchReports({
+            batchPaths,
+            outputPath: outputFile,
+            format: args.output_format || 'json',
+            totalCostUsd,
+            batchCosts: batchCosts.length > 0 ? batchCosts : undefined,
+            skippedFilePaths: skippedPaths.length > 0 ? skippedPaths : undefined,
+            skippedMessage
+          });
+
+          if (batchCosts.length > 0) {
+            batchCosts.forEach((c, i) => console.log(`Batch ${i + 1}: $${c.toFixed(4)}`));
+            const total = batchCosts.reduce((a, b) => a + b, 0);
+            console.log(`Total API cost: $${total.toFixed(4)}`);
+          }
+        } finally {
+          cleanupTmpDir(tempDir, args.verbose ?? false);
+          cleanupTmpDir(tmpSrcDir);
+        }
+      } else {
+        console.warn('No files to review after filtering.');
+        cleanupTmpDir(tmpSrcDir);
+      }
     } else {
       // Standard full-repository code review
       console.log('Running Code Review Agent');

@@ -29,8 +29,9 @@ program
   .option('-c, --context <context>', 'Additional context for the code review (e.g., deployment environment, architecture, compliance requirements)')
   .option('-d, --diff-context <file>', 'JSON file with diff context for PR-focused code review (optimizes token usage)')
   .option('-m, --model <model>', 'Claude model to use: sonnet, opus, haiku - default to "sonnet"', 'sonnet')
-  .option('--failover', 'Enable failover to OpenAI when Anthropic fails (optional feature, off by default). Overrides FAILOVER_ENABLED env.')
-  .option('--openai-api-key <key>', 'OpenAI API key for failover (overrides OPENAI_API_KEY env). Only used when failover is enabled.')
+  .option('-F, --failover', 'Enable failover to OpenAI when Anthropic fails (optional feature, off by default). Overrides FAILOVER_ENABLED env.')
+  .option('-K, --openai-api-key <key>', 'OpenAI API key for failover (overrides OPENAI_API_KEY env). Only used when failover is enabled.')
+  .option('-U, --openai-base-url <url>', 'OpenAI API base URL for failover (overrides OPENAI_BASE_URL env). Only used when failover is enabled.')
   .option('-l, --list_roles', 'List all available roles')
   .option('-v, --version', 'Program version')
   .option('-V, --verbose', 'Verbose mode');
@@ -86,6 +87,9 @@ if (options.openaiApiKey !== undefined) {
   console.warn('⚠️  SECURITY WARNING: OpenAI API key provided via command line argument.');
   console.warn('   For better security, use the OPENAI_API_KEY environment variable instead.\n');
   process.env.OPENAI_API_KEY = options.openaiApiKey;
+}
+if (options.openaiBaseUrl !== undefined) {
+  process.env.OPENAI_BASE_URL = options.openaiBaseUrl;
 }
 
 // Validate model option

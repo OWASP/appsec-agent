@@ -177,5 +177,51 @@ describe('llmQuery', () => {
         })
       );
     });
+
+    it('uses default system prompt when options have no systemPrompt and no valid agents', async () => {
+      process.env.FAILOVER_ENABLED = 'true';
+      process.env.OPENAI_API_KEY = 'sk-test';
+      mockQuery.mockReturnValue({
+        [Symbol.asyncIterator]: async function* () {
+          throw new Error('fail');
+        }
+      });
+
+      async function* emptyStream() {}
+      mockCreate.mockResolvedValue(emptyStream());
+
+      const emptyOptions = {} as import('@anthropic-ai/claude-agent-sdk').Options;
+      for await (const _ of llmQuery({ prompt: 'Hi', options: emptyOptions })) {}
+
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          messages: [
+            { role: 'system', content: 'You are a helpful assistant.' },
+            { role: 'user', content: 'Hi' }
+          ]
+        })
+      );
+    });
+
+    it('uses OPENAI_BASE_URL when set in env', async () => {
+      process.env.FAILOVER_ENABLED = 'true';
+      process.env.OPENAI_API_KEY = 'sk-test';
+      process.env.OPENAI_BASE_URL = 'https://api.custom-openai.com/v1';
+      mockQuery.mockReturnValue({
+        [Symbol.asyncIterator]: async function* () {
+          throw new Error('fail');
+        }
+      });
+
+      async function* emptyStream() {}
+      mockCreate.mockResolvedValue(emptyStream());
+
+      for await (const _ of llmQuery({ prompt: 'Hi', options: defaultOptions })) {}
+
+      const OpenAIConstructor = require('openai').default;
+      expect(OpenAIConstructor).toHaveBeenCalledWith(
+        expect.objectContaining({ apiKey: 'sk-test', baseURL: 'https://api.custom-openai.com/v1' })
+      );
+    });
   });
 });

@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-02-12
+
+### Changed
+- **Claude Agent SDK**: Upgraded to `@anthropic-ai/claude-agent-sdk@^0.2.39` (parity with Claude Code 2.1.39); peer `@anthropic-ai/claude-code` set to `2.1.39`
+- **Dependencies**: Added `zod@^4.0.0` for SDK peer; added `.npmrc` with `legacy-peer-deps=true` to resolve openai optional peer conflict
+
 ## [1.2.0] - 2026-02-11
 
 ### Added

@@ -275,6 +275,68 @@ export function isFile(fileName: string): boolean {
   }
 }
 
+/** Dir names to skip when sampling for prompt (failover code review). */
+const SAMPLE_SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'coverage', '__pycache__', '.venv', 'venv']);
+
+/** File extensions to include when sampling (others skipped to keep prompt small). */
+const SAMPLE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.py', '.java', '.go', '.rs', '.rb', '.php', '.c', '.cpp', '.h', '.hpp', '.cs', '.vue', '.svelte', '.md', '.yaml', '.yml', '.json', '.html', '.css', '.scss', '.sh', '.bash']);
+
+/**
+ * Sample a directory for inclusion in a prompt (e.g. when using OpenAI fallback for code review).
+ * Returns a string of file contents up to maxChars. Skips binary and large dirs.
+ */
+export function sampleDirectoryForPrompt(dirPath: string, maxChars: number = 70_000): string {
+  if (!dirPath || !fs.existsSync(dirPath) || !fs.statSync(dirPath).isDirectory()) {
+    return '';
+  }
+  const parts: string[] = [];
+  let total = 0;
+  const baseDir = path.resolve(dirPath);
+
+  function walk(dir: string): void {
+    if (total >= maxChars) return;
+    let entries: string[];
+    try {
+      entries = fs.readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const name of entries.sort()) {
+      if (total >= maxChars) break;
+      const full = path.join(dir, name);
+      const rel = path.relative(baseDir, full);
+      if (name.startsWith('.') && name !== '.env' && name !== '.eslintrc') continue;
+      try {
+        const stat = fs.statSync(full);
+        if (stat.isDirectory()) {
+          if (SAMPLE_SKIP_DIRS.has(name)) continue;
+          walk(full);
+          continue;
+        }
+        if (!stat.isFile()) continue;
+        const ext = path.extname(name).toLowerCase();
+        if (!SAMPLE_EXTENSIONS.has(ext) && !name.includes('.')) continue;
+        const content = fs.readFileSync(full, 'utf-8');
+        if (/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(content)) continue;
+        const block = `--- ${rel} ---\n${content}\n`;
+        if (total + block.length > maxChars) {
+          const cap = maxChars - total - 50;
+          parts.push(`--- ${rel} (truncated) ---\n${content.slice(0, cap)}\n...\n`);
+          total = maxChars;
+          return;
+        }
+        parts.push(block);
+        total += block.length;
+      } catch {
+        // skip unreadable
+      }
+    }
+  }
+
+  walk(baseDir);
+  return parts.join('\n');
+}
+
 /**
  * Convert file rows to a list, filtering out comments
  */
@@ -509,7 +571,20 @@ export function loadYaml(confFile: string, verbose: boolean = false): ConfigDict
     const processed = processEnvVars(withMerges);
     
     if (verbose) {
-      console.log('conf_dict:', JSON.stringify(processed, null, 2));
+      const maxStrLen = 120;
+      const truncateForLog = (obj: unknown): unknown => {
+        if (typeof obj === 'string') {
+          return obj.length <= maxStrLen ? obj : obj.slice(0, maxStrLen) + '...';
+        }
+        if (Array.isArray(obj)) return obj.map(truncateForLog);
+        if (obj !== null && typeof obj === 'object') {
+          const out: Record<string, unknown> = {};
+          for (const [k, v] of Object.entries(obj)) out[k] = truncateForLog(v);
+          return out;
+        }
+        return obj;
+      };
+      console.log('conf_dict:', JSON.stringify(truncateForLog(processed), null, 2));
     }
     
     return processed;

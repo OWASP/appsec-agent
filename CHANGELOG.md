@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-02-11
+
+### Added
+- **OpenAI fallback write tool**: When using OpenAI failover (e.g. code review with `-F`), the model can now write the report to a file via a `write_file` tool, matching Anthropic behavior. Tool definition and execution live in `src/openai_tools.ts` for easy maintenance. Writes are restricted to the current working directory via existing path validation.
+
 ## [1.0.5] - 2026-02-11
 
 ### Added

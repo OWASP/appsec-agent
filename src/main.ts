@@ -7,7 +7,7 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import { AgentActions, AgentArgs } from './agent_actions';
-import { copyProjectSrcDir, validateOutputFilePath, validateDirectoryPath, validateInputFilePath, sanitizePathForError, getExtensionForFormat } from './utils';
+import { copyProjectSrcDir, validateOutputFilePath, validateDirectoryPath, validateInputFilePath, sanitizePathForError, getExtensionForFormat, sampleDirectoryForPrompt } from './utils';
 import { DiffContext, formatDiffContextForPrompt, validateDiffContext } from './diff_context';
 
 /**
@@ -235,9 +235,14 @@ Please consider this context when analyzing the code. Focus on:
 `;
       }
       
-      const userPrompt = `Review the code in the ${srcLocation}.${contextSection}.
+      let userPrompt = `Review the code in the ${srcLocation}.${contextSection}.
 Provide a comprehensive security review report identifying potential security issues found in the code. Please write the review report in the ${outputFile} file under current working directory in ${args.output_format} format.`;
-      
+      if (process.env.FAILOVER_ENABLED === 'true' && tmpSrcDir) {
+        const codeSample = sampleDirectoryForPrompt(tmpSrcDir);
+        if (codeSample) {
+          userPrompt += `\n\n## Code to review (included for fallback mode)\n\nThe following is a sampling of the source code. Analyze it for security issues and produce your report.\n\n${codeSample}`;
+        }
+      }
       await agentActions.codeReviewerWithOptions(userPrompt);
       cleanupTmpDir(tmpSrcDir);
     }

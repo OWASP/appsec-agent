@@ -7,6 +7,11 @@
 
 import { query as anthropicQuery, Options } from '@anthropic-ai/claude-agent-sdk';
 import OpenAI from 'openai';
+import {
+  WRITE_FILE_TOOL,
+  messageReducer,
+  executeWriteToolCalls
+} from './openai_tools';
 
 /** Message types yielded by the adapter; same shape as Claude SDK for compatibility. */
 export type StreamEventMessage = {
@@ -113,6 +118,8 @@ async function* openaiFallbackStream(
   const stream = await openai.chat.completions.create({
     model,
     messages,
+    tools: [WRITE_FILE_TOOL],
+    tool_choice: 'auto',
     stream: true,
     stream_options: { include_usage: true }
   });
@@ -120,11 +127,14 @@ async function* openaiFallbackStream(
   let fullText = '';
   let promptTokens = 0;
   let completionTokens = 0;
+  let accumulatedMessage = {} as OpenAI.Chat.ChatCompletionMessage;
+
   for await (const chunk of stream) {
     if (chunk.usage) {
       promptTokens = chunk.usage.prompt_tokens ?? 0;
       completionTokens = chunk.usage.completion_tokens ?? 0;
     }
+    accumulatedMessage = messageReducer(accumulatedMessage, chunk);
     const delta = chunk.choices[0]?.delta?.content;
     if (typeof delta === 'string' && delta) {
       fullText += delta;
@@ -136,6 +146,10 @@ async function* openaiFallbackStream(
         }
       } as StreamEventMessage;
     }
+  }
+
+  if (accumulatedMessage.tool_calls?.length) {
+    executeWriteToolCalls(accumulatedMessage.tool_calls, process.cwd());
   }
 
   yield {
@@ -171,6 +185,7 @@ export async function* llmQuery(params: {
     getFailoverConfig();
 
   let primaryErrorResult: QueryMessage | null = null;
+  const buffer: QueryMessage[] = [];
 
   try {
     for await (const msg of anthropicQuery({ prompt, options })) {
@@ -178,9 +193,12 @@ export async function* llmQuery(params: {
         primaryErrorResult = msg as QueryMessage;
         break;
       }
-      yield msg as QueryMessage;
+      buffer.push(msg as QueryMessage);
     }
-    if (primaryErrorResult === null) return;
+    if (primaryErrorResult === null) {
+      for (const m of buffer) yield m;
+      return;
+    }
     if (failoverEnabled && openaiApiKey) {
       const systemPrompt = getSystemPromptFromOptions(options);
       yield* openaiFallbackStream(
@@ -192,6 +210,7 @@ export async function* llmQuery(params: {
       );
       return;
     }
+    for (const m of buffer) yield m;
     yield primaryErrorResult;
   } catch (primaryError) {
     if (!failoverEnabled || !openaiApiKey) {

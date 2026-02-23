@@ -4,6 +4,7 @@
  * Author: Sam Li
  */
 
+import * as fs from 'fs';
 import { SDKAssistantMessage, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
 import { AgentOptions } from './agent_options';
 import { llmQuery } from './llm_query';
@@ -234,10 +235,14 @@ export class AgentActions {
             // Stop cursor when we receive result (in case no content was received)
             if (cursor) cursor.stop();
             const resultMsg = message as SDKResultMessage;
-            // Output structured JSON when using json_schema output format
-            // The structured_output field contains the validated JSON matching the schema
             if ((resultMsg as any).structured_output) {
-              console.log(JSON.stringify((resultMsg as any).structured_output));
+              const jsonReport = JSON.stringify((resultMsg as any).structured_output, null, 2);
+              if (this.args.output_file) {
+                fs.writeFileSync(this.args.output_file, jsonReport, 'utf-8');
+                console.log(`\nReport written to ${this.args.output_file}`);
+              } else {
+                console.log(jsonReport);
+              }
             }
             if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
               console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);
@@ -378,10 +383,14 @@ export class AgentActions {
             // Stop cursor when we receive result (in case no content was received)
             if (cursor) cursor.stop();
             const resultMsg = message as SDKResultMessage;
-            // Output structured JSON when using json_schema output format
-            // The structured_output field contains the validated JSON matching the schema
             if ((resultMsg as any).structured_output) {
-              console.log(JSON.stringify((resultMsg as any).structured_output));
+              const jsonReport = JSON.stringify((resultMsg as any).structured_output, null, 2);
+              if (this.args.output_file) {
+                fs.writeFileSync(this.args.output_file, jsonReport, 'utf-8');
+                console.log(`\nReport written to ${this.args.output_file}`);
+              } else {
+                console.log(jsonReport);
+              }
             }
             if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
               console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);

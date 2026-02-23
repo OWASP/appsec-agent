@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2026-02-23
+
+### Fixed
+- **Write structured output to report file**: When using JSON schema output format (`-f json`), the agent now writes `structured_output` to the output file (e.g., `code_review_report.json`) instead of only printing to stdout. With `outputFormat: { type: 'json_schema' }`, Claude may skip the Write tool since the SDK captures structured output separately. The agent now writes the file directly, so downstream consumers find the report file as expected.
+
 ## [1.3.2] - 2026-02-23
 
 ### Fixed

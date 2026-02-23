@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - 2026-02-23
+
+### Fixed
+- **Structured output extraction**: When using JSON schema output format (`-f json`), the agent now correctly extracts `structured_output` from the result message. Previously, the structured JSON was returned in `result.structured_output` per Claude SDK spec, but the code only captured conversational text from `assistant.message.content`, causing "No report generated" errors in downstream parsers.
+
 ## [1.3.1] - 2026-02-23
 
 ### Changed

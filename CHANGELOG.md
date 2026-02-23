@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-02-12
+
+### Added
+- **Structured JSON output for security reports**: When using `--output-format json`, code reviewer and PR diff reviewer now enforce a JSON schema so model output conforms to a defined structure (metadata, executive_summary, findings with severity/category/affected_files/remediation, etc.). Ensures compatibility with the sast-ai-app parser. Schema and TypeScript types live in `src/schemas/security_report.ts`.
+
 ## [1.2.1] - 2026-02-12
 
 ### Changed

@@ -196,7 +196,7 @@ export class AgentActions {
    */
   async codeReviewerWithOptions(userPrompt: string): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
-    const options = agentOptions.getCodeReviewerOptions(this.args.role);
+    const options = agentOptions.getCodeReviewerOptions(this.args.role, this.args.output_format);
 
     // Declare cursor outside try block so it's accessible in catch
     let cursor: BlinkingCursor | null = null;
@@ -335,7 +335,7 @@ export class AgentActions {
     onResult?: (result: { total_cost_usd?: number }) => void
   ): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
-    const options = agentOptions.getDiffReviewerOptions(this.args.role, srcDir);
+    const options = agentOptions.getDiffReviewerOptions(this.args.role, srcDir, this.args.output_format);
 
     // Declare cursor outside try block so it's accessible in catch
     let cursor: BlinkingCursor | null = null;

@@ -6,6 +6,7 @@
 
 import { Options, AgentDefinition, PermissionResult, CanUseTool } from '@anthropic-ai/claude-agent-sdk';
 import { ConfigDict } from './utils';
+import { SECURITY_REPORT_SCHEMA } from './schemas/security_report';
 
 export interface ToolUsageLog {
   tool: string;
@@ -87,13 +88,15 @@ export class AgentOptions {
 
   /**
    * Get options for security code reviewer
+   * @param role - The role configuration key
+   * @param outputFormat - Output format (json, markdown, etc.)
    */
-  getCodeReviewerOptions(role: string = 'code_reviewer'): Options {
+  getCodeReviewerOptions(role: string = 'code_reviewer', outputFormat?: string): Options {
     const roleConfig = this.confDict[this.environment]?.[role];
     const systemPrompt = roleConfig?.options?.system_prompt || 
       'You are an Application Security (AppSec) expert assistant. You are responsible for performing a thorough code review. List out all the potential security and privacy issues found in the code.';
 
-    return {
+    const options: Options = {
       agents: {
         'code-reviewer': {
           description: 'Reviews code for best practices and potential security issues only',
@@ -104,6 +107,16 @@ export class AgentOptions {
       },
       permissionMode: 'bypassPermissions'
     };
+
+    // Add JSON schema enforcement when output format is JSON
+    if (outputFormat?.toLowerCase() === 'json') {
+      options.outputFormat = {
+        type: 'json_schema',
+        schema: SECURITY_REPORT_SCHEMA
+      };
+    }
+
+    return options;
   }
 
   /**
@@ -131,8 +144,11 @@ export class AgentOptions {
    * Get options for PR diff-focused code reviewer
    * This mode analyzes only the changed code from a pull request,
    * with access to Read and Write tools for additional context if needed.
+   * @param role - The role configuration key
+   * @param srcDir - Optional source directory path
+   * @param outputFormat - Output format (json, markdown, etc.)
    */
-  getDiffReviewerOptions(role: string = 'code_reviewer', srcDir?: string | null): Options {
+  getDiffReviewerOptions(role: string = 'code_reviewer', srcDir?: string | null, outputFormat?: string): Options {
     const roleConfig = this.confDict[this.environment]?.[role];
     
     let systemPrompt = `You are an Application Security (AppSec) expert assistant specializing in Pull Request security reviews.
@@ -159,7 +175,7 @@ You have access to Read and Write tools if you need to:
       systemPrompt = roleConfig.options.diff_reviewer_system_prompt;
     }
 
-    return {
+    const options: Options = {
       agents: {
         'diff-reviewer': {
           description: 'Reviews PR diff changes for security vulnerabilities',
@@ -170,6 +186,16 @@ You have access to Read and Write tools if you need to:
       },
       permissionMode: 'bypassPermissions'
     };
+
+    // Add JSON schema enforcement when output format is JSON
+    if (outputFormat?.toLowerCase() === 'json') {
+      options.outputFormat = {
+        type: 'json_schema',
+        schema: SECURITY_REPORT_SCHEMA
+      };
+    }
+
+    return options;
   }
 }
 

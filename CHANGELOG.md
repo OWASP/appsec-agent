@@ -5,10 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.4] - 2026-02-23
+
+### Fixed
+- **Write structured output to report file**: `codeReviewerWithOptions` and `diffReviewerWithOptions` now return the structured JSON string. `main.ts` writes it to the output file (e.g., `code_review_report.json`) if Claude didn't use the Write tool. With `outputFormat: { type: 'json_schema' }`, Claude produces the report as `structured_output` on the SDK result and may skip the Write tool entirely. The caller (`main.ts`) knows the correct output path and writes the file, so downstream consumers find it as expected.
+
 ## [1.3.3] - 2026-02-23
 
 ### Fixed
-- **Write structured output to report file**: When using JSON schema output format (`-f json`), the agent now writes `structured_output` to the output file (e.g., `code_review_report.json`) instead of only printing to stdout. With `outputFormat: { type: 'json_schema' }`, Claude may skip the Write tool since the SDK captures structured output separately. The agent now writes the file directly, so downstream consumers find the report file as expected.
+- **Write structured output to report file** (incomplete): Attempted to write via `this.args.output_file` in `agent_actions.ts`, but the backend doesn't pass `-o` to the CLI, so `output_file` was always undefined. Superseded by v1.3.4.
 
 ## [1.3.2] - 2026-02-23
 

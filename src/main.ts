@@ -233,7 +233,11 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
           args.output_format || 'json',
           args.context
         );
-        await agentActions.diffReviewerWithOptions(userPrompt, tmpSrcDir);
+        const structuredResult = await agentActions.diffReviewerWithOptions(userPrompt, tmpSrcDir);
+        if (structuredResult && !fs.existsSync(outputFile)) {
+          fs.writeFileSync(outputFile, structuredResult, 'utf-8');
+          console.log(`Report written to ${outputFile}`);
+        }
         cleanupTmpDir(tmpSrcDir);
       } else if (batches.length > 0) {
         const extension = getExtensionForFormat(args.output_format);
@@ -251,11 +255,15 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
               args.output_format || 'json',
               args.context
             );
-            await agentActions.diffReviewerWithOptions(userPrompt, tmpSrcDir, (result) => {
+            const batchResult = await agentActions.diffReviewerWithOptions(userPrompt, tmpSrcDir, (result) => {
               if (result.total_cost_usd !== undefined && result.total_cost_usd > 0) {
                 batchCosts.push(result.total_cost_usd);
               }
             });
+            if (batchResult && !fs.existsSync(batchOutputPath)) {
+              fs.writeFileSync(batchOutputPath, batchResult, 'utf-8');
+              console.log(`Batch ${i + 1} report written to ${batchOutputPath}`);
+            }
             if (fs.existsSync(batchOutputPath)) {
               batchPaths.push(batchOutputPath);
             }
@@ -326,7 +334,11 @@ Provide a comprehensive security review report identifying potential security is
           userPrompt += `\n\n## Code to review (included for fallback mode)\n\nThe following is a sampling of the source code. Analyze it for security issues and produce your report.\n\n${codeSample}`;
         }
       }
-      await agentActions.codeReviewerWithOptions(userPrompt);
+      const structuredResult = await agentActions.codeReviewerWithOptions(userPrompt);
+      if (structuredResult && !fs.existsSync(outputFile)) {
+        fs.writeFileSync(outputFile, structuredResult, 'utf-8');
+        console.log(`Report written to ${outputFile}`);
+      }
       cleanupTmpDir(tmpSrcDir);
     }
 

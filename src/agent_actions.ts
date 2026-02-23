@@ -4,7 +4,6 @@
  * Author: Sam Li
  */
 
-import * as fs from 'fs';
 import { SDKAssistantMessage, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
 import { AgentOptions } from './agent_options';
 import { llmQuery } from './llm_query';
@@ -199,8 +198,8 @@ export class AgentActions {
     const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
     const options = agentOptions.getCodeReviewerOptions(this.args.role, this.args.output_format);
 
-    // Declare cursor outside try block so it's accessible in catch
     let cursor: BlinkingCursor | null = null;
+    let structuredJson = '';
 
     try {
       // Start blinking cursor to show we're waiting for Claude's response
@@ -236,13 +235,7 @@ export class AgentActions {
             if (cursor) cursor.stop();
             const resultMsg = message as SDKResultMessage;
             if ((resultMsg as any).structured_output) {
-              const jsonReport = JSON.stringify((resultMsg as any).structured_output, null, 2);
-              if (this.args.output_file) {
-                fs.writeFileSync(this.args.output_file, jsonReport, 'utf-8');
-                console.log(`\nReport written to ${this.args.output_file}`);
-              } else {
-                console.log(jsonReport);
-              }
+              structuredJson = JSON.stringify((resultMsg as any).structured_output, null, 2);
             }
             if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
               console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);
@@ -266,7 +259,7 @@ export class AgentActions {
       throw error;
     }
     console.log();
-    return '';
+    return structuredJson;
   }
 
   /**
@@ -347,11 +340,10 @@ export class AgentActions {
     const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
     const options = agentOptions.getDiffReviewerOptions(this.args.role, srcDir, this.args.output_format);
 
-    // Declare cursor outside try block so it's accessible in catch
     let cursor: BlinkingCursor | null = null;
+    let structuredJson = '';
 
     try {
-      // Start blinking cursor to show we're waiting for Claude's response
       cursor = new BlinkingCursor();
       cursor.start();
 
@@ -384,13 +376,7 @@ export class AgentActions {
             if (cursor) cursor.stop();
             const resultMsg = message as SDKResultMessage;
             if ((resultMsg as any).structured_output) {
-              const jsonReport = JSON.stringify((resultMsg as any).structured_output, null, 2);
-              if (this.args.output_file) {
-                fs.writeFileSync(this.args.output_file, jsonReport, 'utf-8');
-                console.log(`\nReport written to ${this.args.output_file}`);
-              } else {
-                console.log(jsonReport);
-              }
+              structuredJson = JSON.stringify((resultMsg as any).structured_output, null, 2);
             }
             if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
               console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);
@@ -415,7 +401,7 @@ export class AgentActions {
       throw error;
     }
     console.log();
-    return '';
+    return structuredJson;
   }
 }
 

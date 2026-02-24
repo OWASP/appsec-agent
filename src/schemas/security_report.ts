@@ -3,7 +3,7 @@
  * 
  * This schema enforces a consistent structure for security reports generated
  * by the appsec-agent when using JSON output format. It ensures compatibility
- * with the sast-ai-app parser.
+ * with the parent app parser.
  * 
  * Author: Sam Li
  */

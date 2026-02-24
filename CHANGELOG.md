@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.5] - 2026-02-23
+
+### Fixed
+- **JSON report schema conformance**: When output format is JSON, the prompt now instructs the model to provide the report as a structured response (follow the required schema) and not to write the file; the system writes the schema-constrained `structured_output` to the report file. This ensures the root `security_review_report` wrapper and full schema compliance. Applied to both code reviewer and PR diff reviewer (single and batched). When `structuredResult` is present, it is always written to the output file (overwriting any file the model may have written via the Write tool).
+- **Version and author in `agent-run -v`**: `getProjectRoot()` now locates the directory containing `package.json` by walking up from `__dirname`, so version and author display correctly when running the compiled CLI (e.g. `node dist/bin/agent-run.js -v` or after `npm install`).
+
 ## [1.3.4] - 2026-02-23
 
 ### Fixed

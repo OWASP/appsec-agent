@@ -457,9 +457,17 @@ export function runCommand(
 }
 
 /**
- * Get the project root absolute path
+ * Get the project root absolute path (directory containing package.json).
+ * Works when running from src/ (ts-node) or dist/src/ (compiled).
  */
 export function getProjectRoot(): string {
+  let dir = __dirname;
+  const root = path.parse(dir).root;
+  while (dir !== root) {
+    const pkgPath = path.join(dir, 'package.json');
+    if (fs.existsSync(pkgPath)) return dir;
+    dir = path.dirname(dir);
+  }
   return path.resolve(__dirname, '..');
 }
 

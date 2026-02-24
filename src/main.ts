@@ -163,8 +163,13 @@ ${additionalContext}
 `;
   }
 
-  prompt += `Write a comprehensive security review report to ${outputFile} in ${outputFormat} format.
+  if (outputFormat?.toLowerCase() === 'json') {
+    prompt += `Provide the security review report as your structured JSON response (follow the required schema). Do not write the report to a file; the system will save it to ${outputFile}.
 Focus only on the changed code - do not report issues in unchanged code.`;
+  } else {
+    prompt += `Write a comprehensive security review report to ${outputFile} in ${outputFormat} format.
+Focus only on the changed code - do not report issues in unchanged code.`;
+  }
 
   return prompt;
 }
@@ -234,7 +239,7 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
           args.context
         );
         const structuredResult = await agentActions.diffReviewerWithOptions(userPrompt, tmpSrcDir);
-        if (structuredResult && !fs.existsSync(outputFile)) {
+        if (structuredResult) {
           fs.writeFileSync(outputFile, structuredResult, 'utf-8');
           console.log(`Report written to ${outputFile}`);
         }
@@ -260,7 +265,7 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
                 batchCosts.push(result.total_cost_usd);
               }
             });
-            if (batchResult && !fs.existsSync(batchOutputPath)) {
+            if (batchResult) {
               fs.writeFileSync(batchOutputPath, batchResult, 'utf-8');
               console.log(`Batch ${i + 1} report written to ${batchOutputPath}`);
             }
@@ -326,8 +331,13 @@ Please consider this context when analyzing the code. Focus on:
 `;
       }
       
-      let userPrompt = `Review the code in the ${srcLocation}.${contextSection}.
-Provide a comprehensive security review report identifying potential security issues found in the code. Please write the review report in the ${outputFile} file under current working directory in ${args.output_format} format.`;
+      const isJson = args.output_format?.toLowerCase() === 'json';
+      const outputInstruction = isJson
+        ? `Provide the security review report as your structured JSON response (follow the required schema). Do not write the report to a file; the system will save it to ${outputFile}.`
+        : `Please write the review report in the ${outputFile} file under current working directory in ${args.output_format} format.`;
+      let userPrompt = `Review the code in the ${srcLocation}.${contextSection}
+
+Provide a comprehensive security review report identifying potential security issues found in the code. ${outputInstruction}`;
       if (process.env.FAILOVER_ENABLED === 'true' && tmpSrcDir) {
         const codeSample = sampleDirectoryForPrompt(tmpSrcDir);
         if (codeSample) {
@@ -335,7 +345,7 @@ Provide a comprehensive security review report identifying potential security is
         }
       }
       const structuredResult = await agentActions.codeReviewerWithOptions(userPrompt);
-      if (structuredResult && !fs.existsSync(outputFile)) {
+      if (structuredResult) {
         fs.writeFileSync(outputFile, structuredResult, 'utf-8');
         console.log(`Report written to ${outputFile}`);
       }

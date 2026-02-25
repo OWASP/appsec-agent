@@ -12,21 +12,19 @@ export interface SecurityFinding {
   id: string;
   title: string;
   severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
   category: string;
+  file: string;
+  line_numbers?: string;
   cwe_id?: string;
   cvss_score?: number;
-  affected_files: Array<{
-    path: string;
-    lines?: string;  // Format: "8-10" or "8" - NOT an array
-  }>;
   description: string;
+  code_snippet?: string;
   impact?: string;
-  vulnerable_code?: string;
-  remediation: string | {
-    description?: string;
-    remediation_steps?: string[];
-    secure_code_example?: string;
-  };
+  recommendation: string;
+  fixed_code?: string;
+  cwe?: string;
+  owasp?: string;
   references?: string[];
 }
 
@@ -96,49 +94,51 @@ export const SECURITY_REPORT_SCHEMA: Record<string, unknown> = {
           type: 'array',
           items: {
             type: 'object',
-            required: ['id', 'title', 'severity', 'category', 'affected_files', 'description', 'remediation'],
+            required: ['id', 'title', 'severity', 'confidence', 'category', 'file', 'description', 'recommendation'],
             properties: {
-              id: { type: 'string' },
+              id: { 
+                type: 'string',
+                description: 'Sequential ID (SEC-001, SEC-002, etc.)'
+              },
               title: { type: 'string' },
               severity: { 
                 type: 'string',
                 enum: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO']
               },
+              confidence: {
+                type: 'string',
+                enum: ['HIGH', 'MEDIUM', 'LOW'],
+                description: 'Confidence level of the finding'
+              },
               category: { type: 'string' },
+              file: {
+                type: 'string',
+                description: 'File path where the vulnerability was found'
+              },
+              line_numbers: { 
+                type: 'string',
+                description: 'Line number(s) where the issue occurs, e.g., "8-10" or "8"'
+              },
               cwe_id: { type: 'string' },
               cvss_score: { type: 'number', minimum: 0, maximum: 10 },
-              affected_files: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  required: ['path'],
-                  properties: {
-                    path: { type: 'string' },
-                    lines: { 
-                      type: 'string',
-                      description: 'Line numbers as string, e.g., "8-10" or "8". NOT an array.'
-                    }
-                  }
-                }
-              },
               description: { type: 'string' },
+              code_snippet: { type: 'string' },
               impact: { type: 'string' },
-              vulnerable_code: { type: 'string' },
-              remediation: {
-                oneOf: [
-                  { type: 'string' },
-                  {
-                    type: 'object',
-                    properties: {
-                      description: { type: 'string' },
-                      remediation_steps: {
-                        type: 'array',
-                        items: { type: 'string' }
-                      },
-                      secure_code_example: { type: 'string' }
-                    }
-                  }
-                ]
+              recommendation: {
+                type: 'string',
+                description: 'Remediation steps to fix the vulnerability'
+              },
+              fixed_code: {
+                type: 'string',
+                description: 'Corrected code that fixes the vulnerability'
+              },
+              cwe: {
+                type: 'string',
+                description: 'CWE identifier, e.g., "CWE-89: SQL Injection"'
+              },
+              owasp: {
+                type: 'string',
+                description: 'OWASP Top 10 reference'
               },
               references: {
                 type: 'array',

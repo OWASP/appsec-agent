@@ -7,6 +7,7 @@
 import { Options, AgentDefinition, PermissionResult, CanUseTool } from '@anthropic-ai/claude-agent-sdk';
 import { ConfigDict } from './utils';
 import { SECURITY_REPORT_SCHEMA } from './schemas/security_report';
+import { THREAT_MODEL_REPORT_SCHEMA } from './schemas/threat_model_report';
 
 export interface ToolUsageLog {
   tool: string;
@@ -121,23 +122,36 @@ export class AgentOptions {
 
   /**
    * Get options for threat modeler
+   * @param role - The role configuration key
+   * @param outputFormat - Output format (json, markdown, etc.)
    */
-  getThreatModelerOptions(role: string = 'threat_modeler'): Options {
+  getThreatModelerOptions(role: string = 'threat_modeler', outputFormat?: string): Options {
     const roleConfig = this.confDict[this.environment]?.[role];
     const systemPrompt = roleConfig?.options?.system_prompt || 
       'You are an Application Security (AppSec) expert assistant. You are responsible for performing risk assessment on the source code repository for SOC2 type 2 compliance audit using the STRIDE methodology.';
 
-    return {
+    const isJson = outputFormat?.toLowerCase() === 'json';
+
+    const options: Options = {
       agents: {
         'threat-modeler': {
           description: 'Performs threat modeling and risk assessment using STRIDE methodology',
           prompt: systemPrompt,
-          tools: ['Read', 'Grep', 'Write', 'Graphviz'],
+          tools: isJson ? ['Read', 'Grep'] : ['Read', 'Grep', 'Write', 'Graphviz'],
           model: this.model
         } as AgentDefinition
       },
       permissionMode: 'bypassPermissions'
     };
+
+    if (isJson) {
+      options.outputFormat = {
+        type: 'json_schema',
+        schema: THREAT_MODEL_REPORT_SCHEMA
+      };
+    }
+
+    return options;
   }
 
   /**

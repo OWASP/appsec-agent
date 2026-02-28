@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-02-28
+
+### Added
+- **Structured JSON output for threat modeler**: When using `--output-format json`, the threat modeler now enforces a JSON schema (`THREAT_MODEL_REPORT_SCHEMA`) so model output conforms to a defined structure covering Data Flow Diagram (nodes, flows, trust boundaries), STRIDE threat model, and risk registry. Schema and TypeScript types live in `src/schemas/threat_model_report.ts`.
+- **Threat model report schema exports**: New public exports for `DFDNode`, `DFDDataFlow`, `DFDTrustBoundary`, `Threat`, `Risk`, `ThreatModelReport`, and `THREAT_MODEL_REPORT_SCHEMA` from the package index.
+
+### Changed
+- **Threat modeler agent refactor**: `threatModelerAgentWithOptions` now returns the structured JSON string (instead of empty string) when structured output is available. `main.ts` writes the schema-constrained result to the output file, matching the pattern used by the code reviewer.
+- **Threat modeler prompt split**: JSON mode uses a structured analysis prompt (no file writes by the model); non-JSON mode preserves the original ASCII DFD + file-writing behavior.
+- **`getThreatModelerOptions` accepts `outputFormat`**: When format is JSON, tools are restricted to read-only (`Read`, `Grep`) and `outputFormat` is set with the threat model schema.
+- Removed redundant comments from `agent_actions.ts`.
+- Version bump to 1.6.0.
+
 ## [1.4.0] - 2026-02-25
 
 ### Changed

@@ -267,20 +267,19 @@ export class AgentActions {
    */
   async threatModelerAgentWithOptions(userPrompt: string): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
-    const options = agentOptions.getThreatModelerOptions(this.args.role);
-    // Declare cursor outside try block so it's accessible in catch
+    const options = agentOptions.getThreatModelerOptions(this.args.role, this.args.output_format);
+
     let cursor: BlinkingCursor | null = null;
+    let structuredJson = '';
+
     try {
-      // Start blinking cursor to show we're waiting for Claude's response
       cursor = new BlinkingCursor();
       cursor.start();
       try {
         for await (const message of llmQuery({ prompt: userPrompt, options })) {
           if (message.type === 'stream_event') {
-            // Stop cursor when we receive stream events
             if (cursor) cursor.stop();
             const streamMsg = message as any;
-            // Handle content block deltas (streaming text)
             if (streamMsg.event?.type === 'content_block_delta' && streamMsg.event.delta?.type === 'text_delta') {
               const deltaText = streamMsg.event.delta.text || '';
               if (deltaText) {
@@ -288,7 +287,6 @@ export class AgentActions {
               }
             }
           } else if (message.type === 'assistant') {
-            // Stop cursor when we receive assistant message
             if (cursor) cursor.stop();
             const assistantMsg = message as SDKAssistantMessage;
             if (assistantMsg.message.content) {
@@ -299,20 +297,20 @@ export class AgentActions {
               }
             }
           } else if (message.type === 'result') {
-            // Stop cursor when we receive result (in case no content was received)
             if (cursor) cursor.stop();
             const resultMsg = message as SDKResultMessage;
+            if ((resultMsg as any).structured_output) {
+              structuredJson = JSON.stringify((resultMsg as any).structured_output, null, 2);
+            }
             if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
               console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);
             }
           }
         }
       } finally {
-        // Always stop the cursor when done, even if there's an error
         if (cursor) cursor.stop();
       }
     } catch (error) {
-      // Ensure cursor is stopped on error
       if (cursor) {
         try {
           cursor.stop();
@@ -324,7 +322,7 @@ export class AgentActions {
       throw error;
     }
     console.log();
-    return '';
+    return structuredJson;
   }
 
   /**

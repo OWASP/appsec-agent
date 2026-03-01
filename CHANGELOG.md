@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1] - 2026-02-28
+
+### Changed
+- **Enable PR diff chunking for `code_reviewer`**: Added `diff_review_max_tokens_per_batch`, `diff_review_max_batches`, and `diff_review_max_files` to `code_reviewer` config, matching `pr_reviewer` defaults (150K tokens/batch, 3 batches, 80 files). Previously `code_reviewer` with `--diff-context` had no chunking, limiting it to a single context window.
+- Version bump to 1.6.1.
+
 ## [1.6.0] - 2026-02-28
 
 ### Added

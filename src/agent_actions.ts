@@ -19,6 +19,7 @@ export interface AgentArgs {
   verbose?: boolean;
   context?: string;  // User-provided context for code review
   diff_context?: string; // Path to JSON file with diff context for PR-focused review
+  fix_context?: string;  // Path to JSON file with fix context for code_fixer role
   model?: string;  // Claude model selection: sonnet, opus, haiku
   // PR diff chunking (optional; 0 or omit = no chunking)
   diff_max_tokens_per_batch?: number;
@@ -319,6 +320,63 @@ export class AgentActions {
         }
       }
       console.error('Error during threat modeling:', error);
+      throw error;
+    }
+    console.log();
+    return structuredJson;
+  }
+
+  /**
+   * Code fixer agent with structured JSON output.
+   * Returns the structured fix JSON and prints cost to stdout.
+   */
+  async codeFixerWithOptions(userPrompt: string, srcDir?: string | null): Promise<string> {
+    const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
+    const options = agentOptions.getCodeFixerOptions(this.args.role, srcDir);
+
+    let cursor: BlinkingCursor | null = null;
+    let structuredJson = '';
+
+    try {
+      cursor = new BlinkingCursor();
+      cursor.start();
+      try {
+        for await (const message of llmQuery({ prompt: userPrompt, options })) {
+          if (message.type === 'stream_event') {
+            if (cursor) cursor.stop();
+          } else if (message.type === 'assistant') {
+            if (cursor) cursor.stop();
+            const assistantMsg = message as SDKAssistantMessage;
+            if (this.args.verbose && assistantMsg.message.content) {
+              for (const block of assistantMsg.message.content) {
+                if (block.type === 'text') {
+                  console.log(`Claude: ${block.text}`);
+                }
+              }
+            }
+          } else if (message.type === 'result') {
+            if (cursor) cursor.stop();
+            const resultMsg = message as SDKResultMessage;
+            if ((resultMsg as any).structured_output) {
+              structuredJson = JSON.stringify((resultMsg as any).structured_output, null, 2);
+            }
+            if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
+              console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);
+            }
+          }
+        }
+      } finally {
+        if (cursor) cursor.stop();
+      }
+    } catch (error) {
+      if (cursor) {
+        try {
+          cursor.stop();
+        } catch {
+          // Ignore if cursor cleanup fails
+        }
+      }
+      console.error('Error during code fix generation:', error);
       throw error;
     }
     console.log();

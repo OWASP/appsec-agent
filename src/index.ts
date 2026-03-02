@@ -17,4 +17,11 @@ export {
   ThreatModelReport,
   THREAT_MODEL_REPORT_SCHEMA,
 } from './schemas/threat_model_report';
+export {
+  FixContext,
+  FixContextFinding,
+  FixContextCodeContext,
+  FixOutput,
+  FIX_OUTPUT_SCHEMA,
+} from './schemas/security_fix';
 

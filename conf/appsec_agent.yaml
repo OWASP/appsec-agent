@@ -33,6 +33,11 @@ default: &default
       diff_review_max_batches: 3
       diff_review_max_files: 80
       # diff_review_exclude_paths: []
+  code_fixer:
+    options:
+      system_prompt: "You are an expert security engineer specializing in fixing vulnerabilities in code. You receive a finding with code context and must produce a precise, minimal fix that resolves the security issue while preserving the original code's functionality and indentation. Only modify the affected lines. Always use the recommended secure alternatives when applicable."
+      output_format: "json"
+      verbose: True
 
 
 development:

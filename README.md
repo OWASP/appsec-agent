@@ -134,6 +134,15 @@ A specialized agent for automated code analysis that can:
 - Accept deployment context via `-c/--context` for environment-specific analysis
 - **PR-focused review mode** via `-d/--diff-context` for optimized token usage
 
+### Code Fixer Agent (`code_fixer`)
+A specialized agent for generating precise security fixes that can:
+- Receive a security finding with full code context via `--fix-context`
+- Generate minimal, targeted fixes that resolve the vulnerability
+- Return structured JSON output (`FixOutput`) with fixed code, line numbers, explanation, and confidence
+- Preserve original indentation and code functionality
+- Support retry workflows when a previous fix fails validation
+- Use `Read` and `Grep` tools for additional source context when `--src_dir` is provided
+
 ### Threat Modeler (`threat_modeler`)
 A specialized agent for comprehensive threat modeling that can:
 - Generate ASCII text-based Data Flow Diagrams (DFD)
@@ -255,6 +264,63 @@ $ npx agent-run -r pr_reviewer -d pr-diff.json
 $ npx agent-run -r code_reviewer -d pr-diff.json --diff-max-tokens 150000 --diff-max-batches 3
 ```
 
+### Code Fixer Example
+```bash
+# Fix a vulnerability described in a fix context JSON file
+$ npx agent-run -r code_fixer --fix-context fix_context.json
+
+# With source directory for additional context
+$ npx agent-run -r code_fixer --fix-context fix_context.json -s ./src
+
+# Custom output file
+$ npx agent-run -r code_fixer --fix-context fix_context.json -o my_fix.json
+```
+
+The fix context JSON file should follow this structure:
+
+```json
+{
+  "finding": {
+    "title": "SQL Injection",
+    "severity": "HIGH",
+    "cwe": "CWE-89",
+    "owasp": "A03:2021",
+    "file": "src/db.ts",
+    "line": 42,
+    "description": "User input directly concatenated into SQL query",
+    "recommendation": "Use parameterized queries",
+    "category": "Injection"
+  },
+  "code_context": {
+    "language": "typescript",
+    "imports": "import { db } from './database';",
+    "vulnerable_section": "const result = db.query(`SELECT * FROM users WHERE id = ${userId}`);",
+    "vulnerable_section_start": 40,
+    "vulnerable_section_end": 44,
+    "full_file_with_line_numbers": "  40| const result = db.query(...);",
+    "indentation_guidance": "Use 2-space indentation"
+  },
+  "security_guidance": "Use parameterized queries to prevent SQL injection.",
+  "learned_examples": "",
+  "negative_examples": "",
+  "custom_instructions": "",
+  "chain_of_thought": false
+}
+```
+
+The agent returns a structured `FixOutput`:
+
+```json
+{
+  "fixed_code": "const result = db.query('SELECT * FROM users WHERE id = ?', [userId]);",
+  "start_line": 42,
+  "end_line": 42,
+  "explanation": "Replaced string interpolation with parameterized query to prevent SQL injection",
+  "confidence": "high",
+  "breaking_changes": false
+}
+```
+
 ### Threat Modeler Example
 ```bash
 # Run threat modeler on current directory
@@ -357,6 +423,10 @@ appsec-agent/
 │   ├── agent_options.ts       # Agent configuration management
 │   ├── main.ts               # Main application logic
 │   ├── utils.ts              # Utility functions
+│   ├── schemas/
+│   │   ├── security_report.ts # JSON schema for code review reports
+│   │   ├── threat_model_report.ts # JSON schema for threat model reports
+│   │   └── security_fix.ts    # JSON schema for code fixer output
 │   └── __tests__/
 │       ├── concurrency.test.ts  # Concurrency and thread-safety tests
 │       └── ...                # Other test files
@@ -384,6 +454,7 @@ appsec-agent/
 - `getCodeReviewerOptions()`: Gets options for code reviewer
 - `getThreatModelerOptions()`: Gets options for threat modeler
 - `getDiffReviewerOptions()`: Gets options for PR diff-focused code reviewer
+- `getCodeFixerOptions()`: Gets options for code fixer agent (always uses JSON schema output)
 
 #### Diff Context Functions
 
@@ -477,9 +548,10 @@ $ npm test -- concurrency.test.ts
 ### Test Results
 
 All tests pass including:
-- ✅ 187 total tests
+- ✅ 225 total tests across 11 suites
 - ✅ 11 concurrency tests
 - ✅ 51 diff context validation tests
+- ✅ 9 code fixer tests (main + agent options)
 - ✅ Full coverage of core functionality
 
 ## 📚 References

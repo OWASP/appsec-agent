@@ -11,6 +11,7 @@ import { copyProjectSrcDir, validateOutputFilePath, validateDirectoryPath, valid
 import { DiffContext, formatDiffContextForPrompt, validateDiffContext } from './diff_context';
 import { splitIntoBatches, ChunkingOptions } from './diff_chunking';
 import { mergeBatchReports } from './diff_report_merge';
+import { FixContext } from './schemas/security_fix';
 
 /**
  * Validate and copy source directory, exiting on validation failure
@@ -98,6 +99,146 @@ function loadDiffContext(diffContextPath: string, cwd: string): DiffContext {
   }
   
   return data;
+}
+
+/**
+ * Load and validate fix context from JSON file
+ */
+function loadFixContext(fixContextPath: string, cwd: string): FixContext {
+  const resolvedPath = validateInputFilePath(fixContextPath, cwd);
+
+  if (!resolvedPath) {
+    const safePath = sanitizePathForError(fixContextPath);
+    console.error(`Error: Invalid fix context file path: ${safePath}`);
+    console.error('The path must be valid and relative paths cannot contain directory traversal sequences.');
+    process.exit(1);
+  }
+
+  const safePath = sanitizePathForError(resolvedPath);
+
+  if (!fs.existsSync(resolvedPath)) {
+    console.error(`Error: Fix context file not found: ${safePath}`);
+    process.exit(1);
+  }
+
+  try {
+    const content = fs.readFileSync(resolvedPath, 'utf-8');
+    const data = JSON.parse(content) as FixContext;
+    if (!data.finding || !data.code_context) {
+      console.error(`Error: Fix context missing required fields (finding, code_context) in: ${safePath}`);
+      process.exit(1);
+    }
+    return data;
+  } catch (error: any) {
+    const errorMessage = error?.message || 'Unknown error';
+    console.error(`Error: Failed to read fix context file ${safePath}: ${errorMessage}`);
+    process.exit(1);
+  }
+}
+
+/**
+ * Build user prompt for the code_fixer role from FixContext
+ */
+function buildCodeFixerPrompt(ctx: FixContext): string {
+  const { finding, code_context } = ctx;
+
+  let prompt = `Fix the following security vulnerability. Return your fix as structured JSON (follow the required schema). Do not write any files.
+
+## Finding
+- **Severity**: ${finding.severity}
+- **Type**: ${finding.title}
+- **CWE**: ${finding.cwe}
+- **OWASP**: ${finding.owasp}
+- **File**: ${finding.file}
+- **Line**: ${finding.line}
+
+## Description
+${finding.description}
+
+## Recommendation
+${finding.recommendation}
+`;
+
+  if (ctx.security_guidance) {
+    prompt += `\n${ctx.security_guidance}\n`;
+  }
+
+  if (ctx.chain_of_thought) {
+    prompt += `\n## Chain of Thought
+Think step-by-step about the vulnerability and the fix before producing the output.\n`;
+  }
+
+  prompt += `
+## Code Context
+
+### File Imports
+\`\`\`${code_context.language}
+${code_context.imports}
+\`\`\`
+
+### Vulnerable Code Section (Lines ${code_context.vulnerable_section_start}-${code_context.vulnerable_section_end})
+\`\`\`${code_context.language}
+${code_context.vulnerable_section}
+\`\`\`
+
+### Full File Context
+\`\`\`${code_context.language}
+${code_context.full_file_with_line_numbers}
+\`\`\`
+`;
+
+  if (ctx.learned_examples) {
+    prompt += `\n${ctx.learned_examples}\n`;
+  }
+
+  if (ctx.negative_examples) {
+    prompt += `\n${ctx.negative_examples}\n`;
+  }
+
+  if (ctx.custom_instructions) {
+    prompt += `\n${ctx.custom_instructions}\n`;
+  }
+
+  prompt += `
+## Indentation Requirements
+${code_context.indentation_guidance}
+
+## Instructions
+1. If a "Recommendation" section is provided above, follow those specific recommendations
+2. Follow the security guidance above for this specific vulnerability type
+3. Generate a fix that fully addresses the security issue - partial fixes are NOT acceptable
+4. Use the recommended secure alternatives when applicable
+5. Preserve the original code's functionality where possible, but security takes precedence
+6. Only modify the affected lines - return ONLY the fixed portion, not the entire file
+7. CRITICAL - PRESERVE INDENTATION: Your fixed_code MUST start with the exact same whitespace as shown above
+
+## CRITICAL - LINE NUMBER RULES
+1. The "Vulnerable Code Section" header above says "Lines ${code_context.vulnerable_section_start}-${code_context.vulnerable_section_end}"
+2. Your start_line MUST be >= ${code_context.vulnerable_section_start}
+3. Your end_line MUST be <= ${code_context.vulnerable_section_end}
+4. The finding is reported at line ${finding.line} - your fix MUST include or be adjacent to this line
+5. NEVER return start_line: 1 unless the vulnerability is literally at line 1 of the file
+6. Your fixed_code should contain ONLY the code for lines start_line through end_line`;
+
+  if (ctx.previous_fix_code && ctx.validation_errors?.length) {
+    prompt += `
+
+## RETRY: Previous Fix Failed Validation
+
+Your previous fix attempt had validation errors. Please correct the fix.
+
+### Previous Attempt
+\`\`\`${code_context.language}
+${ctx.previous_fix_code}
+\`\`\`
+
+### Validation Errors
+${ctx.validation_errors.map((e, i) => `${i + 1}. ${e}`).join('\n')}
+
+Fix the code to resolve these validation errors while still addressing the original security issue.`;
+  }
+
+  return prompt;
 }
 
 /** Defaults for PR chunking when not set (0 = no chunking). */
@@ -381,6 +522,33 @@ Use sequential IDs: node-001/flow-001/tb-001 for DFD elements, THREAT-001 for th
     if (structuredResult) {
       fs.writeFileSync(outputFile, structuredResult, 'utf-8');
       console.log(`Report written to ${outputFile}`);
+    }
+    cleanupTmpDir(tmpSrcDir);
+
+  } else if (args.role === 'code_fixer') {
+    console.log('Running Code Fixer Agent');
+
+    if (!args.fix_context) {
+      console.error('Error: --fix-context is required for the code_fixer role.');
+      process.exit(1);
+    }
+
+    const fixContext = loadFixContext(args.fix_context, currentWorkingDir);
+    const outputFile = validateOutputFile(
+      args.output_file || 'fix_output.json',
+      currentWorkingDir
+    );
+
+    const tmpSrcDir = args.src_dir
+      ? validateAndCopySrcDir(args.src_dir, currentWorkingDir)
+      : null;
+
+    const userPrompt = buildCodeFixerPrompt(fixContext);
+
+    const structuredResult = await agentActions.codeFixerWithOptions(userPrompt, tmpSrcDir);
+    if (structuredResult) {
+      fs.writeFileSync(outputFile, structuredResult, 'utf-8');
+      console.log(`Fix written to ${outputFile}`);
     }
     cleanupTmpDir(tmpSrcDir);
 

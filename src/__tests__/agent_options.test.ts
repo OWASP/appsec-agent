@@ -224,5 +224,62 @@ describe('AgentOptions', () => {
       expect(options.agents?.['threat-modeler'].prompt).toBe('Threat modeler system prompt');
     });
   });
+
+  describe('getCodeFixerOptions', () => {
+    it('should return options with agent configuration and structured output', () => {
+      const confWithFixer: ConfigDict = {
+        default: {
+          ...mockConfDict.default,
+          code_fixer: {
+            options: {
+              system_prompt: 'Code fixer system prompt'
+            }
+          }
+        }
+      };
+      const agentOptions = new AgentOptions(confWithFixer, environment);
+      const options = agentOptions.getCodeFixerOptions('code_fixer');
+
+      expect(options.agents).toBeDefined();
+      expect(options.agents?.['code-fixer']).toBeDefined();
+      expect(options.agents?.['code-fixer'].prompt).toBe('Code fixer system prompt');
+      expect(options.agents?.['code-fixer'].tools).toEqual(['Read', 'Grep']);
+      expect(options.agents?.['code-fixer'].model).toBe('sonnet');
+      expect(options.permissionMode).toBe('bypassPermissions');
+      expect(options.outputFormat).toEqual({
+        type: 'json_schema',
+        schema: expect.objectContaining({
+          type: 'object',
+          required: expect.arrayContaining(['fixed_code', 'start_line', 'end_line'])
+        })
+      });
+    });
+
+    it('should use default system prompt when config is missing', () => {
+      const emptyConfDict: ConfigDict = { default: {} };
+      const agentOptions = new AgentOptions(emptyConfDict, environment);
+      const options = agentOptions.getCodeFixerOptions('code_fixer');
+
+      expect(options.agents?.['code-fixer'].prompt).toContain('expert security engineer');
+    });
+
+    it('should append source directory to system prompt when provided', () => {
+      const emptyConfDict: ConfigDict = { default: {} };
+      const agentOptions = new AgentOptions(emptyConfDict, environment);
+      const options = agentOptions.getCodeFixerOptions('code_fixer', '/tmp/src');
+
+      expect(options.agents?.['code-fixer'].prompt).toContain('/tmp/src');
+      expect(options.agents?.['code-fixer'].prompt).toContain('Source directory available');
+    });
+
+    it('should always enforce JSON schema output format', () => {
+      const emptyConfDict: ConfigDict = { default: {} };
+      const agentOptions = new AgentOptions(emptyConfDict, environment);
+      const options = agentOptions.getCodeFixerOptions();
+
+      expect(options.outputFormat).toBeDefined();
+      expect((options.outputFormat as any).type).toBe('json_schema');
+    });
+  });
 });
 

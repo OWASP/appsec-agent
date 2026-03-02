@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-03-02
+
+### Added
+- **Code Fixer agent (`code_fixer`)**: New agent role that generates precise, minimal security fixes for code vulnerabilities. Receives a finding with full code context via `--fix-context <file>` and returns a structured JSON fix (`FixOutput`) with `fixed_code`, `start_line`, `end_line`, `explanation`, `confidence`, and `breaking_changes`.
+  - New `FixContext` / `FixOutput` TypeScript interfaces and `FIX_OUTPUT_SCHEMA` JSON schema in `src/schemas/security_fix.ts`.
+  - New `getCodeFixerOptions()` in `AgentOptions`: configures the `code-fixer` agent with `Read`/`Grep` tools and always-on JSON schema output enforcement.
+  - New `codeFixerWithOptions()` in `AgentActions`: runs the LLM query, collects structured output, and reports cost.
+  - New `loadFixContext()` and `buildCodeFixerPrompt()` in `main.ts`: reads/validates fix context JSON, builds a detailed prompt including finding metadata, code context, indentation rules, line number constraints, and retry support for failed validations.
+  - New `--fix-context <file>` CLI option in `agent-run`.
+  - `code_fixer` role configuration added to `conf/appsec_agent.yaml`.
+  - Public exports for `FixContext`, `FixContextFinding`, `FixContextCodeContext`, `FixOutput`, and `FIX_OUTPUT_SCHEMA` from the package index.
+- **Retry support for code fixer**: When a previous fix fails validation, the caller can pass `previous_fix_code` and `validation_errors` in the fix context; the prompt includes a retry section so the model corrects its output.
+- **Comprehensive test coverage for code fixer**: 5 new tests in `main.test.ts` (missing fix-context error, full run, prompt content, src_dir passthrough, retry context) and 4 new tests in `agent_options.test.ts` (agent config, default prompt, src_dir in prompt, JSON schema enforcement). Total tests: 225.
+
+### Changed
+- Version bump to 1.7.0.
+
 ## [1.6.1] - 2026-02-28
 
 ### Changed

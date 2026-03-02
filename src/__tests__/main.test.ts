@@ -53,7 +53,8 @@ describe('main', () => {
       simpleQueryClaudeWithOptions: jest.fn().mockResolvedValue(''),
       codeReviewerWithOptions: jest.fn().mockResolvedValue(''),
       threatModelerAgentWithOptions: jest.fn().mockResolvedValue(''),
-      diffReviewerWithOptions: jest.fn().mockResolvedValue('')
+      diffReviewerWithOptions: jest.fn().mockResolvedValue(''),
+      codeFixerWithOptions: jest.fn().mockResolvedValue('')
     } as any;
 
     (AgentActions as jest.MockedClass<typeof AgentActions>).mockImplementation(() => mockAgentActions);
@@ -346,6 +347,142 @@ describe('main', () => {
       await main(mockConfDict, { ...threatModelerArgs, src_dir: sourceDir });
 
       expect(exitMock).toHaveBeenCalledWith(0);
+    });
+  });
+
+  describe('code_fixer', () => {
+    let fixContextPath: string;
+    const sampleFixContext = {
+      finding: {
+        title: 'SQL Injection',
+        severity: 'HIGH',
+        cwe: 'CWE-89',
+        owasp: 'A03:2021',
+        file: 'src/db.ts',
+        line: 42,
+        description: 'User input directly concatenated into SQL query',
+        recommendation: 'Use parameterized queries',
+        category: 'Injection'
+      },
+      code_context: {
+        language: 'typescript',
+        imports: 'import { db } from "./database";',
+        vulnerable_section: 'const result = db.query(`SELECT * FROM users WHERE id = ${userId}`);',
+        vulnerable_section_start: 40,
+        vulnerable_section_end: 44,
+        full_file_with_line_numbers: '  40| const result = db.query(`SELECT * FROM users WHERE id = ${userId}`);',
+        indentation_guidance: 'Use 2-space indentation'
+      },
+      security_guidance: 'Use parameterized queries to prevent SQL injection.',
+      learned_examples: '',
+      negative_examples: '',
+      custom_instructions: '',
+      chain_of_thought: false
+    };
+
+    beforeEach(() => {
+      fixContextPath = path.join(testDir, 'fix_context.json');
+      fs.writeFileSync(fixContextPath, JSON.stringify(sampleFixContext), 'utf-8');
+    });
+
+    it('should exit with error when --fix-context is missing', async () => {
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      exitMock.mockImplementationOnce((code?: number) => {
+        throw new Error(`process.exit(${code})`);
+      });
+
+      await expect(main(mockConfDict, { role: 'code_fixer', environment: 'default' }))
+        .rejects.toThrow('process.exit(1)');
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('--fix-context is required'));
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('should run code fixer with fix context', async () => {
+      const structuredFix = JSON.stringify({
+        fixed_code: 'const result = db.query("SELECT * FROM users WHERE id = ?", [userId]);',
+        start_line: 42,
+        end_line: 42,
+        explanation: 'Use parameterized query',
+        confidence: 'high',
+        breaking_changes: false
+      });
+      mockAgentActions.codeFixerWithOptions.mockResolvedValue(structuredFix);
+
+      await main(mockConfDict, {
+        role: 'code_fixer',
+        environment: 'default',
+        fix_context: fixContextPath,
+        output_file: 'fix_output.json',
+        output_format: 'json'
+      });
+
+      expect(mockAgentActions.codeFixerWithOptions).toHaveBeenCalledWith(
+        expect.stringContaining('SQL Injection'),
+        null
+      );
+      expect(exitMock).toHaveBeenCalledWith(0);
+    });
+
+    it('should include finding details in prompt', async () => {
+      mockAgentActions.codeFixerWithOptions.mockResolvedValue('{}');
+
+      await main(mockConfDict, {
+        role: 'code_fixer',
+        environment: 'default',
+        fix_context: fixContextPath,
+        output_file: 'fix_output.json',
+        output_format: 'json'
+      });
+
+      const prompt = mockAgentActions.codeFixerWithOptions.mock.calls[0][0];
+      expect(prompt).toContain('CWE-89');
+      expect(prompt).toContain('src/db.ts');
+      expect(prompt).toContain('Line**: 42');
+      expect(prompt).toContain('parameterized queries');
+    });
+
+    it('should run code fixer with src_dir', async () => {
+      const { sourceDir, tmpDir } = setupSourceDirs();
+      mockAgentActions.codeFixerWithOptions.mockResolvedValue('{}');
+
+      await main(mockConfDict, {
+        role: 'code_fixer',
+        environment: 'default',
+        fix_context: fixContextPath,
+        output_file: 'fix_output.json',
+        output_format: 'json',
+        src_dir: sourceDir
+      });
+
+      expect(copyProjectSrcDir).toHaveBeenCalled();
+      expect(mockAgentActions.codeFixerWithOptions).toHaveBeenCalledWith(
+        expect.any(String),
+        tmpDir
+      );
+    });
+
+    it('should include retry context when previous_fix_code is present', async () => {
+      const retryContext = {
+        ...sampleFixContext,
+        previous_fix_code: 'bad fix code',
+        validation_errors: ['Syntax error at line 1', 'Missing semicolon']
+      };
+      fs.writeFileSync(fixContextPath, JSON.stringify(retryContext), 'utf-8');
+      mockAgentActions.codeFixerWithOptions.mockResolvedValue('{}');
+
+      await main(mockConfDict, {
+        role: 'code_fixer',
+        environment: 'default',
+        fix_context: fixContextPath,
+        output_file: 'fix_output.json',
+        output_format: 'json'
+      });
+
+      const prompt = mockAgentActions.codeFixerWithOptions.mock.calls[0][0];
+      expect(prompt).toContain('Previous Fix Failed Validation');
+      expect(prompt).toContain('bad fix code');
+      expect(prompt).toContain('Syntax error at line 1');
     });
   });
 

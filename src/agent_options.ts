@@ -8,6 +8,7 @@ import { Options, AgentDefinition, PermissionResult, CanUseTool } from '@anthrop
 import { ConfigDict } from './utils';
 import { SECURITY_REPORT_SCHEMA } from './schemas/security_report';
 import { THREAT_MODEL_REPORT_SCHEMA } from './schemas/threat_model_report';
+import { FIX_OUTPUT_SCHEMA } from './schemas/security_fix';
 
 export interface ToolUsageLog {
   tool: string;
@@ -208,6 +209,44 @@ You have access to Read and Write tools if you need to:
         schema: SECURITY_REPORT_SCHEMA
       };
     }
+
+    return options;
+  }
+
+  /**
+   * Get options for code fixer agent
+   * Uses structured JSON output to guarantee a well-formed fix response.
+   * Has Read and Grep tools to explore the source directory for additional context.
+   * @param role - The role configuration key
+   * @param srcDir - Optional source directory path for additional context
+   */
+  getCodeFixerOptions(role: string = 'code_fixer', srcDir?: string | null): Options {
+    const roleConfig = this.confDict[this.environment]?.[role];
+    let systemPrompt = roleConfig?.options?.system_prompt ||
+      'You are an expert security engineer specializing in fixing vulnerabilities in code. ' +
+      'You receive a finding with code context and must produce a precise, minimal fix that resolves ' +
+      'the security issue while preserving the original code\'s functionality and indentation. ' +
+      'Only modify the affected lines. Always use the recommended secure alternatives when applicable.';
+
+    if (srcDir) {
+      systemPrompt += `\n\nSource directory available at: ${srcDir}. You may read files for additional context if needed.`;
+    }
+
+    const options: Options = {
+      agents: {
+        'code-fixer': {
+          description: 'Generates precise security fixes for code vulnerabilities',
+          prompt: systemPrompt,
+          tools: ['Read', 'Grep'],
+          model: this.model
+        } as AgentDefinition
+      },
+      permissionMode: 'bypassPermissions',
+      outputFormat: {
+        type: 'json_schema',
+        schema: FIX_OUTPUT_SCHEMA
+      }
+    };
 
     return options;
   }

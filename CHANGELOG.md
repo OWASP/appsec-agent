@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.1] - 2026-03-02
+
+### Added
+- **Deployment context for threat modeler**: The `threat_modeler` role now accepts `-c/--context` to provide deployment and environment information (e.g., cloud provider, compliance requirements). Context is injected into both JSON and non-JSON prompts so the model can tailor threats, attack vectors, and risk assessments to the actual deployment environment.
+- **Deployment context for code fixer**: `FixContext` now supports an optional `deployment_context` field. When present, the code fixer prompt includes a "Deployment & Environment Context" section so fixes consider environment-specific security practices.
+- **New tests**: 5 new tests covering context injection for threat modeler (JSON and non-JSON modes, absence case) and code fixer (presence and absence of `deployment_context`).
+
+### Changed
+- Version bump to 1.7.1.
+
 ## [1.7.0] - 2026-03-02
 
 ### Added

@@ -143,7 +143,18 @@ function buildCodeFixerPrompt(ctx: FixContext): string {
   const { finding, code_context } = ctx;
 
   let prompt = `Fix the following security vulnerability. Return your fix as structured JSON (follow the required schema). Do not write any files.
+`;
 
+  if (ctx.deployment_context) {
+    prompt += `
+## Deployment & Environment Context
+${ctx.deployment_context}
+
+Please consider this context when generating the fix. Focus on security practices relevant to this deployment environment.
+`;
+  }
+
+  prompt += `
 ## Finding
 - **Severity**: ${finding.severity}
 - **Type**: ${finding.title}
@@ -501,12 +512,28 @@ Provide a comprehensive security review report identifying potential security is
     const tmpSrcDir = args.src_dir ? validateAndCopySrcDir(args.src_dir, currentWorkingDir) : null;
     const srcLocation = tmpSrcDir ? `the ${tmpSrcDir} directory` : 'the current working directory';
     
+    let contextSection = '';
+    if (args.context) {
+      console.log('Using context:', args.context.substring(0, 50) + (args.context.length > 50 ? '...' : ''));
+      contextSection = `
+
+IMPORTANT DEPLOYMENT & ENVIRONMENT CONTEXT:
+${args.context}
+
+Please consider this context when performing threat modeling. Focus on:
+- Threats specific to this deployment environment
+- Attack vectors relevant to the stated architecture and compliance requirements
+- Data flow risks that may be mitigated or exacerbated by this context
+
+`;
+    }
+
     const isJson = args.output_format?.toLowerCase() === 'json';
     
     let userPrompt: string;
     if (isJson) {
       userPrompt = `Analyze the source code in ${srcLocation} and produce a comprehensive threat model report as structured JSON (follow the required schema). Do not write any files; the system will save the output.
-
+${contextSection}
 Your analysis must include:
 1. A Data Flow Diagram (DFD) — identify all system components as nodes (external entities, processes, data stores), map all data flows between them with protocols and data classifications, and define trust boundaries.
 2. A STRIDE threat analysis — provide an executive summary, then enumerate each threat with its STRIDE category, severity, likelihood, affected DFD components (by node/flow ID), impact assessment, and mitigation strategy. Include CWE/OWASP references where applicable.
@@ -515,7 +542,7 @@ Your analysis must include:
 Use sequential IDs: node-001/flow-001/tb-001 for DFD elements, THREAT-001 for threats, RISK-001 for risks.`;
     } else {
       const basePrompt = `Draw the ASCII text based Data Flow Diagram (DFD), with output format as <codebase_data_flow_diagram_text_timestamp>. Then proceeding to use STRIDE methodology to perform threat modeling on the DFD, without output report in the format <codebase_threat_model_timestamp>. Finally, provide a separate risk registry report including proposed remediation plan in the format <codebase_risk_registry_text_timestamp>. We're looking for 3 reports in the current working directory as the deliverable. Please write the threat modeler report under the current working directory in ${args.output_format} format.`;
-      userPrompt = `Review the code in ${srcLocation}. ${basePrompt}`;
+      userPrompt = `Review the code in ${srcLocation}.${contextSection} ${basePrompt}`;
     }
     
     const structuredResult = await agentActions.threatModelerAgentWithOptions(userPrompt);

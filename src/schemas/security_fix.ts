@@ -42,6 +42,8 @@ export interface FixContext {
   negative_examples: string;
   custom_instructions: string;
   chain_of_thought: boolean;
+  /** Deployment/environment context from the project settings */
+  deployment_context?: string;
   /** Retry-specific: previous fix code that failed validation */
   previous_fix_code?: string;
   /** Retry-specific: validation errors from the previous attempt */

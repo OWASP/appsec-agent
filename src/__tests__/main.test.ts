@@ -339,6 +339,38 @@ describe('main', () => {
       expect(exitMock).toHaveBeenCalledWith(0);
     });
 
+    it('should include deployment context in prompt when context is provided', async () => {
+      await main(mockConfDict, {
+        ...threatModelerArgs,
+        context: 'AWS Lambda in prod VPC; PCI-DSS compliant'
+      });
+
+      const callArg = mockAgentActions.threatModelerAgentWithOptions.mock.calls[0][0];
+      expect(callArg).toContain('DEPLOYMENT & ENVIRONMENT CONTEXT');
+      expect(callArg).toContain('AWS Lambda in prod VPC; PCI-DSS compliant');
+      expect(exitMock).toHaveBeenCalledWith(0);
+    });
+
+    it('should include deployment context in JSON prompt when context is provided', async () => {
+      await main(mockConfDict, {
+        ...threatModelerArgs,
+        output_format: 'json',
+        context: 'Kubernetes on GKE; SOC2 Type II'
+      });
+
+      const callArg = mockAgentActions.threatModelerAgentWithOptions.mock.calls[0][0];
+      expect(callArg).toContain('DEPLOYMENT & ENVIRONMENT CONTEXT');
+      expect(callArg).toContain('Kubernetes on GKE; SOC2 Type II');
+      expect(exitMock).toHaveBeenCalledWith(0);
+    });
+
+    it('should not include deployment context when context is not provided', async () => {
+      await main(mockConfDict, threatModelerArgs);
+
+      const callArg = mockAgentActions.threatModelerAgentWithOptions.mock.calls[0][0];
+      expect(callArg).not.toContain('DEPLOYMENT & ENVIRONMENT CONTEXT');
+    });
+
     it('should clean up temporary directory after threat modeler', async () => {
       const { sourceDir, tmpDir } = setupSourceDirs();
       fs.ensureDirSync(tmpDir);
@@ -460,6 +492,42 @@ describe('main', () => {
         expect.any(String),
         tmpDir
       );
+    });
+
+    it('should include deployment context in prompt when present', async () => {
+      const ctxWithDeployment = {
+        ...sampleFixContext,
+        deployment_context: 'AWS Lambda in prod VPC; handles PII data'
+      };
+      fs.writeFileSync(fixContextPath, JSON.stringify(ctxWithDeployment), 'utf-8');
+      mockAgentActions.codeFixerWithOptions.mockResolvedValue('{}');
+
+      await main(mockConfDict, {
+        role: 'code_fixer',
+        environment: 'default',
+        fix_context: fixContextPath,
+        output_file: 'fix_output.json',
+        output_format: 'json'
+      });
+
+      const prompt = mockAgentActions.codeFixerWithOptions.mock.calls[0][0];
+      expect(prompt).toContain('Deployment & Environment Context');
+      expect(prompt).toContain('AWS Lambda in prod VPC; handles PII data');
+    });
+
+    it('should not include deployment context section when not present', async () => {
+      mockAgentActions.codeFixerWithOptions.mockResolvedValue('{}');
+
+      await main(mockConfDict, {
+        role: 'code_fixer',
+        environment: 'default',
+        fix_context: fixContextPath,
+        output_file: 'fix_output.json',
+        output_format: 'json'
+      });
+
+      const prompt = mockAgentActions.codeFixerWithOptions.mock.calls[0][0];
+      expect(prompt).not.toContain('Deployment & Environment Context');
     });
 
     it('should include retry context when previous_fix_code is present', async () => {

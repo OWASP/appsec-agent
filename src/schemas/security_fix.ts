@@ -48,6 +48,8 @@ export interface FixContext {
   previous_fix_code?: string;
   /** Retry-specific: validation errors from the previous attempt */
   validation_errors?: string[];
+  /** Phase 3: When true, the agent should generate a companion unit test */
+  generate_companion_test?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -61,6 +63,12 @@ export interface FixOutput {
   explanation: string;
   confidence: 'high' | 'medium' | 'low';
   breaking_changes: boolean;
+  /** Phase 3: Generated companion test code */
+  test_code?: string;
+  /** Phase 3: Suggested file path for the test (e.g. "__tests__/fix.test.ts") */
+  test_file?: string;
+  /** Phase 3: Test framework used (e.g. "jest", "pytest") */
+  test_framework?: string;
 }
 
 /**
@@ -99,6 +107,18 @@ export const FIX_OUTPUT_SCHEMA: Record<string, unknown> = {
     breaking_changes: {
       type: 'boolean',
       description: 'Whether this fix introduces breaking changes to the API.',
+    },
+    test_code: {
+      type: 'string',
+      description: 'Optional: Generated companion unit test code that verifies the fix.',
+    },
+    test_file: {
+      type: 'string',
+      description: 'Optional: Suggested file path for the companion test.',
+    },
+    test_framework: {
+      type: 'string',
+      description: 'Optional: Test framework used (e.g. jest, pytest, junit).',
     },
   },
 };

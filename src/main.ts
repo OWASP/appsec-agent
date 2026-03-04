@@ -12,6 +12,7 @@ import { DiffContext, formatDiffContextForPrompt, validateDiffContext } from './
 import { splitIntoBatches, ChunkingOptions } from './diff_chunking';
 import { mergeBatchReports } from './diff_report_merge';
 import { FixContext } from './schemas/security_fix';
+import { loadQaContext, QaContext } from './schemas/qa_context';
 
 /**
  * Validate and copy source directory, exiting on validation failure
@@ -137,6 +138,53 @@ function loadFixContext(fixContextPath: string, cwd: string): FixContext {
 }
 
 /**
+ * Build user prompt for the qa_verifier role from QaContext
+ */
+function buildQaVerifierPrompt(ctx: QaContext): string {
+  const parts: string[] = [];
+
+  parts.push('## QA Verification Task\n');
+  parts.push(`Verify the security fix applied in PR: ${ctx.pr_url}\n`);
+
+  if (ctx.deployment_context) {
+    parts.push('### Deployment & Environment Context');
+    parts.push(ctx.deployment_context);
+    parts.push('');
+  }
+
+  parts.push('### Test Configuration');
+  parts.push(`- **Test command:** \`${ctx.test_command}\``);
+  if (ctx.test_framework) {
+    parts.push(`- **Test framework:** ${ctx.test_framework}`);
+  }
+  if (ctx.setup_commands) {
+    parts.push(`- **Setup commands:** \`${ctx.setup_commands}\``);
+  }
+  parts.push(`- **Timeout:** ${ctx.timeout_seconds} seconds`);
+  parts.push(`- **Block on failure:** ${ctx.block_on_failure ? 'Yes' : 'No'}`);
+  parts.push('');
+
+  if (ctx.environment_variables && Object.keys(ctx.environment_variables).length > 0) {
+    parts.push('### Environment Variables');
+    for (const [key, val] of Object.entries(ctx.environment_variables)) {
+      parts.push(`- \`${key}\` = \`${val}\``);
+    }
+    parts.push('');
+  }
+
+  parts.push('### Instructions');
+  parts.push('1. If setup commands are provided, run them first to prepare the environment.');
+  parts.push('2. Run the test command and capture the output.');
+  parts.push('3. If tests fail, analyze the failure output to determine:');
+  parts.push('   - Which specific tests failed and why');
+  parts.push('   - Whether the failures are related to the security fix or are pre-existing');
+  parts.push('   - Actionable suggestions for resolving failures');
+  parts.push('4. Return a structured QA verdict JSON with your findings.');
+
+  return parts.join('\n');
+}
+
+/**
  * Build user prompt for the code_fixer role from FixContext
  */
 function buildCodeFixerPrompt(ctx: FixContext): string {
@@ -230,6 +278,20 @@ ${code_context.indentation_guidance}
 4. The finding is reported at line ${finding.line} - your fix MUST include or be adjacent to this line
 5. NEVER return start_line: 1 unless the vulnerability is literally at line 1 of the file
 6. Your fixed_code should contain ONLY the code for lines start_line through end_line`;
+
+  if (ctx.generate_companion_test) {
+    prompt += `
+
+## COMPANION TEST GENERATION
+In addition to the fix, generate a companion unit test that verifies:
+1. The security vulnerability is properly addressed by the fix
+2. The fixed code still produces correct output for normal inputs
+3. Known attack vectors for this vulnerability type are properly blocked
+
+Include the test code in the \`test_code\` field, suggest an appropriate file path in \`test_file\`,
+and specify the test framework in \`test_framework\` (e.g. jest, pytest, junit).
+The test should be self-contained and runnable with minimal setup.`;
+  }
 
   if (ctx.previous_fix_code && ctx.validation_errors?.length) {
     prompt += `
@@ -576,6 +638,33 @@ Use sequential IDs: node-001/flow-001/tb-001 for DFD elements, THREAT-001 for th
     if (structuredResult) {
       fs.writeFileSync(outputFile, structuredResult, 'utf-8');
       console.log(`Fix written to ${outputFile}`);
+    }
+    cleanupTmpDir(tmpSrcDir);
+
+  } else if (args.role === 'qa_verifier') {
+    console.log('Running QA Verifier Agent');
+
+    if (!args.qa_context) {
+      console.error('Error: --qa-context is required for the qa_verifier role.');
+      process.exit(1);
+    }
+
+    const qaContext = loadQaContext(args.qa_context, currentWorkingDir);
+    const outputFile = validateOutputFile(
+      args.output_file || 'qa_verdict.json',
+      currentWorkingDir
+    );
+
+    const tmpSrcDir = args.src_dir
+      ? validateAndCopySrcDir(args.src_dir, currentWorkingDir)
+      : null;
+
+    const userPrompt = buildQaVerifierPrompt(qaContext);
+
+    const structuredResult = await agentActions.qaVerifierWithOptions(userPrompt, tmpSrcDir);
+    if (structuredResult) {
+      fs.writeFileSync(outputFile, structuredResult, 'utf-8');
+      console.log(`QA verdict written to ${outputFile}`);
     }
     cleanupTmpDir(tmpSrcDir);
 

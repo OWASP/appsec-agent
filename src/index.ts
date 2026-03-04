@@ -24,4 +24,9 @@ export {
   FixOutput,
   FIX_OUTPUT_SCHEMA,
 } from './schemas/security_fix';
+export {
+  QaContext,
+  QaVerdict,
+  QA_VERDICT_SCHEMA,
+} from './schemas/qa_context';
 

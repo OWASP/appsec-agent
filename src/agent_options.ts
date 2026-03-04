@@ -9,6 +9,7 @@ import { ConfigDict } from './utils';
 import { SECURITY_REPORT_SCHEMA } from './schemas/security_report';
 import { THREAT_MODEL_REPORT_SCHEMA } from './schemas/threat_model_report';
 import { FIX_OUTPUT_SCHEMA } from './schemas/security_fix';
+import { QA_VERDICT_SCHEMA } from './schemas/qa_context';
 
 export interface ToolUsageLog {
   tool: string;
@@ -245,6 +246,42 @@ You have access to Read and Write tools if you need to:
       outputFormat: {
         type: 'json_schema',
         schema: FIX_OUTPUT_SCHEMA
+      }
+    };
+
+    return options;
+  }
+
+  /**
+   * Get options for the QA verifier agent
+   * Uses Read, Grep, and Bash tools for test execution and analysis
+   */
+  getQaVerifierOptions(role: string = 'qa_verifier', srcDir?: string | null): Options {
+    const roleConfig = this.confDict[this.environment]?.[role];
+    let systemPrompt = roleConfig?.options?.system_prompt ||
+      'You are a QA verification engineer. Your task is to verify security fixes by running the project\'s test suite ' +
+      'and analyzing the results. You have access to the project source code and can execute shell commands to run tests. ' +
+      'First, set up the environment (install dependencies if needed), then run the test suite. ' +
+      'If tests fail, analyze the failures to determine if they are caused by the security fix or are pre-existing issues. ' +
+      'Provide a structured verdict with pass/fail status, failure details, and actionable suggestions.';
+
+    if (srcDir) {
+      systemPrompt += `\n\nProject source code is available at: ${srcDir}. Use Read and Grep to inspect files, and Bash to execute commands.`;
+    }
+
+    const options: Options = {
+      agents: {
+        'qa-verifier': {
+          description: 'Verifies security fixes by running project tests and analyzing results',
+          prompt: systemPrompt,
+          tools: ['Read', 'Grep', 'Bash'],
+          model: this.model
+        } as AgentDefinition
+      },
+      permissionMode: 'bypassPermissions',
+      outputFormat: {
+        type: 'json_schema',
+        schema: QA_VERDICT_SCHEMA
       }
     };
 

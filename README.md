@@ -143,6 +143,15 @@ A specialized agent for generating precise security fixes that can:
 - Support retry workflows when a previous fix fails validation
 - Use `Read` and `Grep` tools for additional source context when `--src_dir` is provided
 
+### QA Verifier Agent (`qa_verifier`)
+A specialized agent for verifying security fixes that can:
+- Run the project's test suite to verify a security fix doesn't break functionality
+- Analyze test failures to determine if they are caused by the fix or are pre-existing
+- Provide a structured JSON verdict (`QaVerdict`) with pass/fail status, failure details, and suggestions
+- Execute shell commands via a restricted Bash tool with security constraints
+- Support custom test commands, setup commands, and environment variables
+- Accept deployment context for environment-aware verification
+
 ### Threat Modeler (`threat_modeler`)
 A specialized agent for comprehensive threat modeling that can:
 - Generate ASCII text-based Data Flow Diagrams (DFD)
@@ -321,6 +330,48 @@ The agent returns a structured `FixOutput`:
 }
 ```
 
+### QA Verifier Example
+```bash
+# Verify a security fix by running the project's tests
+$ npx agent-run -r qa_verifier --qa-context qa_context.json
+
+# With source directory for additional context
+$ npx agent-run -r qa_verifier --qa-context qa_context.json -s ./src
+
+# Custom output file
+$ npx agent-run -r qa_verifier --qa-context qa_context.json -o qa_verdict.json
+```
+
+The QA context JSON file should follow this structure:
+
+```json
+{
+  "pr_url": "https://github.com/owner/repo/pull/42",
+  "test_command": "npm test",
+  "test_framework": "jest",
+  "setup_commands": "npm ci",
+  "timeout_seconds": 120,
+  "block_on_failure": true,
+  "deployment_context": "Production Kubernetes cluster",
+  "environment_variables": {
+    "NODE_ENV": "test"
+  }
+}
+```
+
+The agent returns a structured `QaVerdict`:
+
+```json
+{
+  "pass": true,
+  "test_exit_code": 0,
+  "failures": [],
+  "logs": "All 235 tests passed",
+  "analysis": "All tests pass after the security fix.",
+  "suggestions": []
+}
+```
+
 ### Threat Modeler Example
 ```bash
 # Run threat modeler on current directory
@@ -427,6 +478,9 @@ appsec-agent/
 │   │   ├── security_report.ts # JSON schema for code review reports
 │   │   ├── threat_model_report.ts # JSON schema for threat model reports
 │   │   └── security_fix.ts    # JSON schema for code fixer output
+│   │   └── qa_context.ts      # JSON schema for QA verifier verdict
+│   ├── tools/
+│   │   └── bash_tool.ts       # Restricted Bash tool for QA verifier
 │   └── __tests__/
 │       ├── concurrency.test.ts  # Concurrency and thread-safety tests
 │       └── ...                # Other test files
@@ -455,6 +509,7 @@ appsec-agent/
 - `getThreatModelerOptions()`: Gets options for threat modeler
 - `getDiffReviewerOptions()`: Gets options for PR diff-focused code reviewer
 - `getCodeFixerOptions()`: Gets options for code fixer agent (always uses JSON schema output)
+- `getQaVerifierOptions()`: Gets options for QA verifier agent (Read, Grep, Bash tools + JSON schema output)
 
 #### Diff Context Functions
 
@@ -548,10 +603,11 @@ $ npm test -- concurrency.test.ts
 ### Test Results
 
 All tests pass including:
-- ✅ 225 total tests across 11 suites
+- ✅ 235 total tests across 11 suites
 - ✅ 11 concurrency tests
 - ✅ 51 diff context validation tests
 - ✅ 9 code fixer tests (main + agent options)
+- ✅ 5 QA verifier tests
 - ✅ Full coverage of core functionality
 
 ## 📚 References

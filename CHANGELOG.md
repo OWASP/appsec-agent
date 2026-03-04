@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-03-02
+
+### Added
+- **QA Verifier agent (`qa_verifier`)**: New agent role that verifies security fixes by running the project's test suite and analyzing results. Receives test configuration via `--qa-context <file>` and returns a structured JSON verdict (`QaVerdict`) with pass/fail status, exit code, failure descriptions, logs, analysis, and actionable suggestions.
+  - New `QaContext` / `QaVerdict` TypeScript interfaces and `QA_VERDICT_SCHEMA` JSON schema in `src/schemas/qa_context.ts`.
+  - New `getQaVerifierOptions()` in `AgentOptions`: configures the `qa-verifier` agent with `Read`, `Grep`, and `Bash` tools and JSON schema output enforcement.
+  - New `qaVerifierWithOptions()` in `AgentActions`: runs the LLM query, collects structured output, and reports cost.
+  - New `loadQaContext()` in `src/schemas/qa_context.ts`: reads/validates QA context JSON with required field checks and defaults.
+  - New `buildQaVerifierPrompt()` in `main.ts`: builds a prompt with PR URL, test configuration, deployment context, environment variables, and step-by-step instructions.
+  - New `--qa-context <file>` CLI option in `agent-run`.
+  - `qa_verifier` role configuration added to `conf/appsec_agent.yaml`.
+- **Restricted Bash tool (`src/tools/bash_tool.ts`)**: Controlled shell access for the QA verifier agent with command validation (blocks dangerous patterns like `rm -rf /`, `sudo`, `eval`), timeout enforcement, working directory isolation, and output size limits.
+- **Companion test generation for code fixer**: `FixContext` now supports an optional `generate_companion_test` flag. When true, the code fixer prompt includes instructions to generate a companion unit test verifying the fix. `FixOutput` schema extended with optional `test_code`, `test_file`, and `test_framework` fields.
+- **New tests**: 5 new QA verifier tests in `main.test.ts` (missing qa-context error, full run, deployment context, test configuration in prompt, src_dir passthrough). Total tests: 235.
+
+### Changed
+- Version bump to 1.8.0.
+
 ## [1.7.1] - 2026-03-02
 
 ### Added

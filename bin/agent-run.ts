@@ -29,6 +29,7 @@ program
   .option('-c, --context <context>', 'Additional context for the code review (e.g., deployment environment, architecture, compliance requirements)')
   .option('--diff-context <file>', 'JSON file with diff context for PR-focused code review (optimizes token usage)')
   .option('--fix-context <file>', 'JSON file with fix context for code_fixer role (finding + code context)')
+  .option('--qa-context <file>', 'JSON file with QA context for qa_verifier role (PR URL + test configuration)')
   .option('--diff-max-tokens <n>', 'Max tokens per batch for PR chunking (0 = disabled). Overrides config.')
   .option('--diff-max-batches <n>', 'Max batches per PR run (e.g. 3). Overrides config.')
   .option('--diff-max-files <n>', 'Max files to include in PR review; rest skipped. Overrides config.')
@@ -115,6 +116,7 @@ const args = {
   context: options.context,
   diff_context: options.diffContext,
   fix_context: options.fixContext,
+  qa_context: options.qaContext,
   model: options.model,
   diff_max_tokens_per_batch: options.diffMaxTokens !== undefined ? parseInt(options.diffMaxTokens, 10) : undefined,
   diff_max_batches: options.diffMaxBatches !== undefined ? parseInt(options.diffMaxBatches, 10) : undefined,

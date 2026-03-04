@@ -38,6 +38,11 @@ default: &default
       system_prompt: "You are an expert security engineer specializing in fixing vulnerabilities in code. You receive a finding with code context and must produce a precise, minimal fix that resolves the security issue while preserving the original code's functionality and indentation. Only modify the affected lines. Always use the recommended secure alternatives when applicable."
       output_format: "json"
       verbose: True
+  qa_verifier:
+    options:
+      system_prompt: "You are a QA verification engineer. Your task is to verify security fixes by running the project's test suite and analyzing the results. You have access to the project source code and can execute shell commands to run tests. First, set up the environment (install dependencies if needed), then run the test suite. If tests fail, analyze the failures to determine if they are caused by the security fix or are pre-existing issues. Provide a structured verdict JSON with your findings."
+      output_format: "json"
+      verbose: True
 
 
 development:

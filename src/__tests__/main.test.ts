@@ -54,7 +54,8 @@ describe('main', () => {
       codeReviewerWithOptions: jest.fn().mockResolvedValue(''),
       threatModelerAgentWithOptions: jest.fn().mockResolvedValue(''),
       diffReviewerWithOptions: jest.fn().mockResolvedValue(''),
-      codeFixerWithOptions: jest.fn().mockResolvedValue('')
+      codeFixerWithOptions: jest.fn().mockResolvedValue(''),
+      qaVerifierWithOptions: jest.fn().mockResolvedValue('')
     } as any;
 
     (AgentActions as jest.MockedClass<typeof AgentActions>).mockImplementation(() => mockAgentActions);
@@ -551,6 +552,119 @@ describe('main', () => {
       expect(prompt).toContain('Previous Fix Failed Validation');
       expect(prompt).toContain('bad fix code');
       expect(prompt).toContain('Syntax error at line 1');
+    });
+  });
+
+  describe('qa_verifier', () => {
+    let qaContextPath: string;
+    const sampleQaContext = {
+      pr_url: 'https://github.com/owner/repo/pull/42',
+      test_command: 'npm test',
+      test_framework: 'jest',
+      setup_commands: 'npm ci',
+      timeout_seconds: 120,
+      block_on_failure: true,
+    };
+
+    beforeEach(() => {
+      qaContextPath = path.join(testDir, 'qa_context.json');
+      fs.writeFileSync(qaContextPath, JSON.stringify(sampleQaContext), 'utf-8');
+    });
+
+    it('should exit with error when --qa-context is missing', async () => {
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      exitMock.mockImplementationOnce((code?: number) => {
+        throw new Error(`process.exit(${code})`);
+      });
+
+      await expect(main(mockConfDict, { role: 'qa_verifier', environment: 'default' }))
+        .rejects.toThrow('process.exit(1)');
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('--qa-context is required'));
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('should run qa verifier with context', async () => {
+      const structuredVerdict = JSON.stringify({
+        pass: true,
+        test_exit_code: 0,
+        failures: [],
+        logs: 'All tests passed',
+      });
+      mockAgentActions.qaVerifierWithOptions.mockResolvedValue(structuredVerdict);
+
+      await main(mockConfDict, {
+        role: 'qa_verifier',
+        environment: 'default',
+        qa_context: qaContextPath,
+        output_file: 'qa_verdict.json',
+        output_format: 'json'
+      });
+
+      expect(mockAgentActions.qaVerifierWithOptions).toHaveBeenCalledWith(
+        expect.stringContaining('QA Verification Task'),
+        null
+      );
+      expect(exitMock).toHaveBeenCalledWith(0);
+    });
+
+    it('should include deployment context in prompt when present', async () => {
+      const ctxWithDeployment = {
+        ...sampleQaContext,
+        deployment_context: 'Production Kubernetes cluster with Istio mesh',
+      };
+      fs.writeFileSync(qaContextPath, JSON.stringify(ctxWithDeployment), 'utf-8');
+      mockAgentActions.qaVerifierWithOptions.mockResolvedValue('{}');
+
+      await main(mockConfDict, {
+        role: 'qa_verifier',
+        environment: 'default',
+        qa_context: qaContextPath,
+        output_file: 'qa_verdict.json',
+        output_format: 'json'
+      });
+
+      const prompt = mockAgentActions.qaVerifierWithOptions.mock.calls[0][0];
+      expect(prompt).toContain('Deployment & Environment Context');
+      expect(prompt).toContain('Production Kubernetes cluster with Istio mesh');
+    });
+
+    it('should include test configuration in prompt', async () => {
+      mockAgentActions.qaVerifierWithOptions.mockResolvedValue('{}');
+
+      await main(mockConfDict, {
+        role: 'qa_verifier',
+        environment: 'default',
+        qa_context: qaContextPath,
+        output_file: 'qa_verdict.json',
+        output_format: 'json'
+      });
+
+      const prompt = mockAgentActions.qaVerifierWithOptions.mock.calls[0][0];
+      expect(prompt).toContain('npm test');
+      expect(prompt).toContain('jest');
+      expect(prompt).toContain('npm ci');
+      expect(prompt).toContain('120 seconds');
+    });
+
+    it('should run qa verifier with src_dir', async () => {
+      const { sourceDir } = setupSourceDirs();
+      mockAgentActions.qaVerifierWithOptions.mockResolvedValue('{}');
+
+      await main(mockConfDict, {
+        role: 'qa_verifier',
+        environment: 'default',
+        qa_context: qaContextPath,
+        output_file: 'qa_verdict.json',
+        output_format: 'json',
+        src_dir: sourceDir
+      });
+
+      expect(copyProjectSrcDir).toHaveBeenCalled();
+      expect(mockAgentActions.qaVerifierWithOptions).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(String)
+      );
     });
   });
 

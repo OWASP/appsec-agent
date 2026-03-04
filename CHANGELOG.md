@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.1] - 2026-03-02
+
+### Added
+- **Test coverage for Bash tool**: 20 new tests in `bash_tool.test.ts` covering tool definition, safe command execution, working directory isolation, environment variables, all dangerous pattern blocks (rm -rf, sudo, eval, curl|sh, etc.), error handling, timeout enforcement, and output truncation.
+- **Test coverage for QA context**: 18 new tests in `qa_context.test.ts` covering `loadQaContext` validation (missing/invalid `pr_url`, missing/invalid `test_command`, default coercion for `timeout_seconds` and `block_on_failure`, optional fields, invalid JSON, path resolution) and `QA_VERDICT_SCHEMA` structure.
+- **Test coverage for getDiffReviewerOptions**: 7 new tests covering agent config, source directory injection, JSON schema enforcement, markdown mode, config override via `diff_reviewer_system_prompt`, and defaults.
+- **Test coverage for getQaVerifierOptions**: 6 new tests covering agent config with structured output, default prompt, source directory injection, null srcDir, JSON schema enforcement, and model selection.
+
+### Changed
+- Version bump to 1.8.1.
+- Total tests: 286 (up from 235). Test suites: 13 (up from 11).
+- Coverage improvements: `bash_tool.ts` 0% → 100% stmts, `qa_context.ts` 72% → 100% stmts, `agent_options.ts` 66% → 93% stmts. All schemas at 100%.
+
 ## [1.8.0] - 2026-03-02
 
 ### Added

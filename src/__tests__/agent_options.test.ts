@@ -448,8 +448,9 @@ describe('AgentOptions', () => {
       expect(options.outputFormat).toEqual({
         type: 'json_schema',
         schema: expect.objectContaining({
-          name: 'retest_verdict',
-          strict: true
+          type: 'object',
+          required: expect.arrayContaining(['still_present', 'confidence', 'reasoning', 'current_line']),
+          additionalProperties: false
         })
       });
     });

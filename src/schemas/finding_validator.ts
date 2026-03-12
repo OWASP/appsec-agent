@@ -71,31 +71,27 @@ export function loadRetestContext(filePath: string, cwd: string): RetestContext 
 // JSON Schema for Claude SDK outputFormat (structured output)
 // ---------------------------------------------------------------------------
 
-export const RETEST_VERDICT_SCHEMA = {
-  name: 'retest_verdict',
-  strict: true,
-  schema: {
-    type: 'object',
-    properties: {
-      still_present: {
-        type: 'boolean',
-        description: 'Whether the vulnerability is still present in the current code',
-      },
-      confidence: {
-        type: 'string',
-        enum: ['high', 'medium', 'low'],
-        description: 'Confidence level in the assessment',
-      },
-      reasoning: {
-        type: 'string',
-        description: 'Brief explanation of why the vulnerability is or is not present',
-      },
-      current_line: {
-        type: ['number', 'null'],
-        description: 'Line number where the issue exists, or null if resolved',
-      },
+export const RETEST_VERDICT_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  required: ['still_present', 'confidence', 'reasoning', 'current_line'],
+  properties: {
+    still_present: {
+      type: 'boolean',
+      description: 'Whether the vulnerability is still present in the current code',
     },
-    required: ['still_present', 'confidence', 'reasoning', 'current_line'],
-    additionalProperties: false,
+    confidence: {
+      type: 'string',
+      enum: ['high', 'medium', 'low'],
+      description: 'Confidence level in the assessment',
+    },
+    reasoning: {
+      type: 'string',
+      description: 'Brief explanation of why the vulnerability is or is not present',
+    },
+    current_line: {
+      type: ['number', 'null'],
+      description: 'Line number where the issue exists, or null if resolved',
+    },
   },
+  additionalProperties: false,
 };

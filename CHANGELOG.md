@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.4] - 2026-03-12
+
+### Changed
+- **Flatten `RETEST_VERDICT_SCHEMA`**: Removed the `name`/`strict`/`schema` wrapper from `RETEST_VERDICT_SCHEMA` in `src/schemas/finding_validator.ts`, aligning it with the flat `Record<string, unknown>` pattern used by the other schemas (`SECURITY_REPORT_SCHEMA`, `THREAT_MODEL_REPORT_SCHEMA`, `FIX_OUTPUT_SCHEMA`).
+- Updated tests in `finding_validator.test.ts` and `agent_options.test.ts` to match the new flat schema structure.
+- Version bump to 1.8.4.
+
 ## [1.8.3] - 2026-03-12
 
 ### Added

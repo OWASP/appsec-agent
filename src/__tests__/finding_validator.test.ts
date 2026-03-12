@@ -165,17 +165,15 @@ describe('finding_validator', () => {
 
   describe('RETEST_VERDICT_SCHEMA', () => {
     it('should have correct schema structure', () => {
-      expect(RETEST_VERDICT_SCHEMA.name).toBe('retest_verdict');
-      expect(RETEST_VERDICT_SCHEMA.strict).toBe(true);
-      expect(RETEST_VERDICT_SCHEMA.schema.type).toBe('object');
-      expect(RETEST_VERDICT_SCHEMA.schema.required).toEqual([
+      expect(RETEST_VERDICT_SCHEMA.type).toBe('object');
+      expect(RETEST_VERDICT_SCHEMA.required).toEqual([
         'still_present', 'confidence', 'reasoning', 'current_line'
       ]);
-      expect(RETEST_VERDICT_SCHEMA.schema.additionalProperties).toBe(false);
+      expect(RETEST_VERDICT_SCHEMA.additionalProperties).toBe(false);
     });
 
     it('should define all expected properties', () => {
-      const props = RETEST_VERDICT_SCHEMA.schema.properties;
+      const props = RETEST_VERDICT_SCHEMA.properties as Record<string, any>;
       expect(props.still_present.type).toBe('boolean');
       expect(props.confidence.type).toBe('string');
       expect(props.confidence.enum).toEqual(['high', 'medium', 'low']);

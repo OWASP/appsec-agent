@@ -399,8 +399,12 @@ For each issue found:
 `;
 
   if (additionalContext) {
-    prompt += `## Additional Context
+    prompt += `## Project Intelligence (use this to reduce false positives)
 ${additionalContext}
+
+When the project intelligence indicates that specific defenses are in place (e.g., ORM with parameterized queries, security middleware, input validation), DO NOT report findings that those defenses already mitigate unless you can verify the defense is not applied to the specific code path in question.
+
+Developer context reflects the team's stated practices. If you find evidence in the code that contradicts the developer context (e.g., raw SQL despite claiming Prisma-only), trust the code and report the finding.
 
 `;
   }

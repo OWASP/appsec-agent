@@ -100,13 +100,16 @@ export class AgentOptions {
     const systemPrompt = roleConfig?.options?.system_prompt || 
       'You are an Application Security (AppSec) expert assistant. You are responsible for performing a thorough code review. List out all the potential security and privacy issues found in the code.';
 
+    const resolvedMaxTurns = roleConfig?.options?.max_turns ?? 30;
+
     const options: Options = {
       agents: {
         'code-reviewer': {
           description: 'Reviews code for best practices and potential security issues only',
           prompt: systemPrompt,
           tools: ['Read', 'Grep', 'Write'],
-          model: this.model
+          model: this.model,
+          maxTurns: resolvedMaxTurns
         } as AgentDefinition
       },
       permissionMode: 'bypassPermissions'
@@ -135,13 +138,16 @@ export class AgentOptions {
 
     const isJson = outputFormat?.toLowerCase() === 'json';
 
+    const resolvedMaxTurns = roleConfig?.options?.max_turns ?? 20;
+
     const options: Options = {
       agents: {
         'threat-modeler': {
           description: 'Performs threat modeling and risk assessment using STRIDE methodology',
           prompt: systemPrompt,
           tools: isJson ? ['Read', 'Grep'] : ['Read', 'Grep', 'Write', 'Graphviz'],
-          model: this.model
+          model: this.model,
+          maxTurns: resolvedMaxTurns
         } as AgentDefinition
       },
       permissionMode: 'bypassPermissions'
@@ -165,23 +171,36 @@ export class AgentOptions {
    * @param srcDir - Optional source directory path
    * @param outputFormat - Output format (json, markdown, etc.)
    */
-  getDiffReviewerOptions(role: string = 'code_reviewer', srcDir?: string | null, outputFormat?: string): Options {
+  getDiffReviewerOptions(role: string = 'code_reviewer', srcDir?: string | null, outputFormat?: string, maxTurns?: number): Options {
     const roleConfig = this.confDict[this.environment]?.[role];
     
     let systemPrompt = `You are an Application Security (AppSec) expert assistant specializing in Pull Request security reviews.
 
-Your task is to analyze ONLY the changed code provided in the diff context. The changes have already been extracted and formatted for you - you do not need to search for files.
+Your task is to analyze the changed code provided in the diff context for security vulnerabilities.
+
+IMPORTANT: Before reporting a finding, verify it by gathering additional context:
+- Use Grep to search for sanitization functions, middleware, validation logic, or security configurations that may mitigate the issue
+- Use Read to inspect imported modules, utility functions, or configuration files referenced in the diff
+- Check if the project uses an ORM (parameterized queries), security headers (helmet), input validation (zod/joi), or auth middleware
+
+Context that should reduce or eliminate false positives:
+- TypeScript strict mode and strong typing (e.g., numeric params can't be SQL-injected)
+- ORM usage with parameterized queries (Prisma, TypeORM, Sequelize, Knex, Drizzle)
+- Security middleware (helmet, csurf, express-rate-limit, cors)
+- Input validation libraries (zod, joi, class-validator)
+- Framework-provided protections (React auto-escapes JSX, Next.js built-in CSRF)
 
 When reviewing PR changes:
-1. Focus exclusively on the security implications of the new or modified code
-2. Consider how the changes interact with existing code (when imports/context is provided)
-3. Identify vulnerabilities introduced by the changes
+1. Focus on security implications of the new or modified code
+2. VERIFY findings by reading referenced files before reporting them
+3. Cite specific line numbers from the provided diff
 4. Do NOT report issues in unchanged code
-5. Cite specific line numbers from the provided diff
+5. Rate your confidence (high/medium/low) for each finding
 
-You have access to Read and Write tools if you need to:
-- Read a full file for additional context (use sparingly)
-- Write the security review report`;
+You have access to Read, Grep, and Write tools:
+- Grep: Search the codebase for patterns (e.g., function definitions, middleware, configs)
+- Read: Read full file contents for additional context
+- Write: Write the security review report`;
 
     if (srcDir) {
       systemPrompt += `\n\nSource directory available at: ${srcDir}`;
@@ -192,13 +211,18 @@ You have access to Read and Write tools if you need to:
       systemPrompt = roleConfig.options.diff_reviewer_system_prompt;
     }
 
+    const resolvedMaxTurns = maxTurns
+      ?? roleConfig?.options?.max_turns
+      ?? 10;
+
     const options: Options = {
       agents: {
         'diff-reviewer': {
           description: 'Reviews PR diff changes for security vulnerabilities',
           prompt: systemPrompt,
-          tools: ['Read', 'Write'],
-          model: this.model
+          tools: ['Read', 'Grep', 'Write'],
+          model: this.model,
+          maxTurns: resolvedMaxTurns
         } as AgentDefinition
       },
       permissionMode: 'bypassPermissions'
@@ -234,13 +258,16 @@ You have access to Read and Write tools if you need to:
       systemPrompt += `\n\nSource directory available at: ${srcDir}. You may read files for additional context if needed.`;
     }
 
+    const resolvedMaxTurns = roleConfig?.options?.max_turns ?? 10;
+
     const options: Options = {
       agents: {
         'code-fixer': {
           description: 'Generates precise security fixes for code vulnerabilities',
           prompt: systemPrompt,
           tools: ['Read', 'Grep'],
-          model: this.model
+          model: this.model,
+          maxTurns: resolvedMaxTurns
         } as AgentDefinition
       },
       permissionMode: 'bypassPermissions',
@@ -270,13 +297,16 @@ You have access to Read and Write tools if you need to:
       systemPrompt += `\n\nProject source code is available at: ${srcDir}. Use Read and Grep to inspect files, and Bash to execute commands.`;
     }
 
+    const resolvedMaxTurns = roleConfig?.options?.max_turns ?? 15;
+
     const options: Options = {
       agents: {
         'qa-verifier': {
           description: 'Verifies security fixes by running project tests and analyzing results',
           prompt: systemPrompt,
           tools: ['Read', 'Grep', 'Bash'],
-          model: this.model
+          model: this.model,
+          maxTurns: resolvedMaxTurns
         } as AgentDefinition
       },
       permissionMode: 'bypassPermissions',
@@ -305,13 +335,16 @@ You have access to Read and Write tools if you need to:
       systemPrompt += `\n\nSource code is available at: ${srcDir}. Use Read and Grep to inspect files for additional context if needed.`;
     }
 
+    const resolvedMaxTurns = roleConfig?.options?.max_turns ?? 5;
+
     const options: Options = {
       agents: {
         'finding-validator': {
           description: 'Validates whether a previously detected security vulnerability is still present in code',
           prompt: systemPrompt,
           tools: ['Read', 'Grep'],
-          model: this.model
+          model: this.model,
+          maxTurns: resolvedMaxTurns
         } as AgentDefinition
       },
       permissionMode: 'bypassPermissions',

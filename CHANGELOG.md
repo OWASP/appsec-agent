@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-03-12
+
+### Added
+- **`--max-turns <n>` CLI option**: Allows overriding the per-role default `maxTurns` (agent tool-use iterations) from the command line. New `max_turns` field in `AgentArgs`.
+- **Per-role `maxTurns` defaults**: Each agent role now has a tuned default turn budget — `code_reviewer`: 30, `threat_modeler`: 20, `qa_verifier`: 15, `diff_reviewer` (PR reviewer): 10, `code_fixer`: 10, `finding_validator`: 5. Configurable via `max_turns` in YAML or `--max-turns` CLI flag.
+- **`Grep` tool for diff reviewer**: The PR reviewer (`diff-reviewer`) agent now has access to the `Grep` tool alongside `Read` and `Write`, enabling codebase-wide pattern searches to verify findings before reporting.
+
+### Changed
+- **Enhanced diff reviewer system prompt**: Rewrote the PR reviewer prompt to actively reduce false positives. The agent is now instructed to verify findings by searching for sanitization functions, middleware, validation logic, ORM usage, and security configurations before reporting issues. Includes a confidence rating (`high`/`medium`/`low`) requirement for each finding.
+- **"Project Intelligence" context section**: Renamed "Additional Context" to "Project Intelligence" in code reviewer prompts, with explicit instructions to use developer-provided context to eliminate false positives — while trusting code evidence over stated practices when they conflict.
+- **YAML config**: Replaced `pr_reviewer.system_prompt` with `diff_reviewer_system_prompt: null` to use the enhanced hardcoded prompt by default.
+- Version bump to 1.9.0.
+
 ## [1.8.4] - 2026-03-12
 
 ### Changed

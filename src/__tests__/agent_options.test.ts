@@ -226,15 +226,16 @@ describe('AgentOptions', () => {
   });
 
   describe('getDiffReviewerOptions', () => {
-    it('should return options with agent configuration', () => {
+    it('should return options with agent configuration including Grep tool and maxTurns', () => {
       const agentOptions = new AgentOptions(mockConfDict, environment);
       const options = agentOptions.getDiffReviewerOptions('code_reviewer');
 
       expect(options.agents).toBeDefined();
       expect(options.agents?.['diff-reviewer']).toBeDefined();
       expect(options.agents?.['diff-reviewer'].prompt).toContain('Pull Request security reviews');
-      expect(options.agents?.['diff-reviewer'].tools).toEqual(['Read', 'Write']);
+      expect(options.agents?.['diff-reviewer'].tools).toEqual(['Read', 'Grep', 'Write']);
       expect(options.agents?.['diff-reviewer'].model).toBe('opus');
+      expect((options.agents?.['diff-reviewer'] as any).maxTurns).toBe(10);
       expect(options.permissionMode).toBe('bypassPermissions');
     });
 

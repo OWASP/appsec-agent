@@ -39,6 +39,7 @@ program
   .option('-F, --failover', 'Enable failover to OpenAI when Anthropic fails (optional feature, off by default). Overrides FAILOVER_ENABLED env.')
   .option('-K, --openai-api-key <key>', 'OpenAI API key for failover (overrides OPENAI_API_KEY env). Only used when failover is enabled.')
   .option('-U, --openai-base-url <url>', 'OpenAI API base URL for failover (overrides OPENAI_BASE_URL env). Only used when failover is enabled.')
+  .option('--max-turns <n>', 'Max agent turns (tool-use iterations). Overrides per-role default.')
   .option('-l, --list_roles', 'List all available roles')
   .option('-v, --version', 'Program version')
   .option('-V, --verbose', 'Verbose mode');
@@ -123,7 +124,8 @@ const args = {
   diff_max_tokens_per_batch: options.diffMaxTokens !== undefined ? parseInt(options.diffMaxTokens, 10) : undefined,
   diff_max_batches: options.diffMaxBatches !== undefined ? parseInt(options.diffMaxBatches, 10) : undefined,
   diff_max_files: options.diffMaxFiles !== undefined ? parseInt(options.diffMaxFiles, 10) : undefined,
-  diff_exclude: Array.isArray(options.diffExclude) && options.diffExclude.length > 0 ? options.diffExclude : undefined
+  diff_exclude: Array.isArray(options.diffExclude) && options.diffExclude.length > 0 ? options.diffExclude : undefined,
+  max_turns: options.maxTurns !== undefined ? parseInt(options.maxTurns, 10) : undefined
 };
 
 // Log context if provided

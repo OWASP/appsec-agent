@@ -28,6 +28,7 @@ export interface AgentArgs {
   diff_max_batches?: number;
   diff_max_files?: number;
   diff_exclude?: string[];  // Path patterns to exclude from diff review
+  max_turns?: number;  // Override per-role maxTurns (adaptive tool budget)
 }
 
 interface ConversationEntry {
@@ -510,7 +511,7 @@ export class AgentActions {
     onResult?: (result: { total_cost_usd?: number }) => void
   ): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
-    const options = agentOptions.getDiffReviewerOptions(this.args.role, srcDir, this.args.output_format);
+    const options = agentOptions.getDiffReviewerOptions(this.args.role, srcDir, this.args.output_format, this.args.max_turns);
 
     let cursor: BlinkingCursor | null = null;
     let structuredJson = '';

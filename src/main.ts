@@ -13,6 +13,7 @@ import { splitIntoBatches, ChunkingOptions } from './diff_chunking';
 import { mergeBatchReports } from './diff_report_merge';
 import { FixContext } from './schemas/security_fix';
 import { loadQaContext, QaContext } from './schemas/qa_context';
+import { loadRetestContext, RetestContext } from './schemas/finding_validator';
 
 /**
  * Validate and copy source directory, exiting on validation failure
@@ -312,6 +313,33 @@ Fix the code to resolve these validation errors while still addressing the origi
   }
 
   return prompt;
+}
+
+/**
+ * Build user prompt for the finding_validator role from RetestContext
+ */
+function buildFindingValidatorPrompt(ctx: RetestContext): string {
+  const { finding } = ctx;
+
+  return `You are validating whether a previously detected vulnerability still exists in code.
+
+## Original Finding
+- **Type**: ${finding.title}
+- **Category**: ${finding.category}
+- **Severity**: ${finding.severity}
+- **CWE**: ${finding.cwe || 'N/A'}
+- **Original Location**: ${finding.file}, lines ${finding.line_numbers || 'unknown'}
+- **Description**: ${finding.description}
+
+## Code to Analyze (with line numbers)
+File: ${finding.file}
+\`\`\`
+${ctx.code_snippet}
+\`\`\`
+
+## Task
+Analyze the code above and determine if the vulnerability described in the finding STILL EXISTS in this code.
+Return your assessment as structured JSON (follow the required schema).`;
 }
 
 /** Defaults for PR chunking when not set (0 = no chunking). */
@@ -665,6 +693,33 @@ Use sequential IDs: node-001/flow-001/tb-001 for DFD elements, THREAT-001 for th
     if (structuredResult) {
       fs.writeFileSync(outputFile, structuredResult, 'utf-8');
       console.log(`QA verdict written to ${outputFile}`);
+    }
+    cleanupTmpDir(tmpSrcDir);
+
+  } else if (args.role === 'finding_validator') {
+    console.log('Running Finding Validator Agent');
+
+    if (!args.retest_context) {
+      console.error('Error: --retest-context is required for the finding_validator role.');
+      process.exit(1);
+    }
+
+    const retestContext = loadRetestContext(args.retest_context, currentWorkingDir);
+    const outputFile = validateOutputFile(
+      args.output_file || 'retest_verdict.json',
+      currentWorkingDir
+    );
+
+    const tmpSrcDir = args.src_dir
+      ? validateAndCopySrcDir(args.src_dir, currentWorkingDir)
+      : null;
+
+    const userPrompt = buildFindingValidatorPrompt(retestContext);
+
+    const structuredResult = await agentActions.findingValidatorWithOptions(userPrompt, tmpSrcDir);
+    if (structuredResult) {
+      fs.writeFileSync(outputFile, structuredResult, 'utf-8');
+      console.log(`Retest verdict written to ${outputFile}`);
     }
     cleanupTmpDir(tmpSrcDir);
 

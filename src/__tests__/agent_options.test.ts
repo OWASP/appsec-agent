@@ -423,5 +423,78 @@ describe('AgentOptions', () => {
       expect(options.agents?.['qa-verifier'].model).toBe('opus');
     });
   });
+
+  describe('getFindingValidatorOptions', () => {
+    it('should return options with agent configuration and structured output', () => {
+      const confWithValidator: ConfigDict = {
+        default: {
+          ...mockConfDict.default,
+          finding_validator: {
+            options: {
+              system_prompt: 'Finding validator system prompt'
+            }
+          }
+        }
+      };
+      const agentOptions = new AgentOptions(confWithValidator, environment);
+      const options = agentOptions.getFindingValidatorOptions('finding_validator');
+
+      expect(options.agents).toBeDefined();
+      expect(options.agents?.['finding-validator']).toBeDefined();
+      expect(options.agents?.['finding-validator'].prompt).toBe('Finding validator system prompt');
+      expect(options.agents?.['finding-validator'].tools).toEqual(['Read', 'Grep']);
+      expect(options.agents?.['finding-validator'].model).toBe('opus');
+      expect(options.permissionMode).toBe('bypassPermissions');
+      expect(options.outputFormat).toEqual({
+        type: 'json_schema',
+        schema: expect.objectContaining({
+          name: 'retest_verdict',
+          strict: true
+        })
+      });
+    });
+
+    it('should use default system prompt when config is missing', () => {
+      const emptyConfDict: ConfigDict = { default: {} };
+      const agentOptions = new AgentOptions(emptyConfDict, environment);
+      const options = agentOptions.getFindingValidatorOptions('finding_validator');
+
+      expect(options.agents?.['finding-validator'].prompt).toContain('vulnerability validation');
+    });
+
+    it('should append source directory to system prompt when provided', () => {
+      const emptyConfDict: ConfigDict = { default: {} };
+      const agentOptions = new AgentOptions(emptyConfDict, environment);
+      const options = agentOptions.getFindingValidatorOptions('finding_validator', '/tmp/src');
+
+      expect(options.agents?.['finding-validator'].prompt).toContain('/tmp/src');
+      expect(options.agents?.['finding-validator'].prompt).toContain('Source code is available');
+    });
+
+    it('should not include source directory when srcDir is null', () => {
+      const emptyConfDict: ConfigDict = { default: {} };
+      const agentOptions = new AgentOptions(emptyConfDict, environment);
+      const options = agentOptions.getFindingValidatorOptions('finding_validator', null);
+
+      expect(options.agents?.['finding-validator'].prompt).not.toContain('Source code is available');
+    });
+
+    it('should always enforce JSON schema output format', () => {
+      const emptyConfDict: ConfigDict = { default: {} };
+      const agentOptions = new AgentOptions(emptyConfDict, environment);
+      const options = agentOptions.getFindingValidatorOptions();
+
+      expect(options.outputFormat).toBeDefined();
+      expect((options.outputFormat as any).type).toBe('json_schema');
+    });
+
+    it('should use specified model', () => {
+      const emptyConfDict: ConfigDict = { default: {} };
+      const agentOptions = new AgentOptions(emptyConfDict, environment, 'haiku');
+      const options = agentOptions.getFindingValidatorOptions();
+
+      expect(options.agents?.['finding-validator'].model).toBe('haiku');
+    });
+  });
 });
 

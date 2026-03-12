@@ -55,7 +55,8 @@ describe('main', () => {
       threatModelerAgentWithOptions: jest.fn().mockResolvedValue(''),
       diffReviewerWithOptions: jest.fn().mockResolvedValue(''),
       codeFixerWithOptions: jest.fn().mockResolvedValue(''),
-      qaVerifierWithOptions: jest.fn().mockResolvedValue('')
+      qaVerifierWithOptions: jest.fn().mockResolvedValue(''),
+      findingValidatorWithOptions: jest.fn().mockResolvedValue('')
     } as any;
 
     (AgentActions as jest.MockedClass<typeof AgentActions>).mockImplementation(() => mockAgentActions);
@@ -665,6 +666,124 @@ describe('main', () => {
         expect.any(String),
         expect.any(String)
       );
+    });
+  });
+
+  describe('finding_validator', () => {
+    let retestContextPath: string;
+    const sampleRetestContext = {
+      finding: {
+        title: 'SQL Injection',
+        category: 'Injection',
+        severity: 'HIGH',
+        cwe: 'CWE-89',
+        file: 'src/db.ts',
+        line_numbers: '42-44',
+        description: 'User input concatenated into SQL query',
+      },
+      code_snippet: '  42| const result = db.query(`SELECT * FROM users WHERE id = ${userId}`);\n  43| return result;',
+    };
+
+    beforeEach(() => {
+      retestContextPath = path.join(testDir, 'retest_context.json');
+      fs.writeFileSync(retestContextPath, JSON.stringify(sampleRetestContext), 'utf-8');
+    });
+
+    it('should exit with error when --retest-context is missing', async () => {
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      exitMock.mockImplementationOnce((code?: number) => {
+        throw new Error(`process.exit(${code})`);
+      });
+
+      await expect(main(mockConfDict, { role: 'finding_validator', environment: 'default' }))
+        .rejects.toThrow('process.exit(1)');
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('--retest-context is required'));
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('should run finding validator with retest context', async () => {
+      const structuredVerdict = JSON.stringify({
+        still_present: true,
+        confidence: 'high',
+        reasoning: 'The SQL query still uses string interpolation',
+        current_line: 42,
+      });
+      mockAgentActions.findingValidatorWithOptions.mockResolvedValue(structuredVerdict);
+
+      await main(mockConfDict, {
+        role: 'finding_validator',
+        environment: 'default',
+        retest_context: retestContextPath,
+        output_file: 'retest_verdict.json',
+        output_format: 'json'
+      });
+
+      expect(mockAgentActions.findingValidatorWithOptions).toHaveBeenCalledWith(
+        expect.stringContaining('SQL Injection'),
+        null
+      );
+      expect(exitMock).toHaveBeenCalledWith(0);
+    });
+
+    it('should include finding details in prompt', async () => {
+      mockAgentActions.findingValidatorWithOptions.mockResolvedValue('{}');
+
+      await main(mockConfDict, {
+        role: 'finding_validator',
+        environment: 'default',
+        retest_context: retestContextPath,
+        output_file: 'retest_verdict.json',
+        output_format: 'json'
+      });
+
+      const prompt = mockAgentActions.findingValidatorWithOptions.mock.calls[0][0];
+      expect(prompt).toContain('CWE-89');
+      expect(prompt).toContain('src/db.ts');
+      expect(prompt).toContain('42-44');
+      expect(prompt).toContain('Injection');
+      expect(prompt).toContain('SELECT * FROM users');
+    });
+
+    it('should run finding validator with src_dir', async () => {
+      const { sourceDir, tmpDir } = setupSourceDirs();
+      mockAgentActions.findingValidatorWithOptions.mockResolvedValue('{}');
+
+      await main(mockConfDict, {
+        role: 'finding_validator',
+        environment: 'default',
+        retest_context: retestContextPath,
+        output_file: 'retest_verdict.json',
+        output_format: 'json',
+        src_dir: sourceDir
+      });
+
+      expect(copyProjectSrcDir).toHaveBeenCalled();
+      expect(mockAgentActions.findingValidatorWithOptions).toHaveBeenCalledWith(
+        expect.any(String),
+        tmpDir
+      );
+    });
+
+    it('should handle null cwe and line_numbers gracefully', async () => {
+      const ctxNulls = {
+        ...sampleRetestContext,
+        finding: { ...sampleRetestContext.finding, cwe: null, line_numbers: null },
+      };
+      fs.writeFileSync(retestContextPath, JSON.stringify(ctxNulls), 'utf-8');
+      mockAgentActions.findingValidatorWithOptions.mockResolvedValue('{}');
+
+      await main(mockConfDict, {
+        role: 'finding_validator',
+        environment: 'default',
+        retest_context: retestContextPath,
+        output_file: 'retest_verdict.json',
+        output_format: 'json'
+      });
+
+      const prompt = mockAgentActions.findingValidatorWithOptions.mock.calls[0][0];
+      expect(prompt).toContain('N/A');
+      expect(prompt).toContain('unknown');
     });
   });
 

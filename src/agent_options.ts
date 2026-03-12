@@ -10,6 +10,7 @@ import { SECURITY_REPORT_SCHEMA } from './schemas/security_report';
 import { THREAT_MODEL_REPORT_SCHEMA } from './schemas/threat_model_report';
 import { FIX_OUTPUT_SCHEMA } from './schemas/security_fix';
 import { QA_VERDICT_SCHEMA } from './schemas/qa_context';
+import { RETEST_VERDICT_SCHEMA } from './schemas/finding_validator';
 
 export interface ToolUsageLog {
   tool: string;
@@ -282,6 +283,41 @@ You have access to Read and Write tools if you need to:
       outputFormat: {
         type: 'json_schema',
         schema: QA_VERDICT_SCHEMA
+      }
+    };
+
+    return options;
+  }
+
+  /**
+   * Get options for the finding validator agent
+   * Uses Read and Grep tools (read-only) to analyze code for vulnerability presence.
+   */
+  getFindingValidatorOptions(role: string = 'finding_validator', srcDir?: string | null): Options {
+    const roleConfig = this.confDict[this.environment]?.[role];
+    let systemPrompt = roleConfig?.options?.system_prompt ||
+      'You are a security expert specializing in vulnerability validation. ' +
+      'Your task is to analyze code and determine whether a previously detected security vulnerability ' +
+      'is still present. Examine the provided code carefully, considering the original finding details, ' +
+      'and return a structured verdict with your assessment.';
+
+    if (srcDir) {
+      systemPrompt += `\n\nSource code is available at: ${srcDir}. Use Read and Grep to inspect files for additional context if needed.`;
+    }
+
+    const options: Options = {
+      agents: {
+        'finding-validator': {
+          description: 'Validates whether a previously detected security vulnerability is still present in code',
+          prompt: systemPrompt,
+          tools: ['Read', 'Grep'],
+          model: this.model
+        } as AgentDefinition
+      },
+      permissionMode: 'bypassPermissions',
+      outputFormat: {
+        type: 'json_schema',
+        schema: RETEST_VERDICT_SCHEMA
       }
     };
 

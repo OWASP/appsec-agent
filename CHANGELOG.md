@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.3] - 2026-03-12
+
+### Added
+- **Finding Validator agent (`finding_validator`)**: New agent role that validates whether a previously detected security vulnerability is still present in code. Receives a finding with code snippet via `--retest-context <file>` and returns a structured JSON verdict (`RetestVerdict`) with `still_present`, `confidence`, `reasoning`, and `current_line`.
+  - New `RetestContext` / `RetestContextFinding` / `RetestVerdict` TypeScript interfaces and `RETEST_VERDICT_SCHEMA` JSON schema in `src/schemas/finding_validator.ts`.
+  - New `getFindingValidatorOptions()` in `AgentOptions`: configures the `finding-validator` agent with `Read`/`Grep` tools and JSON schema output enforcement.
+  - New `findingValidatorWithOptions()` in `AgentActions`: runs the LLM query, collects structured output, and reports cost.
+  - New `loadRetestContext()` in `src/schemas/finding_validator.ts`: reads/validates retest context JSON with required field checks.
+  - New `buildFindingValidatorPrompt()` in `main.ts`: builds a prompt with finding metadata, code snippet, and analysis instructions.
+  - New `--retest-context <file>` CLI option in `agent-run`.
+  - `finding_validator` role configuration added to `conf/appsec_agent.yaml`.
+  - Public exports for `RetestContext`, `RetestContextFinding`, `RetestVerdict`, and `RETEST_VERDICT_SCHEMA` from the package index.
+- **Comprehensive test coverage for finding validator**: 16 tests in `finding_validator.test.ts` (context loading, validation branches, schema structure), 6 tests in `agent_options.test.ts` (agent config, default prompt, srcDir, JSON schema, model), 5 tests in `main.test.ts` (missing context error, full run, prompt content, src_dir passthrough, null field handling). Total tests: 313 across 14 suites.
+
+### Changed
+- Version bump to 1.8.3.
+
 ## [1.8.2] - 2026-03-11
 
 ### Changed

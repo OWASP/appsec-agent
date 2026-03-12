@@ -29,4 +29,10 @@ export {
   QaVerdict,
   QA_VERDICT_SCHEMA,
 } from './schemas/qa_context';
+export {
+  RetestContext,
+  RetestContextFinding,
+  RetestVerdict,
+  RETEST_VERDICT_SCHEMA,
+} from './schemas/finding_validator';
 

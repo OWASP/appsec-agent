@@ -30,3 +30,8 @@ PUBLISHING.md
 # no cursor files  
 .cursor/
 
+# Test output artifacts
+fix_output.json
+qa_verdict.json
+retest_verdict.json
+

@@ -76,6 +76,11 @@ describe('main', () => {
     if (fs.existsSync(testDir)) {
       fs.removeSync(testDir);
     }
+    for (const f of ['fix_output.json', 'qa_verdict.json', 'retest_verdict.json']) {
+      if (fs.existsSync(f)) {
+        fs.removeSync(f);
+      }
+    }
   });
 
   // Helper to mock readline responses

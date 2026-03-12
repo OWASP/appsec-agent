@@ -171,7 +171,7 @@ describe('AgentOptions', () => {
       expect(options.agents?.['code-reviewer']).toBeDefined();
       expect(options.agents?.['code-reviewer'].prompt).toBe('Code review system prompt');
       expect(options.agents?.['code-reviewer'].tools).toEqual(['Read', 'Grep', 'Write']);
-      expect(options.agents?.['code-reviewer'].model).toBe('sonnet');
+      expect(options.agents?.['code-reviewer'].model).toBe('opus');
       expect(options.permissionMode).toBe('bypassPermissions');
     });
 
@@ -203,7 +203,7 @@ describe('AgentOptions', () => {
       expect(options.agents?.['threat-modeler'].prompt).toBe('Threat modeler system prompt');
       expect(options.agents?.['threat-modeler'].description).toBe('Performs threat modeling and risk assessment using STRIDE methodology');
       expect(options.agents?.['threat-modeler'].tools).toEqual(['Read', 'Grep', 'Write', 'Graphviz']);
-      expect(options.agents?.['threat-modeler'].model).toBe('sonnet');
+      expect(options.agents?.['threat-modeler'].model).toBe('opus');
       expect(options.permissionMode).toBe('bypassPermissions');
     });
 
@@ -234,7 +234,7 @@ describe('AgentOptions', () => {
       expect(options.agents?.['diff-reviewer']).toBeDefined();
       expect(options.agents?.['diff-reviewer'].prompt).toContain('Pull Request security reviews');
       expect(options.agents?.['diff-reviewer'].tools).toEqual(['Read', 'Write']);
-      expect(options.agents?.['diff-reviewer'].model).toBe('sonnet');
+      expect(options.agents?.['diff-reviewer'].model).toBe('opus');
       expect(options.permissionMode).toBe('bypassPermissions');
     });
 
@@ -313,7 +313,7 @@ describe('AgentOptions', () => {
       expect(options.agents?.['code-fixer']).toBeDefined();
       expect(options.agents?.['code-fixer'].prompt).toBe('Code fixer system prompt');
       expect(options.agents?.['code-fixer'].tools).toEqual(['Read', 'Grep']);
-      expect(options.agents?.['code-fixer'].model).toBe('sonnet');
+      expect(options.agents?.['code-fixer'].model).toBe('opus');
       expect(options.permissionMode).toBe('bypassPermissions');
       expect(options.outputFormat).toEqual({
         type: 'json_schema',
@@ -370,7 +370,7 @@ describe('AgentOptions', () => {
       expect(options.agents?.['qa-verifier']).toBeDefined();
       expect(options.agents?.['qa-verifier'].prompt).toBe('QA verifier system prompt');
       expect(options.agents?.['qa-verifier'].tools).toEqual(['Read', 'Grep', 'Bash']);
-      expect(options.agents?.['qa-verifier'].model).toBe('sonnet');
+      expect(options.agents?.['qa-verifier'].model).toBe('opus');
       expect(options.permissionMode).toBe('bypassPermissions');
       expect(options.outputFormat).toEqual({
         type: 'json_schema',

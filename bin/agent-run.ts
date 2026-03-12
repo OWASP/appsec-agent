@@ -34,7 +34,7 @@ program
   .option('--diff-max-batches <n>', 'Max batches per PR run (e.g. 3). Overrides config.')
   .option('--diff-max-files <n>', 'Max files to include in PR review; rest skipped. Overrides config.')
   .option('--diff-exclude <pattern>', 'Exclude path pattern (repeatable). Overrides config.', (v: string, acc: string[]) => { acc.push(v); return acc; }, [])
-  .option('-m, --model <model>', 'Claude model to use: sonnet, opus, haiku - default to "sonnet"', 'sonnet')
+  .option('-m, --model <model>', 'Claude model to use: sonnet, opus, haiku - default to "opus"', 'opus')
   .option('-F, --failover', 'Enable failover to OpenAI when Anthropic fails (optional feature, off by default). Overrides FAILOVER_ENABLED env.')
   .option('-K, --openai-api-key <key>', 'OpenAI API key for failover (overrides OPENAI_API_KEY env). Only used when failover is enabled.')
   .option('-U, --openai-base-url <url>', 'OpenAI API base URL for failover (overrides OPENAI_BASE_URL env). Only used when failover is enabled.')

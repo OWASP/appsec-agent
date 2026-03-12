@@ -23,7 +23,7 @@ export class AgentOptions {
   private model: string;
   private toolUsageLog: ToolUsageLog[] = [];
 
-  constructor(confDict: ConfigDict, environment: string, model: string = 'sonnet') {
+  constructor(confDict: ConfigDict, environment: string, model: string = 'opus') {
     this.confDict = confDict;
     this.environment = environment;
     this.model = model;

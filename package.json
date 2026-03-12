@@ -1,9 +1,9 @@
 {
   "name": "appsec-agent",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "description": "TypeScript package for AppSec AI Agent management",
   "author": "Sam Li",
-  "date": "Mar 2 2026",
+  "date": "Mar 11 2026",
   "license": "MIT",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
@@ -32,7 +32,7 @@
     "typescript"
   ],
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.39",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.74",
     "openai": "^4.73.0",
     "yaml": "^2.4.0",
     "commander": "^11.1.0",
@@ -49,7 +49,7 @@
     "ts-node": "^10.9.2"
   },
   "peerDependencies": {
-    "@anthropic-ai/claude-code": "2.1.39"
+    "@anthropic-ai/claude-code": "2.1.74"
   },
   "engines": {
     "node": ">=18.0.0"

@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.2] - 2026-03-11
+
+### Changed
+- **Default model changed to opus**: The default Claude model is now `opus` instead of `sonnet` for all agent roles. Users can still override with `-m sonnet` or `-m haiku` via the CLI.
+- Version bump to 1.8.2.
+
 ## [1.8.1] - 2026-03-02
 
 ### Added

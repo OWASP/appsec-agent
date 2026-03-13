@@ -49,6 +49,10 @@ default: &default
       system_prompt: "You are a security expert specializing in vulnerability validation. Your task is to analyze code and determine whether a previously detected security vulnerability is still present. Examine the provided code carefully, considering the original finding details, and return a structured verdict with your assessment."
       output_format: "json"
       verbose: True
+  context_extractor:
+    options:
+      output_format: "json"
+      verbose: False
 
 
 development:

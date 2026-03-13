@@ -14,6 +14,7 @@ import { mergeBatchReports } from './diff_report_merge';
 import { FixContext } from './schemas/security_fix';
 import { loadQaContext, QaContext } from './schemas/qa_context';
 import { loadRetestContext, RetestContext } from './schemas/finding_validator';
+import { loadExtractionContext, ExtractionContext } from './schemas/context_extraction';
 
 /**
  * Validate and copy source directory, exiting on validation failure
@@ -340,6 +341,53 @@ ${ctx.code_snippet}
 ## Task
 Analyze the code above and determine if the vulnerability described in the finding STILL EXISTS in this code.
 Return your assessment as structured JSON (follow the required schema).`;
+}
+
+/**
+ * Build user prompt for the context_extractor role from ExtractionContext
+ */
+function buildContextExtractorPrompt(ctx: ExtractionContext): string {
+  const parts: string[] = [];
+
+  parts.push('## Repository Analysis Task\n');
+  parts.push(`Analyze the following repository metadata and files to extract structured project intelligence.\n`);
+
+  parts.push('### Repository Metadata');
+  parts.push(`- **Owner/Org:** ${ctx.owner}`);
+  parts.push(`- **Repository:** ${ctx.repo}`);
+  if (ctx.description) {
+    parts.push(`- **Description:** ${ctx.description}`);
+  }
+  if (ctx.language) {
+    parts.push(`- **Primary Language:** ${ctx.language}`);
+  }
+  if (ctx.languages && Object.keys(ctx.languages).length > 0) {
+    const sorted = Object.entries(ctx.languages)
+      .sort(([, a], [, b]) => b - a)
+      .map(([lang, bytes]) => `${lang} (${Math.round(bytes / 1024)}KB)`)
+      .join(', ');
+    parts.push(`- **Languages:** ${sorted}`);
+  }
+  parts.push('');
+
+  parts.push('### Repository Files\n');
+  for (const file of ctx.files) {
+    parts.push(`#### ${file.path}`);
+    parts.push('```');
+    parts.push(file.content);
+    parts.push('```');
+    parts.push('');
+  }
+
+  parts.push('### Instructions\n');
+  parts.push('Analyze ALL the files above and return structured JSON with these fields:');
+  parts.push('1. **project_summary**: 1-2 sentences describing what the project does, its tech stack (frameworks, languages), and architecture (monorepo, microservice, etc.). Use the repo description as a starting point if available.');
+  parts.push('2. **security_context**: List specific security defenses found in dependencies and config: auth frameworks (passport, next-auth), encryption (bcrypt, argon2), validation (zod, joi), CSRF/XSS protection (helmet, csurf), rate limiting, ORM usage (Prisma, SQLAlchemy — note these use parameterized queries), CI security scanning (CodeQL, Snyk, Trivy). Be concrete with library names.');
+  parts.push('3. **deployment_context**: How the project is built and deployed: CI/CD system (GitHub Actions, Codefresh, Jenkins), container runtime (Docker, ECS, Kubernetes), cloud provider, environments, infrastructure (Terraform, Helm). Extract from CI configs, Dockerfiles, and infra files.');
+  parts.push('4. **developer_context**: Extract ONLY security-relevant rules from developer guidance files (CLAUDE.md, AGENTS.md, .cursor/rules/). Include: PHI/PII handling rules, SQL injection prevention, auth patterns, input validation requirements, compliance mandates (HIPAA, SOX, GDPR). EXCLUDE: generic coding style, formatting, naming conventions, component patterns, UI guidelines.');
+  parts.push('\nReturn empty strings for fields where no relevant information is found. Be concise but specific.');
+
+  return parts.join('\n');
 }
 
 /** Defaults for PR chunking when not set (0 = no chunking). */
@@ -726,6 +774,29 @@ Use sequential IDs: node-001/flow-001/tb-001 for DFD elements, THREAT-001 for th
       console.log(`Retest verdict written to ${outputFile}`);
     }
     cleanupTmpDir(tmpSrcDir);
+
+  } else if (args.role === 'context_extractor') {
+    console.log('Running Context Extractor Agent');
+
+    if (!args.extract_context) {
+      console.error('Error: --extract-context is required for the context_extractor role.');
+      process.exit(1);
+    }
+
+    const extractionContext = loadExtractionContext(args.extract_context, currentWorkingDir);
+    const outputFile = validateOutputFile(
+      args.output_file || 'context_extraction.json',
+      currentWorkingDir
+    );
+
+    console.log(`Extracting context for ${extractionContext.owner}/${extractionContext.repo} (${extractionContext.files.length} files)`);
+
+    const userPrompt = buildContextExtractorPrompt(extractionContext);
+    const structuredResult = await agentActions.contextExtractorWithOptions(userPrompt);
+    if (structuredResult) {
+      fs.writeFileSync(outputFile, structuredResult, 'utf-8');
+      console.log(`Context extraction written to ${outputFile}`);
+    }
 
   } else {
     console.error(`Error: Invalid appsec AI agent role: ${args.role} - refer to 'appsec_agent.yaml' for available roles`);

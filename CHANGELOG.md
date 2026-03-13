@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-03-13
+
+### Added
+- **Context Extractor agent (`context_extractor`)**: New agent role that analyzes repository metadata and files to extract structured project intelligence for improving SAST accuracy. Receives repo metadata and file contents via `--extract-context <file>` and returns a structured JSON report with `project_summary`, `security_context`, `deployment_context`, and `developer_context`.
+  - New `ExtractionContext` / `ContextExtractionOutput` TypeScript interfaces and `CONTEXT_EXTRACTION_SCHEMA` JSON schema in `src/schemas/context_extraction.ts`.
+  - New `getContextExtractorOptions()` in `AgentOptions`: configures the `context-extractor` agent with no tools (pure analysis), `maxTurns: 1`, and JSON schema output enforcement.
+  - New `contextExtractorWithOptions()` in `AgentActions`: runs the LLM query, collects structured output, and reports cost.
+  - New `loadExtractionContext()` in `src/schemas/context_extraction.ts`: reads/validates extraction context JSON with required field checks.
+  - New `buildContextExtractorPrompt()` in `main.ts`: builds a detailed prompt with repo metadata, file contents, and analysis instructions.
+  - New `--extract-context <file>` CLI option in `agent-run`.
+  - `context_extractor` role configuration added to `conf/appsec_agent.yaml`.
+  - 4 new tests in `agent_options.test.ts` covering agent config, default/custom system prompts, and JSON schema enforcement. Total tests: 317 across 14 suites.
+
 ## [1.9.0] - 2026-03-12
 
 ### Added

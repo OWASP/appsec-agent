@@ -22,6 +22,7 @@ export interface AgentArgs {
   fix_context?: string;  // Path to JSON file with fix context for code_fixer role
   qa_context?: string;   // Path to JSON file with QA context for qa_verifier role
   retest_context?: string; // Path to JSON file with retest context for finding_validator role
+  extract_context?: string; // Path to JSON file with extraction context for context_extractor role
   model?: string;  // Claude model selection: sonnet, opus, haiku
   // PR diff chunking (optional; 0 or omit = no chunking)
   diff_max_tokens_per_batch?: number;
@@ -437,6 +438,63 @@ export class AgentActions {
         }
       }
       console.error('Error during QA verification:', error);
+      throw error;
+    }
+    console.log();
+    return structuredJson;
+  }
+
+  /**
+   * Context extractor agent with structured JSON output.
+   * Analyzes repository files to extract project intelligence for SAST accuracy.
+   */
+  async contextExtractorWithOptions(userPrompt: string): Promise<string> {
+    const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
+    const options = agentOptions.getContextExtractorOptions(this.args.role);
+
+    let cursor: BlinkingCursor | null = null;
+    let structuredJson = '';
+
+    try {
+      cursor = new BlinkingCursor();
+      cursor.start();
+      try {
+        for await (const message of llmQuery({ prompt: userPrompt, options })) {
+          if (message.type === 'stream_event') {
+            if (cursor) cursor.stop();
+          } else if (message.type === 'assistant') {
+            if (cursor) cursor.stop();
+            const assistantMsg = message as SDKAssistantMessage;
+            if (this.args.verbose && assistantMsg.message.content) {
+              for (const block of assistantMsg.message.content) {
+                if (block.type === 'text') {
+                  console.log(`Claude: ${block.text}`);
+                }
+              }
+            }
+          } else if (message.type === 'result') {
+            if (cursor) cursor.stop();
+            const resultMsg = message as SDKResultMessage;
+            if ((resultMsg as any).structured_output) {
+              structuredJson = JSON.stringify((resultMsg as any).structured_output, null, 2);
+            }
+            if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
+              console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);
+            }
+          }
+        }
+      } finally {
+        if (cursor) cursor.stop();
+      }
+    } catch (error) {
+      if (cursor) {
+        try {
+          cursor.stop();
+        } catch {
+          // Ignore if cursor cleanup fails
+        }
+      }
+      console.error('Error during context extraction:', error);
       throw error;
     }
     console.log();

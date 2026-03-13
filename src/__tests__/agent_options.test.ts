@@ -425,6 +425,61 @@ describe('AgentOptions', () => {
     });
   });
 
+  describe('getContextExtractorOptions', () => {
+    it('should return options with no tools and maxTurns 1', () => {
+      const agentOptions = new AgentOptions(mockConfDict, environment);
+      const options = agentOptions.getContextExtractorOptions('context_extractor');
+
+      expect(options.agents).toBeDefined();
+      expect(options.agents?.['context-extractor']).toBeDefined();
+      expect(options.agents?.['context-extractor'].tools).toEqual([]);
+      expect((options.agents?.['context-extractor'] as any).maxTurns).toBe(1);
+      expect(options.permissionMode).toBe('bypassPermissions');
+      expect(options.outputFormat).toEqual({
+        type: 'json_schema',
+        schema: expect.objectContaining({
+          type: 'object',
+          required: expect.arrayContaining(['project_summary', 'security_context', 'deployment_context', 'developer_context']),
+          additionalProperties: false,
+        }),
+      });
+    });
+
+    it('should use default system prompt when config is missing', () => {
+      const emptyConfDict: ConfigDict = { default: {} };
+      const agentOptions = new AgentOptions(emptyConfDict, environment);
+      const options = agentOptions.getContextExtractorOptions('context_extractor');
+
+      expect(options.agents?.['context-extractor'].prompt).toContain('security-aware software analyst');
+    });
+
+    it('should use custom system prompt from config when available', () => {
+      const confWithExtractor: ConfigDict = {
+        default: {
+          ...mockConfDict.default,
+          context_extractor: {
+            options: {
+              system_prompt: 'Custom extraction prompt',
+            },
+          },
+        },
+      };
+      const agentOptions = new AgentOptions(confWithExtractor, environment);
+      const options = agentOptions.getContextExtractorOptions('context_extractor');
+
+      expect(options.agents?.['context-extractor'].prompt).toBe('Custom extraction prompt');
+    });
+
+    it('should always enforce JSON schema output format', () => {
+      const emptyConfDict: ConfigDict = { default: {} };
+      const agentOptions = new AgentOptions(emptyConfDict, environment);
+      const options = agentOptions.getContextExtractorOptions();
+
+      expect(options.outputFormat).toBeDefined();
+      expect((options.outputFormat as any).type).toBe('json_schema');
+    });
+  });
+
   describe('getFindingValidatorOptions', () => {
     it('should return options with agent configuration and structured output', () => {
       const confWithValidator: ConfigDict = {

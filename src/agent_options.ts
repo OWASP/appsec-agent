@@ -11,6 +11,7 @@ import { THREAT_MODEL_REPORT_SCHEMA } from './schemas/threat_model_report';
 import { FIX_OUTPUT_SCHEMA } from './schemas/security_fix';
 import { QA_VERDICT_SCHEMA } from './schemas/qa_context';
 import { RETEST_VERDICT_SCHEMA } from './schemas/finding_validator';
+import { CONTEXT_EXTRACTION_SCHEMA } from './schemas/context_extraction';
 
 export interface ToolUsageLog {
   tool: string;
@@ -323,6 +324,36 @@ You have access to Read, Grep, and Write tools:
    * Get options for the finding validator agent
    * Uses Read and Grep tools (read-only) to analyze code for vulnerability presence.
    */
+  getContextExtractorOptions(role: string = 'context_extractor'): Options {
+    const roleConfig = this.confDict[this.environment]?.[role];
+    const systemPrompt = roleConfig?.options?.system_prompt ||
+      'You are a security-aware software analyst. Your task is to analyze repository files and metadata ' +
+      'to extract structured intelligence about a project. Focus on accuracy and specificity. ' +
+      'For security_context, list concrete library names and mechanisms (e.g., "bcrypt for password hashing", ' +
+      '"Django ORM with parameterized queries"). For developer_context, include ONLY security-relevant guidance ' +
+      '(PHI handling, SQL injection rules, auth patterns, compliance requirements) — exclude generic coding style, ' +
+      'formatting, naming conventions, and UI/component patterns. If a field has no relevant information, return an empty string.';
+
+    const options: Options = {
+      agents: {
+        'context-extractor': {
+          description: 'Extracts structured project intelligence from repository files',
+          prompt: systemPrompt,
+          tools: [],
+          model: this.model,
+          maxTurns: 1,
+        } as AgentDefinition,
+      },
+      permissionMode: 'bypassPermissions',
+      outputFormat: {
+        type: 'json_schema',
+        schema: CONTEXT_EXTRACTION_SCHEMA,
+      },
+    };
+
+    return options;
+  }
+
   getFindingValidatorOptions(role: string = 'finding_validator', srcDir?: string | null): Options {
     const roleConfig = this.confDict[this.environment]?.[role];
     let systemPrompt = roleConfig?.options?.system_prompt ||

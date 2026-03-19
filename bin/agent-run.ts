@@ -36,7 +36,7 @@ program
   .option('--diff-max-batches <n>', 'Max batches per PR run (e.g. 3). Overrides config.')
   .option('--diff-max-files <n>', 'Max files to include in PR review; rest skipped. Overrides config.')
   .option('--diff-exclude <pattern>', 'Exclude path pattern (repeatable). Overrides config.', (v: string, acc: string[]) => { acc.push(v); return acc; }, [])
-  .option('-m, --model <model>', 'Claude model to use: sonnet, opus, haiku - default to "opus"', 'opus')
+  .option('-m, --model <model>', 'Claude model: family alias (sonnet, opus, haiku), SDK model ID (claude-sonnet-4-6), or version prefix (sonnet-4-6) - default to "opus"', 'opus')
   .option('-F, --failover', 'Enable failover to OpenAI when Anthropic fails (optional feature, off by default). Overrides FAILOVER_ENABLED env.')
   .option('-K, --openai-api-key <key>', 'OpenAI API key for failover (overrides OPENAI_API_KEY env). Only used when failover is enabled.')
   .option('-U, --openai-base-url <url>', 'OpenAI API base URL for failover (overrides OPENAI_BASE_URL env). Only used when failover is enabled.')
@@ -101,10 +101,14 @@ if (options.openaiBaseUrl !== undefined) {
   process.env.OPENAI_BASE_URL = options.openaiBaseUrl;
 }
 
-// Validate model option
-const validModels = ['sonnet', 'opus', 'haiku'];
-if (!validModels.includes(options.model)) {
-  console.error(`Error: Invalid model "${options.model}". Valid options: ${validModels.join(', ')}`);
+// Validate model option: accept family aliases, SDK model IDs, or version prefixes
+const FAMILY_ALIASES = ['sonnet', 'opus', 'haiku'];
+const model = options.model.toLowerCase().trim();
+const isValidModel = FAMILY_ALIASES.includes(model)
+  || model.startsWith('claude-')
+  || FAMILY_ALIASES.some(f => model.startsWith(`${f}-`));
+if (!isValidModel) {
+  console.error(`Error: Invalid model "${options.model}". Valid formats: family alias (sonnet, opus, haiku), SDK model ID (claude-sonnet-4-6), or version prefix (sonnet-4-6)`);
   process.exit(1);
 }
 
@@ -122,7 +126,7 @@ const args = {
   qa_context: options.qaContext,
   retest_context: options.retestContext,
   extract_context: options.extractContext,
-  model: options.model,
+  model: model,
   diff_max_tokens_per_batch: options.diffMaxTokens !== undefined ? parseInt(options.diffMaxTokens, 10) : undefined,
   diff_max_batches: options.diffMaxBatches !== undefined ? parseInt(options.diffMaxBatches, 10) : undefined,
   diff_max_files: options.diffMaxFiles !== undefined ? parseInt(options.diffMaxFiles, 10) : undefined,

@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2026-03-13
+
+### Changed
+- **Flexible `--model` validation**: The `-m`/`--model` CLI flag now accepts three formats: family aliases (`sonnet`, `opus`, `haiku`), full SDK model IDs (`claude-sonnet-4-6`), and version prefixes (`sonnet-4-6`). Input is normalized to lowercase before validation and passed through to the SDK.
+- Version bump to 2.0.1.
+
 ## [2.0.0] - 2026-03-13
 
 ### Added

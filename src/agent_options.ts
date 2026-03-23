@@ -172,10 +172,33 @@ export class AgentOptions {
    * @param srcDir - Optional source directory path
    * @param outputFormat - Output format (json, markdown, etc.)
    */
-  getDiffReviewerOptions(role: string = 'code_reviewer', srcDir?: string | null, outputFormat?: string, maxTurns?: number): Options {
+  getDiffReviewerOptions(role: string = 'code_reviewer', srcDir?: string | null, outputFormat?: string, maxTurns?: number, noTools?: boolean): Options {
     const roleConfig = this.confDict[this.environment]?.[role];
     
-    let systemPrompt = `You are an Application Security (AppSec) expert assistant specializing in Pull Request security reviews.
+    let systemPrompt: string;
+
+    if (noTools) {
+      systemPrompt = `You are an Application Security (AppSec) expert assistant specializing in Pull Request security reviews.
+
+Your task is to analyze the changed code provided in the diff context for security vulnerabilities.
+
+The diff context already includes relevant imports, function signatures, and surrounding code for each changed file. Produce your complete security review report directly from this provided context.
+
+Context that should reduce or eliminate false positives:
+- TypeScript strict mode and strong typing (e.g., numeric params can't be SQL-injected)
+- ORM usage with parameterized queries (Prisma, TypeORM, Sequelize, Knex, Drizzle)
+- Security middleware (helmet, csurf, express-rate-limit, cors)
+- Input validation libraries (zod, joi, class-validator)
+- Framework-provided protections (React auto-escapes JSX, Next.js built-in CSRF)
+
+When reviewing PR changes:
+1. Focus on security implications of the new or modified code
+2. Consider whether the surrounding context (imports, function signatures) suggests mitigations
+3. Cite specific line numbers from the provided diff
+4. Do NOT report issues in unchanged code
+5. Rate your confidence (high/medium/low) for each finding`;
+    } else {
+      systemPrompt = `You are an Application Security (AppSec) expert assistant specializing in Pull Request security reviews.
 
 Your task is to analyze the changed code provided in the diff context for security vulnerabilities.
 
@@ -202,6 +225,7 @@ You have access to Read, Grep, and Write tools:
 - Grep: Search the codebase for patterns (e.g., function definitions, middleware, configs)
 - Read: Read full file contents for additional context
 - Write: Write the security review report`;
+    }
 
     if (srcDir) {
       systemPrompt += `\n\nSource directory available at: ${srcDir}`;
@@ -221,7 +245,7 @@ You have access to Read, Grep, and Write tools:
         'diff-reviewer': {
           description: 'Reviews PR diff changes for security vulnerabilities',
           prompt: systemPrompt,
-          tools: ['Read', 'Grep', 'Write'],
+          tools: noTools ? ['Write'] : ['Read', 'Grep', 'Write'],
           model: this.model,
           maxTurns: resolvedMaxTurns
         } as AgentDefinition

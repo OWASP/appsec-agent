@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-03-13
+
+### Added
+- **`--no-tools` CLI flag**: Disables Read/Grep tools for the PR diff reviewer, enabling single-turn focused-context analysis mode. When combined with `--diff-context`, this is the fastest review mode — the agent produces a complete report directly from the provided diff context without making tool calls.
+- **Agent stats logging**: The diff reviewer now logs turn count, wall-clock duration, and API time at the end of each run (e.g., `[Agent Stats] turns=1, duration=12s, api_time=10s`).
+- **Verbose turn/tool progress logging**: When `--verbose` is enabled, the diff reviewer logs `[Turn N]` markers and `[Tool Progress]` events with tool names and elapsed time.
+
+### Changed
+- **No-tools system prompt for diff reviewer**: When `--no-tools` is active, uses a streamlined prompt that instructs the agent to produce a complete review directly from the provided diff context (imports, function signatures, surrounding code) without searching the codebase.
+- **Diff reviewer tool list**: With `--no-tools`, the agent only has access to the `Write` tool (for report output); otherwise uses `Read`, `Grep`, and `Write` as before.
+- `diffReviewerWithOptions()` and `getDiffReviewerOptions()` now accept a `noTools` parameter.
+- `no_tools` passed through from CLI args to `main()` for both single-file and batched PR review paths.
+- Version bump to 2.1.0.
+
 ## [2.0.1] - 2026-03-13
 
 ### Changed

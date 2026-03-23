@@ -41,6 +41,7 @@ program
   .option('-K, --openai-api-key <key>', 'OpenAI API key for failover (overrides OPENAI_API_KEY env). Only used when failover is enabled.')
   .option('-U, --openai-base-url <url>', 'OpenAI API base URL for failover (overrides OPENAI_BASE_URL env). Only used when failover is enabled.')
   .option('--max-turns <n>', 'Max agent turns (tool-use iterations). Overrides per-role default.')
+  .option('--no-tools', 'Disable Read/Grep tools for single-turn analysis (use with --diff-context for fastest mode)')
   .option('-l, --list_roles', 'List all available roles')
   .option('-v, --version', 'Program version')
   .option('-V, --verbose', 'Verbose mode');
@@ -131,7 +132,8 @@ const args = {
   diff_max_batches: options.diffMaxBatches !== undefined ? parseInt(options.diffMaxBatches, 10) : undefined,
   diff_max_files: options.diffMaxFiles !== undefined ? parseInt(options.diffMaxFiles, 10) : undefined,
   diff_exclude: Array.isArray(options.diffExclude) && options.diffExclude.length > 0 ? options.diffExclude : undefined,
-  max_turns: options.maxTurns !== undefined ? parseInt(options.maxTurns, 10) : undefined
+  max_turns: options.maxTurns !== undefined ? parseInt(options.maxTurns, 10) : undefined,
+  no_tools: options.noTools === true,
 };
 
 // Log context if provided

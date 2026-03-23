@@ -30,6 +30,7 @@ export interface AgentArgs {
   diff_max_files?: number;
   diff_exclude?: string[];  // Path patterns to exclude from diff review
   max_turns?: number;  // Override per-role maxTurns (adaptive tool budget)
+  no_tools?: boolean;  // Disable Read/Grep tools for single-turn focused-context analysis
 }
 
 interface ConversationEntry {
@@ -566,10 +567,11 @@ export class AgentActions {
   async diffReviewerWithOptions(
     userPrompt: string,
     srcDir?: string | null,
-    onResult?: (result: { total_cost_usd?: number }) => void
+    onResult?: (result: { total_cost_usd?: number }) => void,
+    noTools?: boolean,
   ): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
-    const options = agentOptions.getDiffReviewerOptions(this.args.role, srcDir, this.args.output_format, this.args.max_turns);
+    const options = agentOptions.getDiffReviewerOptions(this.args.role, srcDir, this.args.output_format, this.args.max_turns, noTools);
 
     let cursor: BlinkingCursor | null = null;
     let structuredJson = '';
@@ -579,12 +581,12 @@ export class AgentActions {
       cursor.start();
 
       try {
+        let turnCount = 0;
+
         for await (const message of llmQuery({ prompt: userPrompt, options })) {
           if (message.type === 'stream_event') {
-            // Stop cursor when we receive stream events
             if (cursor) cursor.stop();
             const streamMsg = message as any;
-            // Handle content block deltas (streaming text)
             if (streamMsg.event?.type === 'content_block_delta' && streamMsg.event.delta?.type === 'text_delta') {
               const deltaText = streamMsg.event.delta.text || '';
               if (deltaText) {
@@ -592,8 +594,11 @@ export class AgentActions {
               }
             }
           } else if (message.type === 'assistant') {
-            // Stop cursor when we receive assistant message
             if (cursor) cursor.stop();
+            turnCount++;
+            if (this.args.verbose) {
+              console.log(`[Turn ${turnCount}] Assistant response received`);
+            }
             const assistantMsg = message as SDKAssistantMessage;
             if (assistantMsg.message.content) {
               for (const block of assistantMsg.message.content) {
@@ -603,16 +608,24 @@ export class AgentActions {
               }
             }
           } else if (message.type === 'result') {
-            // Stop cursor when we receive result (in case no content was received)
             if (cursor) cursor.stop();
             const resultMsg = message as SDKResultMessage;
-            if ((resultMsg as any).structured_output) {
-              structuredJson = JSON.stringify((resultMsg as any).structured_output, null, 2);
+            const resultAny = resultMsg as any;
+            if (resultAny.structured_output) {
+              structuredJson = JSON.stringify(resultAny.structured_output, null, 2);
+            }
+            if (resultAny.num_turns !== undefined || resultAny.duration_ms !== undefined) {
+              console.log(`[Agent Stats] turns=${resultAny.num_turns ?? turnCount}, duration=${resultAny.duration_ms ? Math.round(resultAny.duration_ms / 1000) + 's' : 'N/A'}, api_time=${resultAny.duration_api_ms ? Math.round(resultAny.duration_api_ms / 1000) + 's' : 'N/A'}`);
             }
             if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
               console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);
             }
             onResult?.({ total_cost_usd: resultMsg.total_cost_usd });
+          } else if (message.type === 'tool_progress') {
+            if (this.args.verbose) {
+              const toolMsg = message as any;
+              console.log(`[Tool Progress] ${toolMsg.tool_name}: ${toolMsg.elapsed_time_seconds}s`);
+            }
           }
         }
       } finally {

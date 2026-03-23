@@ -532,7 +532,7 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
           args.output_format || 'json',
           args.context
         );
-        const structuredResult = await agentActions.diffReviewerWithOptions(userPrompt, tmpSrcDir);
+        const structuredResult = await agentActions.diffReviewerWithOptions(userPrompt, tmpSrcDir, undefined, args.no_tools);
         if (structuredResult) {
           fs.writeFileSync(outputFile, structuredResult, 'utf-8');
           console.log(`Report written to ${outputFile}`);
@@ -558,7 +558,7 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
               if (result.total_cost_usd !== undefined && result.total_cost_usd > 0) {
                 batchCosts.push(result.total_cost_usd);
               }
-            });
+            }, args.no_tools);
             if (batchResult) {
               fs.writeFileSync(batchOutputPath, batchResult, 'utf-8');
               console.log(`Batch ${i + 1} report written to ${batchOutputPath}`);

@@ -309,7 +309,9 @@ describe('main', () => {
         expect(copyProjectSrcDir).toHaveBeenCalled();
         expect(mockAgentActions.diffReviewerWithOptions).toHaveBeenCalledWith(
           expect.any(String),
-          tmpDir
+          tmpDir,
+          undefined,
+          undefined,
         );
       });
     });

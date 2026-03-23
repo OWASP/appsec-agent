@@ -293,6 +293,92 @@ describe('AgentOptions', () => {
       expect(options.agents?.['diff-reviewer']).toBeDefined();
       expect(options.agents?.['diff-reviewer'].prompt).toContain('Pull Request');
     });
+
+    describe('noTools mode', () => {
+      it('should restrict tools to Write-only when noTools is true', () => {
+        const agentOptions = new AgentOptions(mockConfDict, environment);
+        const options = agentOptions.getDiffReviewerOptions('code_reviewer', null, undefined, undefined, true);
+
+        expect(options.agents?.['diff-reviewer'].tools).toEqual(['Write']);
+      });
+
+      it('should keep Read, Grep, Write tools when noTools is false', () => {
+        const agentOptions = new AgentOptions(mockConfDict, environment);
+        const options = agentOptions.getDiffReviewerOptions('code_reviewer', null, undefined, undefined, false);
+
+        expect(options.agents?.['diff-reviewer'].tools).toEqual(['Read', 'Grep', 'Write']);
+      });
+
+      it('should keep Read, Grep, Write tools when noTools is undefined', () => {
+        const agentOptions = new AgentOptions(mockConfDict, environment);
+        const options = agentOptions.getDiffReviewerOptions('code_reviewer');
+
+        expect(options.agents?.['diff-reviewer'].tools).toEqual(['Read', 'Grep', 'Write']);
+      });
+
+      it('should use focused-context prompt without tool verification when noTools is true', () => {
+        const agentOptions = new AgentOptions(mockConfDict, environment);
+        const options = agentOptions.getDiffReviewerOptions('code_reviewer', null, undefined, undefined, true);
+        const prompt = options.agents?.['diff-reviewer'].prompt as string;
+
+        expect(prompt).toContain('Pull Request security reviews');
+        expect(prompt).toContain('diff context already includes relevant imports');
+        expect(prompt).not.toContain('Use Grep to search');
+        expect(prompt).not.toContain('Use Read to inspect');
+        expect(prompt).not.toContain('VERIFY findings by reading referenced files');
+      });
+
+      it('should use full tool-verification prompt when noTools is false', () => {
+        const agentOptions = new AgentOptions(mockConfDict, environment);
+        const options = agentOptions.getDiffReviewerOptions('code_reviewer', null, undefined, undefined, false);
+        const prompt = options.agents?.['diff-reviewer'].prompt as string;
+
+        expect(prompt).toContain('Use Grep to search');
+        expect(prompt).toContain('Use Read to inspect');
+        expect(prompt).toContain('VERIFY findings by reading referenced files');
+      });
+
+      it('should still append srcDir to prompt in noTools mode', () => {
+        const agentOptions = new AgentOptions(mockConfDict, environment);
+        const options = agentOptions.getDiffReviewerOptions('code_reviewer', '/tmp/src', undefined, undefined, true);
+
+        expect(options.agents?.['diff-reviewer'].prompt).toContain('/tmp/src');
+        expect(options.agents?.['diff-reviewer'].prompt).toContain('Source directory available');
+      });
+
+      it('should still apply maxTurns in noTools mode', () => {
+        const agentOptions = new AgentOptions(mockConfDict, environment);
+        const options = agentOptions.getDiffReviewerOptions('code_reviewer', null, undefined, 2, true);
+
+        expect((options.agents?.['diff-reviewer'] as any).maxTurns).toBe(2);
+      });
+
+      it('should still add JSON schema in noTools mode with json output', () => {
+        const agentOptions = new AgentOptions(mockConfDict, environment);
+        const options = agentOptions.getDiffReviewerOptions('code_reviewer', null, 'json', undefined, true);
+
+        expect(options.outputFormat).toBeDefined();
+        expect((options.outputFormat as any).type).toBe('json_schema');
+      });
+
+      it('should allow config override to replace noTools prompt', () => {
+        const confWithOverride: ConfigDict = {
+          default: {
+            ...mockConfDict.default,
+            code_reviewer: {
+              options: {
+                diff_reviewer_system_prompt: 'Custom override prompt'
+              }
+            }
+          }
+        };
+        const agentOptions = new AgentOptions(confWithOverride, environment);
+        const options = agentOptions.getDiffReviewerOptions('code_reviewer', null, undefined, undefined, true);
+
+        expect(options.agents?.['diff-reviewer'].prompt).toBe('Custom override prompt');
+        expect(options.agents?.['diff-reviewer'].tools).toEqual(['Write']);
+      });
+    });
   });
 
   describe('getCodeFixerOptions', () => {

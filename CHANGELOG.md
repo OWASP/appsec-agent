@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1] - 2026-03-13
+
+### Added
+- **Comprehensive test coverage for `--no-tools` mode**: 9 new tests in `agent_options.test.ts` covering the `noTools` parameter for `getDiffReviewerOptions` — tool restriction (`Write`-only vs `Read`/`Grep`/`Write`), focused-context prompt vs tool-verification prompt, `srcDir` appending, `maxTurns` passthrough, JSON schema output with `noTools`, and config override behavior. Total tests: 326 across 14 suites.
+- Version bump to 2.1.1.
+
 ## [2.1.0] - 2026-03-13
 
 ### Added

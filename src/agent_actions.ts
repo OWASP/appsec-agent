@@ -206,6 +206,8 @@ export class AgentActions {
 
     let cursor: BlinkingCursor | null = null;
     let structuredJson = '';
+    let hadSuccessfulRun = false;
+    let apiCostUsd = 0;
 
     try {
       // Start blinking cursor to show we're waiting for Claude's response
@@ -240,6 +242,13 @@ export class AgentActions {
             // Stop cursor when we receive result (in case no content was received)
             if (cursor) cursor.stop();
             const resultMsg = message as SDKResultMessage;
+            
+            // Track if this was a successful run with API usage
+            if (!resultMsg.is_error && resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
+              hadSuccessfulRun = true;
+              apiCostUsd = resultMsg.total_cost_usd;
+            }
+            
             if ((resultMsg as any).structured_output) {
               structuredJson = JSON.stringify((resultMsg as any).structured_output, null, 2);
             }
@@ -264,6 +273,36 @@ export class AgentActions {
       console.error('Error during code review:', error);
       throw error;
     }
+    
+    // Fallback: If agent completed successfully but didn't return structured output,
+    // generate an empty report to avoid "No report generated" errors
+    if (!structuredJson && hadSuccessfulRun && this.args.output_format?.toLowerCase() === 'json') {
+      console.log('[Fallback] Agent completed but no structured output received, generating empty report');
+      const fallbackReport = {
+        security_review_report: {
+          metadata: {
+            scan_date: new Date().toISOString(),
+            scan_type: 'Full Code Review',
+            total_files_reviewed: 0,
+            total_issues_found: 0
+          },
+          executive_summary: {
+            overview: 'Security review completed. The AI agent analyzed the code but did not return structured findings. This may indicate no security issues were found, or the review requires manual follow-up.',
+            risk_rating: 'UNKNOWN',
+            critical: 0,
+            high: 0,
+            medium: 0,
+            low: 0,
+            info: 0
+          },
+          findings: [],
+          recommendations: [],
+          conclusion: `Review completed with $${apiCostUsd.toFixed(4)} API cost but no structured output was returned. Consider re-running the scan or performing manual review.`
+        }
+      };
+      structuredJson = JSON.stringify(fallbackReport, null, 2);
+    }
+    
     console.log();
     return structuredJson;
   }
@@ -575,6 +614,8 @@ export class AgentActions {
 
     let cursor: BlinkingCursor | null = null;
     let structuredJson = '';
+    let hadSuccessfulRun = false;
+    let apiCostUsd = 0;
 
     try {
       cursor = new BlinkingCursor();
@@ -611,6 +652,13 @@ export class AgentActions {
             if (cursor) cursor.stop();
             const resultMsg = message as SDKResultMessage;
             const resultAny = resultMsg as any;
+            
+            // Track if this was a successful run with API usage
+            if (!resultMsg.is_error && resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
+              hadSuccessfulRun = true;
+              apiCostUsd = resultMsg.total_cost_usd;
+            }
+            
             if (resultAny.structured_output) {
               structuredJson = JSON.stringify(resultAny.structured_output, null, 2);
             }
@@ -644,6 +692,36 @@ export class AgentActions {
       console.error('Error during PR diff code review:', error);
       throw error;
     }
+    
+    // Fallback: If agent completed successfully but didn't return structured output,
+    // generate an empty report to avoid "No report generated" errors
+    if (!structuredJson && hadSuccessfulRun && this.args.output_format?.toLowerCase() === 'json') {
+      console.log('[Fallback] Agent completed but no structured output received, generating empty report');
+      const fallbackReport = {
+        security_review_report: {
+          metadata: {
+            scan_date: new Date().toISOString(),
+            scan_type: 'PR Diff Review',
+            total_files_reviewed: 0,
+            total_issues_found: 0
+          },
+          executive_summary: {
+            overview: 'Security review completed. The AI agent analyzed the code but did not return structured findings. This may indicate no security issues were found, or the review requires manual follow-up.',
+            risk_rating: 'UNKNOWN',
+            critical: 0,
+            high: 0,
+            medium: 0,
+            low: 0,
+            info: 0
+          },
+          findings: [],
+          recommendations: [],
+          conclusion: `Review completed with $${apiCostUsd.toFixed(4)} API cost but no structured output was returned. Consider re-running the scan or performing manual review.`
+        }
+      };
+      structuredJson = JSON.stringify(fallbackReport, null, 2);
+    }
+    
     console.log();
     return structuredJson;
   }

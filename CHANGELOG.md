@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.2] - 2026-04-02
+
+### Fixed
+- **Fallback report when structured output is missing**: When the Claude Agent SDK completes successfully but doesn't return `structured_output`, the agent now generates an empty fallback report (with zeroed severity counts and an explanatory summary) instead of returning nothing. This prevents "No report generated" errors in downstream consumers.
+  - Tracks successful API runs via `hadSuccessfulRun` and `apiCostUsd` from the result message.
+  - Applies to both `codeReviewerWithOptions` (Full Code Review) and `diffReviewerWithOptions` (PR Diff Review) when `--output-format json` is active.
+- Version bump to 2.1.2.
+
 ## [2.1.1] - 2026-03-13
 
 ### Added

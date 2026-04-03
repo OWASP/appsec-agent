@@ -243,10 +243,16 @@ export class AgentActions {
             if (cursor) cursor.stop();
             const resultMsg = message as SDKResultMessage;
             
-            // Track if this was a successful run with API usage
-            if (!resultMsg.is_error && resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
-              hadSuccessfulRun = true;
+            // Track API cost for potential fallback report
+            // Consider it a successful run if we got cost, even if is_error is set
+            if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
               apiCostUsd = resultMsg.total_cost_usd;
+              hadSuccessfulRun = true;
+            }
+            
+            // Log if is_error is set despite having output
+            if (resultMsg.is_error && apiCostUsd > 0) {
+              console.log(`[Warning] SDK reported is_error=true despite successful API usage ($${apiCostUsd.toFixed(4)})`);
             }
             
             if ((resultMsg as any).structured_output) {
@@ -653,10 +659,17 @@ export class AgentActions {
             const resultMsg = message as SDKResultMessage;
             const resultAny = resultMsg as any;
             
-            // Track if this was a successful run with API usage
-            if (!resultMsg.is_error && resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
-              hadSuccessfulRun = true;
+            // Track API cost for potential fallback report
+            // Consider it a successful run if we got cost, even if is_error is set
+            // (SDK may set is_error when max_turns is reached but agent still produced output)
+            if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
               apiCostUsd = resultMsg.total_cost_usd;
+              hadSuccessfulRun = true;
+            }
+            
+            // Log if is_error is set despite having output
+            if (resultMsg.is_error && apiCostUsd > 0) {
+              console.log(`[Warning] SDK reported is_error=true despite successful API usage ($${apiCostUsd.toFixed(4)})`);
             }
             
             if (resultAny.structured_output) {

@@ -13,6 +13,15 @@ import { QA_VERDICT_SCHEMA } from './schemas/qa_context';
 import { RETEST_VERDICT_SCHEMA } from './schemas/finding_validator';
 import { CONTEXT_EXTRACTION_SCHEMA } from './schemas/context_extraction';
 
+const FIX_CODE_VS_OPTIONS_GUIDANCE = `
+
+FIXED CODE vs FIX OPTIONS:
+- Use "fixed_code" ONLY for executable, compilable code that directly replaces the vulnerable code_snippet.
+  Never put comments, recommendations, or "Option 1: ..." text into fixed_code.
+- Use "fix_options" when the fix requires architectural decisions, domain-specific knowledge,
+  or when multiple valid remediation approaches exist. Each option needs an id, title, and description.
+- Provide either fixed_code OR fix_options per finding, not both.`;
+
 export interface ToolUsageLog {
   tool: string;
   input: any;
@@ -98,8 +107,12 @@ export class AgentOptions {
    */
   getCodeReviewerOptions(role: string = 'code_reviewer', outputFormat?: string): Options {
     const roleConfig = this.confDict[this.environment]?.[role];
-    const systemPrompt = roleConfig?.options?.system_prompt || 
+    let systemPrompt = roleConfig?.options?.system_prompt || 
       'You are an Application Security (AppSec) expert assistant. You are responsible for performing a thorough code review. List out all the potential security and privacy issues found in the code.';
+
+    if (outputFormat?.toLowerCase() === 'json') {
+      systemPrompt += FIX_CODE_VS_OPTIONS_GUIDANCE;
+    }
 
     const resolvedMaxTurns = roleConfig?.options?.max_turns ?? 30;
 
@@ -234,6 +247,10 @@ You have access to Read, Grep, and Write tools:
     // Allow role config to override the system prompt
     if (roleConfig?.options?.diff_reviewer_system_prompt) {
       systemPrompt = roleConfig.options.diff_reviewer_system_prompt;
+    }
+
+    if (outputFormat?.toLowerCase() === 'json') {
+      systemPrompt += FIX_CODE_VS_OPTIONS_GUIDANCE;
     }
 
     const resolvedMaxTurns = maxTurns

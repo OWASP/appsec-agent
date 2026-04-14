@@ -8,6 +8,12 @@
  * Author: Sam Li
  */
 
+export interface FixOption {
+  id: number;
+  title: string;
+  description: string;
+}
+
 export interface SecurityFinding {
   id: string;
   title: string;
@@ -23,6 +29,7 @@ export interface SecurityFinding {
   impact?: string;
   recommendation: string;
   fixed_code?: string;
+  fix_options?: FixOption[];
   cwe?: string;
   owasp?: string;
   references?: string[];
@@ -130,7 +137,20 @@ export const SECURITY_REPORT_SCHEMA: Record<string, unknown> = {
               },
               fixed_code: {
                 type: 'string',
-                description: 'Corrected code that fixes the vulnerability'
+                description: 'Executable drop-in replacement code that fixes the vulnerability. MUST be compilable/runnable code, NOT comments or recommendations. If a direct fix is not possible, leave this empty and use fix_options instead.'
+              },
+              fix_options: {
+                type: 'array',
+                description: 'When a direct code fix requires architectural decisions or domain knowledge, provide structured remediation options instead of fixed_code.',
+                items: {
+                  type: 'object',
+                  required: ['id', 'title', 'description'],
+                  properties: {
+                    id: { type: 'integer', description: 'Option number (1, 2, 3, ...)' },
+                    title: { type: 'string', description: 'Short title for the remediation approach' },
+                    description: { type: 'string', description: 'Detailed description of how this option resolves the vulnerability' }
+                  }
+                }
               },
               cwe: {
                 type: 'string',

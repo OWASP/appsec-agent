@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.4] - 2026-04-14
+
+### Added
+- **`fix_options` field in SecurityFinding schema**: New `fix_options` array on findings for cases where a direct code fix requires architectural decisions or domain-specific knowledge. Each option has an `id`, `title`, and `description`. Complements the existing `fixed_code` field — a finding should provide one or the other, not both.
+- **`FixOption` TypeScript interface**: Exported from `src/schemas/security_report.ts`.
+
+### Changed
+- **System prompt guidance for `fixed_code` vs `fix_options`**: When output format is JSON, the code reviewer and diff reviewer system prompts now include explicit instructions distinguishing executable `fixed_code` (compilable drop-in replacement) from structured `fix_options` (multiple remediation approaches). Prevents non-code content from being placed in `fixed_code`.
+- **`fixed_code` schema description tightened**: Updated to clarify it must be executable, compilable code — not comments or recommendations.
+- Version bump to 2.1.4.
+
 ## [2.1.2] - 2026-04-02
 
 ### Fixed

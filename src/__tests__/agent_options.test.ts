@@ -4,6 +4,7 @@
 
 import { AgentOptions, ToolUsageLog } from '../agent_options';
 import { ConfigDict } from '../utils';
+import { SECURITY_REPORT_SCHEMA } from '../schemas/security_report';
 
 describe('AgentOptions', () => {
   let mockConfDict: ConfigDict;
@@ -191,6 +192,32 @@ describe('AgentOptions', () => {
 
       expect(options.agents?.['code-reviewer'].prompt).toBe('Code review system prompt');
     });
+
+    it('should append fix_code vs fix_options guidance when output format is json', () => {
+      const agentOptions = new AgentOptions(mockConfDict, environment);
+      const options = agentOptions.getCodeReviewerOptions('code_reviewer', 'json');
+      const prompt = options.agents?.['code-reviewer'].prompt as string;
+
+      expect(prompt).toContain('FIXED CODE vs FIX OPTIONS');
+      expect(prompt).toContain('fixed_code');
+      expect(prompt).toContain('fix_options');
+    });
+
+    it('should not append fix guidance when output format is markdown', () => {
+      const agentOptions = new AgentOptions(mockConfDict, environment);
+      const options = agentOptions.getCodeReviewerOptions('code_reviewer', 'markdown');
+      const prompt = options.agents?.['code-reviewer'].prompt as string;
+
+      expect(prompt).not.toContain('FIXED CODE vs FIX OPTIONS');
+    });
+
+    it('should not append fix guidance when output format is undefined', () => {
+      const agentOptions = new AgentOptions(mockConfDict, environment);
+      const options = agentOptions.getCodeReviewerOptions('code_reviewer');
+      const prompt = options.agents?.['code-reviewer'].prompt as string;
+
+      expect(prompt).not.toContain('FIXED CODE vs FIX OPTIONS');
+    });
   });
 
   describe('getThreatModelerOptions', () => {
@@ -292,6 +319,51 @@ describe('AgentOptions', () => {
 
       expect(options.agents?.['diff-reviewer']).toBeDefined();
       expect(options.agents?.['diff-reviewer'].prompt).toContain('Pull Request');
+    });
+
+    it('should append fix_code vs fix_options guidance when output format is json', () => {
+      const agentOptions = new AgentOptions(mockConfDict, environment);
+      const options = agentOptions.getDiffReviewerOptions('code_reviewer', null, 'json');
+      const prompt = options.agents?.['diff-reviewer'].prompt as string;
+
+      expect(prompt).toContain('FIXED CODE vs FIX OPTIONS');
+      expect(prompt).toContain('fixed_code');
+      expect(prompt).toContain('fix_options');
+    });
+
+    it('should not append fix guidance when output format is markdown', () => {
+      const agentOptions = new AgentOptions(mockConfDict, environment);
+      const options = agentOptions.getDiffReviewerOptions('code_reviewer', null, 'markdown');
+      const prompt = options.agents?.['diff-reviewer'].prompt as string;
+
+      expect(prompt).not.toContain('FIXED CODE vs FIX OPTIONS');
+    });
+
+    it('should not append fix guidance when output format is undefined', () => {
+      const agentOptions = new AgentOptions(mockConfDict, environment);
+      const options = agentOptions.getDiffReviewerOptions('code_reviewer');
+      const prompt = options.agents?.['diff-reviewer'].prompt as string;
+
+      expect(prompt).not.toContain('FIXED CODE vs FIX OPTIONS');
+    });
+
+    it('should append fix guidance even with config override prompt when json', () => {
+      const confWithOverride: ConfigDict = {
+        default: {
+          ...mockConfDict.default,
+          code_reviewer: {
+            options: {
+              diff_reviewer_system_prompt: 'Custom diff review prompt'
+            }
+          }
+        }
+      };
+      const agentOptions = new AgentOptions(confWithOverride, environment);
+      const options = agentOptions.getDiffReviewerOptions('code_reviewer', null, 'json');
+      const prompt = options.agents?.['diff-reviewer'].prompt as string;
+
+      expect(prompt).toContain('Custom diff review prompt');
+      expect(prompt).toContain('FIXED CODE vs FIX OPTIONS');
     });
 
     describe('noTools mode', () => {
@@ -638,6 +710,36 @@ describe('AgentOptions', () => {
 
       expect(options.agents?.['finding-validator'].model).toBe('haiku');
     });
+  });
+});
+
+describe('SECURITY_REPORT_SCHEMA', () => {
+  const findingsSchema = (SECURITY_REPORT_SCHEMA as any).properties.security_review_report.properties.findings;
+  const findingProps = findingsSchema.items.properties;
+
+  it('should include fix_options in finding properties', () => {
+    expect(findingProps.fix_options).toBeDefined();
+    expect(findingProps.fix_options.type).toBe('array');
+  });
+
+  it('should require id, title, description on fix_options items', () => {
+    const itemSchema = findingProps.fix_options.items;
+
+    expect(itemSchema.type).toBe('object');
+    expect(itemSchema.required).toEqual(['id', 'title', 'description']);
+  });
+
+  it('should define correct types for fix_options item properties', () => {
+    const itemProps = findingProps.fix_options.items.properties;
+
+    expect(itemProps.id.type).toBe('integer');
+    expect(itemProps.title.type).toBe('string');
+    expect(itemProps.description.type).toBe('string');
+  });
+
+  it('should have updated fixed_code description mentioning fix_options', () => {
+    expect(findingProps.fixed_code.description).toContain('compilable/runnable code');
+    expect(findingProps.fixed_code.description).toContain('fix_options');
   });
 });
 

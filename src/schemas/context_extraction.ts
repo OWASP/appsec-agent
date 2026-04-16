@@ -24,6 +24,7 @@ export interface ExtractionContext {
   description: string | null;
   language: string | null;
   languages: Record<string, number>;
+  tree_summary?: string;
   files: ExtractionContextFile[];
 }
 
@@ -36,6 +37,7 @@ export interface ExtractionResult {
   security_context: string;
   deployment_context: string;
   developer_context: string;
+  suggested_exclusions: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -69,7 +71,7 @@ export function loadExtractionContext(filePath: string, cwd: string): Extraction
 
 export const CONTEXT_EXTRACTION_SCHEMA: Record<string, unknown> = {
   type: 'object',
-  required: ['project_summary', 'security_context', 'deployment_context', 'developer_context'],
+  required: ['project_summary', 'security_context', 'deployment_context', 'developer_context', 'suggested_exclusions'],
   properties: {
     project_summary: {
       type: 'string',
@@ -86,6 +88,10 @@ export const CONTEXT_EXTRACTION_SCHEMA: Record<string, unknown> = {
     developer_context: {
       type: 'string',
       description: 'Security-relevant developer guidance ONLY: rules about PHI/PII handling, SQL injection prevention, auth patterns, input validation requirements, compliance (HIPAA/SOX/GDPR). Exclude generic coding style, formatting, naming conventions. Max 2000 chars.',
+    },
+    suggested_exclusions: {
+      type: 'string',
+      description: 'Comma-separated glob patterns for directories/files that should be excluded from security scans because they contain non-production code specific to THIS project. Only suggest patterns NOT already covered by the standard preset (node_modules, vendor, .git, __pycache__, dist, build, tests, __tests__, e2e, helm, terraform, .codefresh, .next, spec, __fixtures__, __mocks__, __snapshots__, *.test.ts, *.spec.ts, *.stories.ts). Look for: generated code dirs, vendored third-party copies, large asset directories (images, fonts), documentation-only dirs, migration/seed scripts, example/sample code. Return empty string if no project-specific exclusions are needed. Max 500 chars.',
     },
   },
   additionalProperties: false,

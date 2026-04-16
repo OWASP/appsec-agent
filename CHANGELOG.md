@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.5] - 2026-04-15
+
+### Added
+- **`suggested_exclusions` field in context extraction**: New `suggested_exclusions` string on `ExtractionResult` for the context extractor to recommend project-specific glob patterns that should be excluded from security scans. Only suggests patterns not already covered by the standard preset (node_modules, vendor, dist, tests, etc.). Added to schema, system prompt, and user prompt with detailed guidance.
+- **`tree_summary` support in `ExtractionContext`**: Optional `tree_summary` field on `ExtractionContext` is now rendered as a "Repository Tree Structure" section in the context extractor prompt, giving the agent visibility into the full directory layout for better exclusion analysis.
+- **Tests for `suggested_exclusions`**: Two new tests verifying the schema includes `suggested_exclusions` as a required field and the default system prompt references it.
+
+### Changed
+- Version bump to 2.1.5.
+
 ## [2.1.4] - 2026-04-14
 
 ### Added

@@ -373,7 +373,10 @@ You have access to Read, Grep, and Write tools:
       'For security_context, list concrete library names and mechanisms (e.g., "bcrypt for password hashing", ' +
       '"Django ORM with parameterized queries"). For developer_context, include ONLY security-relevant guidance ' +
       '(PHI handling, SQL injection rules, auth patterns, compliance requirements) — exclude generic coding style, ' +
-      'formatting, naming conventions, and UI/component patterns. If a field has no relevant information, return an empty string.';
+      'formatting, naming conventions, and UI/component patterns. For suggested_exclusions, analyze the repository ' +
+      'tree structure to identify directories containing non-production code (generated assets, vendored copies, ' +
+      'migrations, seed data, visual assets, documentation) that should be excluded from security scans. Only ' +
+      'suggest patterns NOT already in the standard preset. If a field has no relevant information, return an empty string.';
 
     const options: Options = {
       agents: {

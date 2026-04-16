@@ -636,6 +636,26 @@ describe('AgentOptions', () => {
       expect(options.outputFormat).toBeDefined();
       expect((options.outputFormat as any).type).toBe('json_schema');
     });
+
+    it('should include suggested_exclusions in schema required fields', () => {
+      const emptyConfDict: ConfigDict = { default: {} };
+      const agentOptions = new AgentOptions(emptyConfDict, environment);
+      const options = agentOptions.getContextExtractorOptions();
+
+      const schema = (options.outputFormat as any).schema;
+      expect(schema.required).toContain('suggested_exclusions');
+      expect(schema.properties).toHaveProperty('suggested_exclusions');
+      expect(schema.properties.suggested_exclusions.type).toBe('string');
+    });
+
+    it('should mention exclusion analysis in default system prompt', () => {
+      const emptyConfDict: ConfigDict = { default: {} };
+      const agentOptions = new AgentOptions(emptyConfDict, environment);
+      const options = agentOptions.getContextExtractorOptions();
+
+      const prompt = options.agents?.['context-extractor'].prompt;
+      expect(prompt).toContain('suggested_exclusions');
+    });
   });
 
   describe('getFindingValidatorOptions', () => {

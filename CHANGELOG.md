@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.6] - 2026-04-15
+
+### Added
+- **Test coverage for `agent_actions.ts`**: 29 new tests covering `codeFixerWithOptions`, `qaVerifierWithOptions`, `contextExtractorWithOptions`, `findingValidatorWithOptions`, and `diffReviewerWithOptions` (including fallback report generation, `onResult` callback, `is_error` warning path, stream-event accumulation, verbose turn count, `tool_progress` logging, and `noTools` flag passthrough). Coverage rose from **34.31% → 87.99%** statements.
+- **Test coverage for `schemas/context_extraction.ts`**: 12 new tests in `src/__tests__/context_extraction.test.ts` for `loadExtractionContext` (absolute/relative paths, `tree_summary` passthrough, missing file, owner/repo/files validation, malformed JSON) plus schema invariants. Coverage rose from **25% → 100%**.
+- Total tests: 339 → 380.
+
+### Changed
+- **Refined `suggested_exclusions` guidance**: Both the context-extractor system prompt and the user prompt now instruct the agent to study the tree at ALL nesting depths and use specific paths (e.g., `backend/scripts/**`, `packages/*/resources/**`) rather than generic globs. Standard preset documentation expanded to include `coverage`, `__fixtures__`, `__mocks__`, `__snapshots__`, log/temp/runtime dirs, and IDE config dirs.
+- **`@anthropic-ai/claude-agent-sdk`** bumped from `^0.2.74` to `^0.2.112`.
+- **`@anthropic-ai/claude-code`** peer dependency bumped from `2.1.74` to `2.1.112`.
+- `.gitignore` now excludes the `/docs/` folder (internal-only documentation).
+- Version bump to 2.1.6.
+
 ## [2.1.5] - 2026-04-15
 
 ### Added

@@ -36,14 +36,14 @@ A TypeScript package that provides AI-powered agents for Application Security (A
 - npm or yarn
 - Anthropic API key
 
-### Step 1: Install Claude Code
-Our agent toolkit is built on top of Claude Agent SDK (v0.1.58), which in turn is built on top of Claude Code. To install our toolkit, you need to start with Claude Code. You may want to install it in the global user space:
+### Step 1: Install appsec-agent
 
-```bash
-$ npm install -g @anthropic-ai/claude-code@2.0.58
-```
+> Note on Claude Code: `@anthropic-ai/claude-agent-sdk` bundles its own
+> native `claude` binary for every supported `(platform, arch, libc)`, so
+> the standalone `@anthropic-ai/claude-code` CLI is **not required** to
+> run this package. Install it globally only if you want the `claude` CLI
+> on your `PATH` for manual use.
 
-### Step 2: Install appsec-agent
 Install the package from npm:
 
 ```bash

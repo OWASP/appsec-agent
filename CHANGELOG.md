@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.7] - 2026-04-18
+
+### Changed
+- **`@anthropic-ai/claude-agent-sdk` pin tightened** from `^0.2.112` to exact `0.2.112`. The agent SDK's native-binary resolver is version-coupled to the bundled `claude` binary, so patch drift from a `^` range can silently change runtime behavior. Pin is now explicit; bumps require a package-level change.
+- **`@anthropic-ai/claude-code` peer dependency removed.** Nothing in `appsec-agent` imports from `@anthropic-ai/claude-code`, and the agent SDK already ships the `claude` binary it spawns. Installing the standalone CLI globally was cosmetic at best and a version-drift foot‑gun at worst. Consumers who want the `claude` CLI on `PATH` for manual use can install it themselves.
+- **README Step 1 rewritten** to remove the misleading `npm install -g @anthropic-ai/claude-code@2.0.58` instruction.
+
 ## [2.1.6] - 2026-04-15
 
 ### Added

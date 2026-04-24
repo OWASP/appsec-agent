@@ -185,7 +185,14 @@ export class AgentOptions {
    * @param srcDir - Optional source directory path
    * @param outputFormat - Output format (json, markdown, etc.)
    */
-  getDiffReviewerOptions(role: string = 'code_reviewer', srcDir?: string | null, outputFormat?: string, maxTurns?: number, noTools?: boolean): Options {
+  getDiffReviewerOptions(
+    role: string = 'code_reviewer',
+    srcDir?: string | null,
+    outputFormat?: string,
+    maxTurns?: number,
+    noTools?: boolean,
+    experimentEnabled?: boolean,
+  ): Options {
     const roleConfig = this.confDict[this.environment]?.[role];
     
     let systemPrompt: string;
@@ -251,6 +258,12 @@ You have access to Read, Grep, and Write tools:
 
     if (outputFormat?.toLowerCase() === 'json') {
       systemPrompt += FIX_CODE_VS_OPTIONS_GUIDANCE;
+    }
+
+    if (experimentEnabled) {
+      systemPrompt += `
+
+**Experiment (treatment arm):** Apply stricter false-positive controls. Before reporting a finding, require a concrete failure or exploit path visible from the diff or verified in-repo (Grep/Read). Prefer MEDIUM over HIGH when evidence is mostly circumstantial.`;
     }
 
     const resolvedMaxTurns = maxTurns
@@ -432,6 +445,52 @@ You have access to Read, Grep, and Write tools:
     };
 
     return options;
+  }
+
+  /**
+   * pr_adversary: second pass that filters pr_reviewer findings using failure-path skepticism.
+   * Output: same SECURITY_REPORT_SCHEMA with only surviving findings.
+   */
+  getPrAdversaryOptions(
+    role: string = 'pr_adversary',
+    srcDir?: string | null,
+    maxTurns?: number,
+    experimentEnabled?: boolean,
+  ): Options {
+    const roleConfig = this.confDict[this.environment]?.[role];
+    let systemPrompt =
+      roleConfig?.options?.system_prompt ||
+      'You are a senior application security engineer performing an adversarial second pass on security findings. ' +
+        'You skeptically test whether each reported issue has a *concrete* failure or exploit path in the real code. ' +
+        'You have Read and Grep to verify mitigations, reachability, and false positives. ' +
+        'Your output is only the filtered security report JSON: drop findings you cannot ground in a specific exploit or failure path.';
+
+    if (srcDir) {
+      systemPrompt += `\n\nSource code is available at: ${srcDir}. Use Read and Grep to verify code paths before keeping a finding.`;
+    }
+    if (experimentEnabled) {
+      systemPrompt +=
+        '\n\n**Experiment (treatment):** Bias toward dropping borderline issues unless the diff plus quick repo checks show a real attack surface.';
+    }
+
+    const resolvedMaxTurns = maxTurns ?? roleConfig?.options?.max_turns ?? 15;
+
+    return {
+      agents: {
+        'pr-adversary': {
+          description: 'Adversarial second pass: filters PR scan findings by concrete failure paths',
+          prompt: systemPrompt,
+          tools: ['Read', 'Grep'],
+          model: this.model,
+          maxTurns: resolvedMaxTurns,
+        } as AgentDefinition,
+      },
+      permissionMode: 'bypassPermissions',
+      outputFormat: {
+        type: 'json_schema',
+        schema: SECURITY_REPORT_SCHEMA,
+      },
+    };
   }
 }
 

@@ -273,6 +273,41 @@ $ npx agent-run -r pr_reviewer -d pr-diff.json
 $ npx agent-run -r code_reviewer -d pr-diff.json --diff-max-tokens 150000 --diff-max-batches 3
 ```
 
+#### Adversarial second pass (`pr_adversary`, v5.3.0)
+
+After a `pr_reviewer` run, the parent app (e.g. sast-ai) can invoke a **second pass** that drops findings without a concrete failure/exploit path. Input is a JSON file listing candidate findings; output is a **filtered** `security_review_report` (same schema as the main PR report).
+
+```bash
+# Filter candidate findings (JSON in → JSON out). Optional: same PR diff for context.
+$ npx agent-run -r pr_adversary --adversarial-context candidates.json -s ./repo -f json \
+  -o adversarial_code_review_report.json
+
+# Optional: include diff context (large diffs are truncated for the prompt)
+$ npx agent-run -r pr_adversary --adversarial-context candidates.json --diff-context pr-diff.json -s ./repo -f json
+```
+
+- **`--experiment-enabled`:** adds stricter FP instructions for this pass; for `pr_reviewer`, also tightens the initial diff review when your integrator passes this flag.
+
+**Input file shape** (minimum per finding: `id`, `title`, `file`, `description`):
+
+```json
+{
+  "findings": [
+    {
+      "id": "SEC-001",
+      "title": "…",
+      "file": "src/a.ts",
+      "description": "…",
+      "severity": "HIGH",
+      "confidence": "HIGH",
+      "recommendation": "…"
+    }
+  ],
+  "pr_number": 123,
+  "head_sha": "abc123"
+}
+```
+
 ### Code Fixer Example
 ```bash
 # Fix a vulnerability described in a fix context JSON file

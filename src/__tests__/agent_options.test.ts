@@ -450,6 +450,14 @@ describe('AgentOptions', () => {
         expect(options.agents?.['diff-reviewer'].prompt).toBe('Custom override prompt');
         expect(options.agents?.['diff-reviewer'].tools).toEqual(['Write']);
       });
+
+      it('should append experiment treatment instructions when experimentEnabled is true', () => {
+        const agentOptions = new AgentOptions(mockConfDict, environment);
+        const on = agentOptions.getDiffReviewerOptions('code_reviewer', null, 'json', undefined, false, true);
+        const off = agentOptions.getDiffReviewerOptions('code_reviewer', null, 'json', undefined, false, false);
+        expect(String((on.agents as any)['diff-reviewer'].prompt)).toContain('Experiment (treatment arm)');
+        expect(String((off.agents as any)['diff-reviewer'].prompt)).not.toContain('Experiment (treatment arm)');
+      });
     });
   });
 
@@ -729,6 +737,37 @@ describe('AgentOptions', () => {
       const options = agentOptions.getFindingValidatorOptions();
 
       expect(options.agents?.['finding-validator'].model).toBe('haiku');
+    });
+  });
+
+  describe('getPrAdversaryOptions', () => {
+    it('should return Read/Grep and security report JSON schema', () => {
+      const conf: ConfigDict = {
+        default: {
+          pr_adversary: {
+            options: {
+              system_prompt: 'Adversarial custom prompt',
+            },
+          },
+        },
+      };
+      const agentOptions = new AgentOptions(conf, environment);
+      const options = agentOptions.getPrAdversaryOptions('pr_adversary', '/tmp/repo', 12, false);
+
+      expect(options.agents?.['pr-adversary'].tools).toEqual(['Read', 'Grep']);
+      expect(options.agents?.['pr-adversary'].maxTurns).toBe(12);
+      expect((options.outputFormat as { type: string }).type).toBe('json_schema');
+      expect(String(options.agents?.['pr-adversary'].prompt)).toContain('Adversarial custom prompt');
+      expect(String(options.agents?.['pr-adversary'].prompt)).toContain('/tmp/repo');
+    });
+
+    it('should add experiment line when experimentEnabled is true', () => {
+      const emptyConfDict: ConfigDict = { default: {} };
+      const agentOptions = new AgentOptions(emptyConfDict, environment);
+      const on = agentOptions.getPrAdversaryOptions('pr_adversary', null, undefined, true);
+      const off = agentOptions.getPrAdversaryOptions('pr_adversary', null, undefined, false);
+      expect(String((on.agents as any)['pr-adversary'].prompt)).toContain('Experiment (treatment)');
+      expect(String((off.agents as any)['pr-adversary'].prompt)).not.toContain('Experiment (treatment)');
     });
   });
 });

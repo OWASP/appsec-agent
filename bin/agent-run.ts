@@ -31,6 +31,14 @@ program
   .option('--fix-context <file>', 'JSON file with fix context for code_fixer role (finding + code context)')
   .option('--qa-context <file>', 'JSON file with QA context for qa_verifier role (PR URL + test configuration)')
   .option('--retest-context <file>', 'JSON file with retest context for finding_validator role (finding + code snippet)')
+  .option(
+    '--adversarial-context <file>',
+    'JSON file with candidate findings for pr_adversary second pass (v5.3.0; use with -r pr_adversary)',
+  )
+  .option(
+    '--experiment-enabled',
+    'A/B treatment arm: stricter FP controls for pr_reviewer diff mode; optional variant for pr_adversary',
+  )
   .option('--extract-context <file>', 'JSON file with extraction context for context_extractor role (repo metadata + files)')
   .option('--diff-max-tokens <n>', 'Max tokens per batch for PR chunking (0 = disabled). Overrides config.')
   .option('--diff-max-batches <n>', 'Max batches per PR run (e.g. 3). Overrides config.')
@@ -127,6 +135,8 @@ const args = {
   qa_context: options.qaContext,
   retest_context: options.retestContext,
   extract_context: options.extractContext,
+  adversarial_context: options.adversarialContext,
+  experiment_enabled: options.experimentEnabled === true,
   model: model,
   diff_max_tokens_per_batch: options.diffMaxTokens !== undefined ? parseInt(options.diffMaxTokens, 10) : undefined,
   diff_max_batches: options.diffMaxBatches !== undefined ? parseInt(options.diffMaxBatches, 10) : undefined,

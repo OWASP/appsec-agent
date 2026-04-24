@@ -390,5 +390,29 @@ describe('agent-run CLI', () => {
       });
     });
   });
+
+  describe('v5.3.0 flags (adversarial pass + experiment)', () => {
+    it('should map --adversarial-context and --experiment-enabled to main args', () => {
+      const { Command } = require('commander');
+      const mockCommand = Command();
+      mockCommand.opts.mockReturnValue({
+        role: 'pr_adversary',
+        environment: 'default',
+        adversarialContext: '/tmp/in.json',
+        experimentEnabled: true,
+        output_format: 'json',
+      });
+      const options = mockCommand.opts();
+      const args = {
+        role: options.role,
+        environment: options.environment,
+        adversarial_context: options.adversarialContext,
+        experiment_enabled: options.experimentEnabled === true,
+        output_format: options.output_format,
+      };
+      expect(args.adversarial_context).toBe('/tmp/in.json');
+      expect(args.experiment_enabled).toBe(true);
+    });
+  });
 });
 

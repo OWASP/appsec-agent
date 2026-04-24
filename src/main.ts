@@ -15,6 +15,12 @@ import { FixContext } from './schemas/security_fix';
 import { loadQaContext, QaContext } from './schemas/qa_context';
 import { loadRetestContext, RetestContext } from './schemas/finding_validator';
 import { loadExtractionContext, ExtractionContext } from './schemas/context_extraction';
+import {
+  parseAdversarialPassContext,
+  buildAdversarialUserPrompt,
+  emptySecurityReport,
+  type AdversarialPassContext,
+} from './schemas/adversarial_pass';
 
 /**
  * Validate and copy source directory, exiting on validation failure
@@ -102,6 +108,38 @@ function loadDiffContext(diffContextPath: string, cwd: string): DiffContext {
   }
   
   return data;
+}
+
+/**
+ * Load adversarial pass input (candidate findings + optional PR metadata)
+ */
+function loadAdversarialContextFile(adversarialContextPath: string, cwd: string): AdversarialPassContext {
+  const resolvedPath = validateInputFilePath(adversarialContextPath, cwd);
+  if (!resolvedPath) {
+    const safePath = sanitizePathForError(adversarialContextPath);
+    console.error(`Error: Invalid adversarial context file path: ${safePath}`);
+    process.exit(1);
+  }
+  const safePath = sanitizePathForError(resolvedPath);
+  if (!fs.existsSync(resolvedPath)) {
+    console.error(`Error: Adversarial context file not found: ${safePath}`);
+    process.exit(1);
+  }
+  let data: unknown;
+  try {
+    const content = fs.readFileSync(resolvedPath, 'utf-8');
+    data = JSON.parse(content);
+  } catch (error: any) {
+    const errorMessage = error?.message || 'Unknown error';
+    console.error(`Error: Failed to read adversarial context file ${safePath}: ${errorMessage}`);
+    process.exit(1);
+  }
+  try {
+    return parseAdversarialPassContext(data);
+  } catch (e: any) {
+    console.error(`Error: Invalid adversarial context: ${e?.message || e}`);
+    process.exit(1);
+  }
 }
 
 /**
@@ -781,6 +819,54 @@ Use sequential IDs: node-001/flow-001/tb-001 for DFD elements, THREAT-001 for th
       console.log(`Retest verdict written to ${outputFile}`);
     }
     cleanupTmpDir(tmpSrcDir);
+
+  } else if (args.role === 'pr_adversary') {
+    console.log('Running PR Adversary (adversarial second pass)');
+
+    if (!args.adversarial_context) {
+      console.error('Error: --adversarial-context is required for the pr_adversary role.');
+      process.exit(1);
+    }
+
+    const advCtx = loadAdversarialContextFile(args.adversarial_context, currentWorkingDir);
+    if (args.output_format && args.output_format.toLowerCase() !== 'json') {
+      console.warn('pr_adversary always emits JSON (structured); ignoring -f for file content.');
+    }
+    const outputFile = validateOutputFile(
+      args.output_file || 'adversarial_code_review_report.json',
+      currentWorkingDir
+    );
+
+    let diffExcerpt: string | undefined;
+    if (args.diff_context) {
+      const diffContext = loadDiffContext(args.diff_context, currentWorkingDir);
+      const full = formatDiffContextForPrompt(diffContext);
+      const max = 120000;
+      diffExcerpt = full.length > max ? `${full.slice(0, max)}\n... [truncated] ...` : full;
+    }
+
+    const userPrompt = buildAdversarialUserPrompt(advCtx, {
+      diffExcerpt,
+      additionalContext: args.context,
+    });
+
+    const tmpSrcDir = args.src_dir
+      ? validateAndCopySrcDir(args.src_dir, currentWorkingDir)
+      : null;
+
+    if (advCtx.findings.length === 0) {
+      const empty = emptySecurityReport(advCtx.metadata?.project_name);
+      fs.writeFileSync(outputFile, JSON.stringify(empty, null, 2), 'utf-8');
+      console.log(`No candidate findings; wrote empty report to ${outputFile}`);
+      cleanupTmpDir(tmpSrcDir);
+    } else {
+      const structuredResult = await agentActions.prAdversaryWithOptions(userPrompt, tmpSrcDir);
+      if (structuredResult) {
+        fs.writeFileSync(outputFile, structuredResult, 'utf-8');
+        console.log(`Adversarial report written to ${outputFile}`);
+      }
+      cleanupTmpDir(tmpSrcDir);
+    }
 
   } else if (args.role === 'context_extractor') {
     console.log('Running Context Extractor Agent');

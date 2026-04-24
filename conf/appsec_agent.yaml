@@ -49,6 +49,12 @@ default: &default
       system_prompt: "You are a security expert specializing in vulnerability validation. Your task is to analyze code and determine whether a previously detected security vulnerability is still present. Examine the provided code carefully, considering the original finding details, and return a structured verdict with your assessment."
       output_format: "json"
       verbose: True
+  pr_adversary:
+    options:
+      system_prompt: "You are a senior application security engineer performing an adversarial second pass. For each candidate finding, require a concrete failure or exploit path. Use Read and Grep to verify. Output only a filtered security review report JSON; drop findings you cannot ground."
+      output_format: "json"
+      max_turns: 15
+      verbose: True
   context_extractor:
     options:
       output_format: "json"

@@ -877,7 +877,7 @@ describe('AgentActions', () => {
       const agentActions = new AgentActions(mockConfDict, environment, diffArgs);
       await agentActions.diffReviewerWithOptions('Diff review', '/tmp/src', undefined, true);
 
-      expect(spy).toHaveBeenCalledWith('code_reviewer', '/tmp/src', 'json', undefined, true);
+      expect(spy).toHaveBeenCalledWith('code_reviewer', '/tmp/src', 'json', undefined, true, undefined);
       spy.mockRestore();
     });
 

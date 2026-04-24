@@ -56,7 +56,9 @@ describe('main', () => {
       diffReviewerWithOptions: jest.fn().mockResolvedValue(''),
       codeFixerWithOptions: jest.fn().mockResolvedValue(''),
       qaVerifierWithOptions: jest.fn().mockResolvedValue(''),
-      findingValidatorWithOptions: jest.fn().mockResolvedValue('')
+      findingValidatorWithOptions: jest.fn().mockResolvedValue(''),
+      prAdversaryWithOptions: jest.fn().mockResolvedValue(''),
+      contextExtractorWithOptions: jest.fn().mockResolvedValue(''),
     } as any;
 
     (AgentActions as jest.MockedClass<typeof AgentActions>).mockImplementation(() => mockAgentActions);
@@ -76,7 +78,13 @@ describe('main', () => {
     if (fs.existsSync(testDir)) {
       fs.removeSync(testDir);
     }
-    for (const f of ['fix_output.json', 'qa_verdict.json', 'retest_verdict.json']) {
+    for (const f of [
+      'fix_output.json',
+      'qa_verdict.json',
+      'retest_verdict.json',
+      'pr_adversary_empty_test_out.json',
+      'pr_adversary_run_test_out.json',
+    ]) {
       if (fs.existsSync(f)) {
         fs.removeSync(f);
       }
@@ -791,6 +799,86 @@ describe('main', () => {
       const prompt = mockAgentActions.findingValidatorWithOptions.mock.calls[0][0];
       expect(prompt).toContain('N/A');
       expect(prompt).toContain('unknown');
+    });
+  });
+
+  describe('pr_adversary', () => {
+    let adversarialPath: string;
+    const sample = {
+      findings: [
+        {
+          id: 'SEC-001',
+          title: 'XSS',
+          file: 'src/x.ts',
+          description: 'Unescaped user content',
+          recommendation: 'Escape output',
+          severity: 'high',
+          confidence: 'high',
+        },
+      ],
+      pr_number: 42,
+    };
+
+    beforeEach(() => {
+      adversarialPath = path.join(testDir, 'adversarial_in.json');
+      fs.writeFileSync(adversarialPath, JSON.stringify(sample), 'utf-8');
+    });
+
+    it('should exit when --adversarial-context is missing', async () => {
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      exitMock.mockImplementationOnce((code?: number) => {
+        throw new Error(`process.exit(${code})`);
+      });
+      await expect(main(mockConfDict, { role: 'pr_adversary', environment: 'default' })).rejects.toThrow(
+        'process.exit(1)',
+      );
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('--adversarial-context is required'));
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('should write empty report when findings array is empty', async () => {
+      const emptyPath = path.join(testDir, 'adv_empty.json');
+      fs.writeFileSync(emptyPath, JSON.stringify({ findings: [] }), 'utf-8');
+      const outName = 'pr_adversary_empty_test_out.json';
+
+      await main(mockConfDict, {
+        role: 'pr_adversary',
+        environment: 'default',
+        adversarial_context: emptyPath,
+        output_file: outName,
+        output_format: 'json',
+      });
+
+      expect(mockAgentActions.prAdversaryWithOptions).not.toHaveBeenCalled();
+      const written = JSON.parse(fs.readFileSync(outName, 'utf-8'));
+      expect(written.security_review_report.findings).toEqual([]);
+      expect(exitMock).toHaveBeenCalledWith(0);
+      if (fs.existsSync(outName)) {
+        fs.removeSync(outName);
+      }
+    });
+
+    it('should run prAdversaryWithOptions with prompt containing candidate finding', async () => {
+      const outName = 'pr_adversary_run_test_out.json';
+      mockAgentActions.prAdversaryWithOptions.mockResolvedValue('{"security_review_report":{"metadata":{},"executive_summary":{},"findings":[]}}');
+
+      await main(mockConfDict, {
+        role: 'pr_adversary',
+        environment: 'default',
+        adversarial_context: adversarialPath,
+        output_file: outName,
+        output_format: 'json',
+      });
+
+      expect(mockAgentActions.prAdversaryWithOptions).toHaveBeenCalled();
+      const prompt = mockAgentActions.prAdversaryWithOptions.mock.calls[0][0];
+      expect(prompt).toContain('Adversarial failure-path');
+      expect(prompt).toContain('SEC-001');
+      expect(prompt).toContain('XSS');
+      expect(exitMock).toHaveBeenCalledWith(0);
+      if (fs.existsSync(outName)) {
+        fs.removeSync(outName);
+      }
     });
   });
 

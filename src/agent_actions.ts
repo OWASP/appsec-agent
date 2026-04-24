@@ -23,6 +23,10 @@ export interface AgentArgs {
   qa_context?: string;   // Path to JSON file with QA context for qa_verifier role
   retest_context?: string; // Path to JSON file with retest context for finding_validator role
   extract_context?: string; // Path to JSON file with extraction context for context_extractor role
+  /** v5.3.0: candidate findings JSON for pr_adversary second pass (sast-ai `adversarialPassService`) */
+  adversarial_context?: string;
+  /** A/B: treatment arm for pr_reviewer (stricter false-positive instructions). */
+  experiment_enabled?: boolean;
   model?: string;  // Claude model selection: sonnet, opus, haiku
   // PR diff chunking (optional; 0 or omit = no chunking)
   diff_max_tokens_per_batch?: number;
@@ -605,6 +609,67 @@ export class AgentActions {
   }
 
   /**
+   * pr_adversary: batch adversarial pass over candidate findings (structured security report out).
+   */
+  async prAdversaryWithOptions(userPrompt: string, srcDir?: string | null): Promise<string> {
+    const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
+    const options = agentOptions.getPrAdversaryOptions(
+      this.args.role,
+      srcDir,
+      this.args.max_turns,
+      this.args.experiment_enabled,
+    );
+
+    let cursor: BlinkingCursor | null = null;
+    let structuredJson = '';
+
+    try {
+      cursor = new BlinkingCursor();
+      cursor.start();
+      try {
+        for await (const message of llmQuery({ prompt: userPrompt, options })) {
+          if (message.type === 'stream_event') {
+            if (cursor) cursor.stop();
+          } else if (message.type === 'assistant') {
+            if (cursor) cursor.stop();
+            const assistantMsg = message as SDKAssistantMessage;
+            if (this.args.verbose && assistantMsg.message.content) {
+              for (const block of assistantMsg.message.content) {
+                if (block.type === 'text') {
+                  console.log(`Claude: ${block.text}`);
+                }
+              }
+            }
+          } else if (message.type === 'result') {
+            if (cursor) cursor.stop();
+            const resultMsg = message as SDKResultMessage;
+            if ((resultMsg as any).structured_output) {
+              structuredJson = JSON.stringify((resultMsg as any).structured_output, null, 2);
+            }
+            if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
+              console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);
+            }
+          }
+        }
+      } finally {
+        if (cursor) cursor.stop();
+      }
+    } catch (error) {
+      if (cursor) {
+        try {
+          cursor.stop();
+        } catch {
+          // ignore
+        }
+      }
+      console.error('Error during adversarial pass:', error);
+      throw error;
+    }
+    console.log();
+    return structuredJson;
+  }
+
+  /**
    * PR diff-focused code reviewer with options
    * Optimized for reviewing only changed code from a pull request
    * @param onResult - Optional callback to collect cost for chunked runs (e.g. aggregate total_cost_usd across batches)
@@ -616,7 +681,14 @@ export class AgentActions {
     noTools?: boolean,
   ): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
-    const options = agentOptions.getDiffReviewerOptions(this.args.role, srcDir, this.args.output_format, this.args.max_turns, noTools);
+    const options = agentOptions.getDiffReviewerOptions(
+      this.args.role,
+      srcDir,
+      this.args.output_format,
+      this.args.max_turns,
+      noTools,
+      this.args.experiment_enabled,
+    );
 
     let cursor: BlinkingCursor | null = null;
     let structuredJson = '';

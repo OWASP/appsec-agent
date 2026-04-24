@@ -35,4 +35,11 @@ export {
   RetestVerdict,
   RETEST_VERDICT_SCHEMA,
 } from './schemas/finding_validator';
+export {
+  type AdversarialPassContext,
+  parseAdversarialPassContext,
+  buildAdversarialUserPrompt,
+  toSecurityFindings,
+  emptySecurityReport,
+} from './schemas/adversarial_pass';
 

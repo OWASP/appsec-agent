@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.8] - 2026-04-23
+
+### Added
+- **`pr_adversary` role (v5.3.0 / quality-plan §8.7):** second pass over candidate PR findings. CLI: `--adversarial-context <file.json>` (required) with `{ "findings": [ { id, title, file, description, ... } ] }`; optional `-d/--diff-context` (truncated excerpt for grounding); output is always structured JSON (`adversarial_code_review_report.json` by default). Uses Read/Grep + `SECURITY_REPORT_SCHEMA`; empty `findings` writes an empty report without calling the model.
+- **`--experiment-enabled`:** when set, appends stricter false-positive instructions for **`pr_reviewer`** diff mode and optional experiment variant for **`pr_adversary`** (sast-ai gates this behind `SAST_EXPERIMENT_CLI=1` when passing the flag from the backend).
+- **Exports:** `parseAdversarialPassContext`, `buildAdversarialUserPrompt`, `toSecurityFindings`, `emptySecurityReport`, `AdversarialPassContext` from package entry.
+- **Tests:** unit tests for schema and options; `main` tests for `pr_adversary`; E2E under `e2e/pr_adversary.e2e.test.ts` (mocked LLM, full `main()` path).
+
 ## [2.1.7] - 2026-04-18
 
 ### Changed

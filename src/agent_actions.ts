@@ -25,6 +25,8 @@ export interface AgentArgs {
   extract_context?: string; // Path to JSON file with extraction context for context_extractor role
   /** v5.3.0: candidate findings JSON for pr_adversary second pass (sast-ai `adversarialPassService`) */
   adversarial_context?: string;
+  /** v5.4.0 / plan §3.1 Stage B: import-graph reachability summary JSON (pr_reviewer only). */
+  import_graph_context?: string;
   /** A/B: treatment arm for pr_reviewer (stricter false-positive instructions). */
   experiment_enabled?: boolean;
   model?: string;  // Claude model selection: sonnet, opus, haiku

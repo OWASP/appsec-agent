@@ -42,4 +42,10 @@ export {
   toSecurityFindings,
   emptySecurityReport,
 } from './schemas/adversarial_pass';
+export {
+  type ImportGraphContext,
+  type ImportGraphFileEntry,
+  parseImportGraphContext,
+  formatImportGraphContextForPrompt,
+} from './schemas/import_graph';
 

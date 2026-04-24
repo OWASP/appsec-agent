@@ -36,6 +36,10 @@ program
     'JSON file with candidate findings for pr_adversary second pass (v5.3.0; use with -r pr_adversary)',
   )
   .option(
+    '--import-graph-context <file>',
+    'JSON file with per-file import-graph reachability summary (v5.4.0, plan §3.1 Stage B; use with -r pr_reviewer)',
+  )
+  .option(
     '--experiment-enabled',
     'A/B treatment arm: stricter FP controls for pr_reviewer diff mode; optional variant for pr_adversary',
   )
@@ -136,6 +140,7 @@ const args = {
   retest_context: options.retestContext,
   extract_context: options.extractContext,
   adversarial_context: options.adversarialContext,
+  import_graph_context: options.importGraphContext,
   experiment_enabled: options.experimentEnabled === true,
   model: model,
   diff_max_tokens_per_batch: options.diffMaxTokens !== undefined ? parseInt(options.diffMaxTokens, 10) : undefined,
@@ -158,6 +163,17 @@ if (args.diff_context) {
     console.warn('⚠️  Warning: --diff-context is only used with the code_reviewer or pr_reviewer role.');
     console.warn(`   Current role: ${args.role}. The diff context will be ignored.`);
     console.warn('   Use -r code_reviewer or -r pr_reviewer to enable PR diff-focused code review.\n');
+  }
+}
+
+// v5.4.0 / plan §3.1 Stage B: import-graph context is only consumed by the
+// pr_reviewer diff-mode prompt. Other roles simply ignore it (fail-open).
+if (args.import_graph_context) {
+  console.log('Using import-graph context file:', args.import_graph_context);
+  if (!(args.role === 'pr_reviewer' && args.diff_context)) {
+    console.warn('⚠️  Warning: --import-graph-context is only consumed by pr_reviewer in diff-context mode.');
+    console.warn(`   Current role: ${args.role}${args.diff_context ? '' : ' (no --diff-context supplied)'}. The import-graph context will be ignored.`);
+    console.warn('   Use -r pr_reviewer --diff-context <file> to enable Stage B reachability hints.\n');
   }
 }
 

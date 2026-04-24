@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-04-24
+
+### Added
+- **Import-graph context for `pr_reviewer` (v5.4.0 / quality-plan §3.1 Stage B):** new `--import-graph-context <file.json>` CLI flag accepts a per-file reachability summary from the parent app's import-graph builder and injects it into the diff-review user prompt so the LLM can factor inbound-caller counts into its confidence calls. Shape: `{ default_branch_sha?, coverage?, files: [{ file, inbound_prod_import_count, callers?, is_entry_point?, graph_status? }] }` with a max of 500 files and 20 callers per file (caller lists are truncated beyond that for prompt-budget reasons). Fail-open on any parse/IO error — the authoritative confidence downrank lives in the parent app (`sast-ai-app/backend/src/services/importGraphDecision.ts`), so a bad payload only suppresses the LLM-side hint.
+- **Schema module `schemas/import_graph.ts`:** `parseImportGraphContext` (throws on structural errors) + `formatImportGraphContextForPrompt` (compact markdown table, only top-3 callers surfaced) + `ImportGraphContext` / `ImportGraphFileEntry` types re-exported from the package entry.
+- **Role/flag compatibility check in `bin/agent-run.ts`:** `--import-graph-context` only takes effect for `-r pr_reviewer --diff-context <file>`; other role combinations log a warning and ignore the flag.
+- **Tests:** 13 unit tests in `src/__tests__/schemas/import_graph.test.ts` covering parse happy-path, metadata round-trip, cap enforcement (500 files / 20 callers), structural error paths (non-object, missing files array, non-numeric count, unknown graph_status), and prompt formatter output (empty list short-circuit, caller truncation, coverage-banner toggle).
+
+### Why a coordinated release with `sast-ai-app@5.4.0`
+- Same cross-repo sequencing as v5.3.0: the **agent PR lands and publishes first**, then the backend PR merges pinning `appsec-agent@^2.2.0`. The backend's Stage B downrank and the new `SAST_INJECT_IMPORT_GRAPH=1` narrative both assume the agent can accept `--import-graph-context`; shipping them in the other order would degrade every diff-context scan until the agent updates.
+
+### Scope boundaries (explicitly deferred to v2.3.0)
+- A live MCP-tool variant of the import-graph lookup (agent calls `GET /api/internal/import-graph` during a turn rather than consuming a pre-computed summary) remains out of scope. Claude Agent SDK doesn't expose a clean custom-tool channel for HTTP calls today; the v5.0.0 `findings-history` pattern (backend-composed narrative injected via env/CLI) is the ready-today mechanism and matches the cadence the plan has followed since v5.0.0.
+
 ## [2.1.8] - 2026-04-23
 
 ### Added

@@ -21,6 +21,11 @@ import {
   emptySecurityReport,
   type AdversarialPassContext,
 } from './schemas/adversarial_pass';
+import {
+  parseImportGraphContext,
+  formatImportGraphContextForPrompt,
+  type ImportGraphContext,
+} from './schemas/import_graph';
 
 /**
  * Validate and copy source directory, exiting on validation failure
@@ -108,6 +113,41 @@ function loadDiffContext(diffContextPath: string, cwd: string): DiffContext {
   }
   
   return data;
+}
+
+/**
+ * Load and validate an import-graph context JSON file (v5.4.0 / plan §3.1 Stage B).
+ * On any parse/IO error we log and return `null` (fail-open): the downstream scan
+ * should not be blocked by a bad import-graph payload; the authoritative downrank
+ * lives in the parent app.
+ */
+function loadImportGraphContextFile(importGraphContextPath: string, cwd: string): ImportGraphContext | null {
+  const resolvedPath = validateInputFilePath(importGraphContextPath, cwd);
+  if (!resolvedPath) {
+    const safePath = sanitizePathForError(importGraphContextPath);
+    console.warn(`⚠️  Invalid import-graph context path (ignored): ${safePath}`);
+    return null;
+  }
+  const safePath = sanitizePathForError(resolvedPath);
+  if (!fs.existsSync(resolvedPath)) {
+    console.warn(`⚠️  Import-graph context file not found (ignored): ${safePath}`);
+    return null;
+  }
+  let data: unknown;
+  try {
+    const content = fs.readFileSync(resolvedPath, 'utf-8');
+    data = JSON.parse(content);
+  } catch (error: any) {
+    const errorMessage = error?.message || 'Unknown error';
+    console.warn(`⚠️  Failed to read import-graph context ${safePath} (ignored): ${errorMessage}`);
+    return null;
+  }
+  try {
+    return parseImportGraphContext(data);
+  } catch (e: any) {
+    console.warn(`⚠️  Invalid import-graph context ${safePath} (ignored): ${e?.message || e}`);
+    return null;
+  }
 }
 
 /**
@@ -466,7 +506,8 @@ function buildDiffReviewPrompt(
   diffContext: DiffContext, 
   outputFile: string, 
   outputFormat: string,
-  additionalContext?: string
+  additionalContext?: string,
+  importGraphSummary?: string,
 ): string {
   const formattedDiff = formatDiffContextForPrompt(diffContext);
   
@@ -499,6 +540,11 @@ When the project intelligence indicates that specific defenses are in place (e.g
 
 Developer context reflects the team's stated practices. If you find evidence in the code that contradicts the developer context (e.g., raw SQL despite claiming Prisma-only), trust the code and report the finding.
 
+`;
+  }
+
+  if (importGraphSummary && importGraphSummary.trim()) {
+    prompt += `${importGraphSummary}
 `;
   }
 
@@ -563,7 +609,19 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
       
       const diffContext = loadDiffContext(args.diff_context, currentWorkingDir);
       console.log(`Reviewing PR #${diffContext.prNumber}: ${diffContext.totalFilesChanged} files (+${diffContext.totalLinesAdded}/-${diffContext.totalLinesRemoved})`);
-      
+
+      // v5.4.0: optional per-file reachability summary from the parent app's
+      // import-graph builder. Fail-open on any parse/IO error.
+      const importGraphCtx = args.import_graph_context
+        ? loadImportGraphContextFile(args.import_graph_context, currentWorkingDir)
+        : null;
+      const importGraphSummary = importGraphCtx ? formatImportGraphContextForPrompt(importGraphCtx) : '';
+      if (importGraphCtx) {
+        console.log(
+          `Using import-graph context: ${importGraphCtx.files.length} file(s), coverage=${importGraphCtx.coverage ?? 'full'}, sha=${importGraphCtx.default_branch_sha?.slice(0, 12) ?? 'n/a'}`,
+        );
+      }
+
       const tmpSrcDir = args.src_dir ? validateAndCopySrcDir(args.src_dir, currentWorkingDir) : null;
       const chunkingOpts = getChunkingOptions(confDict, args.environment, args);
       const { batches, skippedFiles, skippedDueToBatches } = splitIntoBatches(diffContext, chunkingOpts);
@@ -575,7 +633,8 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
           batches[0],
           outputFile,
           args.output_format || 'json',
-          args.context
+          args.context,
+          importGraphSummary,
         );
         const structuredResult = await agentActions.diffReviewerWithOptions(userPrompt, tmpSrcDir, undefined, args.no_tools);
         if (structuredResult) {
@@ -597,7 +656,8 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
               batches[i],
               batchOutputPath,
               args.output_format || 'json',
-              args.context
+              args.context,
+              importGraphSummary,
             );
             const batchResult = await agentActions.diffReviewerWithOptions(userPrompt, tmpSrcDir, (result) => {
               if (result.total_cost_usd !== undefined && result.total_cost_usd > 0) {

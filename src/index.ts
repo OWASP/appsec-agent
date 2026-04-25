@@ -49,3 +49,10 @@ export {
   formatImportGraphContextForPrompt,
 } from './schemas/import_graph';
 
+export {
+  type RuntimeEnrichmentContext,
+  type RuntimeEnrichmentFileEntry,
+  parseRuntimeEnrichmentContext,
+  formatRuntimeEnrichmentContextForPrompt,
+} from './schemas/runtime_enrichment';
+

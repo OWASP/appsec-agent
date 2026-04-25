@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-04-25
+
+### Added
+- **Runtime-enrichment context for `pr_reviewer` (sast-ai-app v5.7.0 / quality-plan §4 + §8.14):** new `--runtime-enrichment-context <file.json>` CLI flag accepts a per-file production-incident summary from the parent app's `runtimeEnrichmentService` and injects it into the diff-review user prompt so the LLM can factor incident history into its severity + confidence calls. Shape: `{ default_branch_sha?, parsed_at?, files: [{ file, incident_count, last_seen_at? }], metadata? }` with a max of 500 files (matches the import-graph cap; the parent-app contract caps the source list at 10k rows but only files-overlapping-the-PR are passed in). Fail-open on any parse/IO error — the authoritative gate override lives in the parent app (`sast-ai-app/backend/src/routes/prScanProcessor.ts` partitions findings into hot/cold and applies `medium → low / 0.6 → 0.4` per file), so a bad payload only suppresses the LLM-side advisory hint.
+- **Schema module `schemas/runtime_enrichment.ts`:** `parseRuntimeEnrichmentContext` (throws on structural errors; silently strips unknown extra fields per the §8.5 PHI gate so a future buggy backend revision can't leak incident bodies / stack traces / request payloads to the LLM) + `formatRuntimeEnrichmentContextForPrompt` (compact markdown table, sorted by `incident_count` desc to anchor the LLM's attention on the strongest-signal files when the prompt is truncated; advisory line surfaces both halves of the §4 transform — `medium → low` AND `0.6 → 0.4` — so the LLM and the post-LLM gate apply consistent thresholds) + `RuntimeEnrichmentContext` / `RuntimeEnrichmentFileEntry` types re-exported from the package entry.
+- **Role/flag compatibility check in `bin/agent-run.ts`:** `--runtime-enrichment-context` only takes effect for `-r pr_reviewer --diff-context <file>`; other role combinations log a warning and ignore the flag (mirrors `--import-graph-context`).
+- **Tests:** 16 unit tests in `src/__tests__/schemas/runtime_enrichment.test.ts` covering parse happy-path, last_seen_at inclusion + drop-on-empty/whitespace/non-string, fractional/negative count handling, the §8.5 PHI minimization invariant (extra fields silently dropped), metadata round-trip, structural error paths (non-object input, missing files array, 501-file cap, missing/empty/whitespace file string, non-numeric/NaN/Infinity count, non-object entries), and prompt formatter output (empty-list short-circuit, sort-order, §4 transform numbers surfaced, SHA omitted when absent). Plus 3 e2e tests in `e2e/pr_reviewer_runtime_enrichment.e2e.test.ts` exercising the full `main()` path: happy-path injection, fail-open on bad payload, and empty-files short-circuit. Total tests: 410 → 432.
+
+### Why a coordinated release with `sast-ai-app@5.7.0`
+- Same cross-repo sequencing as v5.4.0 / v2.2.0: the **agent PR lands and publishes first**, then the backend PR merges pinning `appsec-agent@^2.3.0`. The backend's v5.7.0 wiring writes a `.runtime-enrichment-context.json` file and passes its path via `--runtime-enrichment-context`; shipping the backend first would degrade every diff-context scan with a flag the agent doesn't recognize (commander would error out before `main()` ran).
+
+### Scope boundaries (explicitly deferred)
+- A live MCP-tool variant of the runtime-enrichment lookup (agent calls `GET /api/projects/:id/hot-files` during a turn rather than consuming a pre-computed summary) remains out of scope for the same reason as the import-graph variant: Claude Agent SDK doesn't expose a clean custom-tool channel for HTTP calls today; the v5.0.0 `findings-history` pattern (backend-composed narrative injected via env/CLI) is the ready-today mechanism and matches the cadence the plan has followed since v5.0.0.
+- Auto-population of the parent app's hot-file list from production logs remains a v6.x sast-ai-app concern; this release accepts whatever the parent app emits.
+
 ## [2.2.0] - 2026-04-24
 
 ### Added

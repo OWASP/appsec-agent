@@ -1,0 +1,78 @@
+name: Sync OWASP/main from yangsec888/main
+
+# Keeps OWASP/appsec-agent main in sync with yangsec888/appsec-agent main.
+# Performs a fast-forward-only merge; if histories diverge it fails loudly so
+# a human can investigate instead of silently rewriting history.
+#
+# This workflow runs in OWASP/appsec-agent (it pushes to its own origin), but
+# the file lives in yangsec888/appsec-agent so it survives each sync.
+
+on:
+  schedule:
+    # Every 6 hours, on the hour.
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force push (DESTROYS divergent commits on OWASP/main)'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-from-fork
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    # Only run in the OWASP repo, not in the personal fork.
+    if: github.repository == 'OWASP/appsec-agent'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout OWASP main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Add personal fork as remote
+        run: git remote add fork https://github.com/yangsec888/appsec-agent.git
+
+      - name: Fetch fork
+        run: git fetch fork main --tags
+
+      - name: Sync main
+        env:
+          FORCE: ${{ github.event.inputs.force }}
+        run: |
+          set -euo pipefail
+          if [ "$(git rev-parse HEAD)" = "$(git rev-parse fork/main)" ]; then
+            echo "Already up to date with fork/main."
+            exit 0
+          fi
+
+          if git merge-base --is-ancestor HEAD fork/main; then
+            echo "Fast-forwarding OWASP/main to fork/main..."
+            git merge --ff-only fork/main
+            git push origin main --follow-tags
+            exit 0
+          fi
+
+          if [ "$FORCE" = "true" ]; then
+            echo "::warning::Force-syncing OWASP/main to fork/main (rewrites history)."
+            git reset --hard fork/main
+            git push origin main --force-with-lease --follow-tags
+            exit 0
+          fi
+
+          echo "::error::OWASP/main has diverged from yangsec888/main and cannot fast-forward."
+          echo "Re-run this workflow manually with 'force=true' to overwrite, or rebase yangsec888/main onto OWASP/main."
+          exit 1

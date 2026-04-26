@@ -40,6 +40,10 @@ program
     'JSON file with per-file import-graph reachability summary (v5.4.0, plan §3.1 Stage B; use with -r pr_reviewer)',
   )
   .option(
+    '--runtime-enrichment-context <file>',
+    'JSON file with per-file production-incident summary for hot files (v2.3.0 / sast-ai-app plan §4 + §8.14; use with -r pr_reviewer)',
+  )
+  .option(
     '--experiment-enabled',
     'A/B treatment arm: stricter FP controls for pr_reviewer diff mode; optional variant for pr_adversary',
   )
@@ -141,6 +145,7 @@ const args = {
   extract_context: options.extractContext,
   adversarial_context: options.adversarialContext,
   import_graph_context: options.importGraphContext,
+  runtime_enrichment_context: options.runtimeEnrichmentContext,
   experiment_enabled: options.experimentEnabled === true,
   model: model,
   diff_max_tokens_per_batch: options.diffMaxTokens !== undefined ? parseInt(options.diffMaxTokens, 10) : undefined,
@@ -174,6 +179,18 @@ if (args.import_graph_context) {
     console.warn('⚠️  Warning: --import-graph-context is only consumed by pr_reviewer in diff-context mode.');
     console.warn(`   Current role: ${args.role}${args.diff_context ? '' : ' (no --diff-context supplied)'}. The import-graph context will be ignored.`);
     console.warn('   Use -r pr_reviewer --diff-context <file> to enable Stage B reachability hints.\n');
+  }
+}
+
+// v2.3.0 / sast-ai-app plan §4 + §8.14: runtime-enrichment context is only
+// consumed by the pr_reviewer diff-mode prompt. Same role-gate as
+// --import-graph-context — other roles simply ignore it (fail-open).
+if (args.runtime_enrichment_context) {
+  console.log('Using runtime-enrichment context file:', args.runtime_enrichment_context);
+  if (!(args.role === 'pr_reviewer' && args.diff_context)) {
+    console.warn('⚠️  Warning: --runtime-enrichment-context is only consumed by pr_reviewer in diff-context mode.');
+    console.warn(`   Current role: ${args.role}${args.diff_context ? '' : ' (no --diff-context supplied)'}. The runtime-enrichment context will be ignored.`);
+    console.warn('   Use -r pr_reviewer --diff-context <file> to enable §4 hot-file hints.\n');
   }
 }
 

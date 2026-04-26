@@ -26,6 +26,11 @@ import {
   formatImportGraphContextForPrompt,
   type ImportGraphContext,
 } from './schemas/import_graph';
+import {
+  parseRuntimeEnrichmentContext,
+  formatRuntimeEnrichmentContextForPrompt,
+  type RuntimeEnrichmentContext,
+} from './schemas/runtime_enrichment';
 
 /**
  * Validate and copy source directory, exiting on validation failure
@@ -146,6 +151,46 @@ function loadImportGraphContextFile(importGraphContextPath: string, cwd: string)
     return parseImportGraphContext(data);
   } catch (e: any) {
     console.warn(`⚠️  Invalid import-graph context ${safePath} (ignored): ${e?.message || e}`);
+    return null;
+  }
+}
+
+/**
+ * Load and validate a runtime-enrichment context JSON file (v2.3.0 /
+ * sast-ai-app plan §4 + §8.14). On any parse/IO error we log and return
+ * `null` (fail-open): the downstream scan should not be blocked by a bad
+ * runtime-enrichment payload; the authoritative gate override lives in the
+ * parent app's `prScanProcessor` and only depends on `matchedFiles`, not
+ * on this LLM-prompt advisory block.
+ */
+function loadRuntimeEnrichmentContextFile(
+  runtimeEnrichmentContextPath: string,
+  cwd: string,
+): RuntimeEnrichmentContext | null {
+  const resolvedPath = validateInputFilePath(runtimeEnrichmentContextPath, cwd);
+  if (!resolvedPath) {
+    const safePath = sanitizePathForError(runtimeEnrichmentContextPath);
+    console.warn(`⚠️  Invalid runtime-enrichment context path (ignored): ${safePath}`);
+    return null;
+  }
+  const safePath = sanitizePathForError(resolvedPath);
+  if (!fs.existsSync(resolvedPath)) {
+    console.warn(`⚠️  Runtime-enrichment context file not found (ignored): ${safePath}`);
+    return null;
+  }
+  let data: unknown;
+  try {
+    const content = fs.readFileSync(resolvedPath, 'utf-8');
+    data = JSON.parse(content);
+  } catch (error: any) {
+    const errorMessage = error?.message || 'Unknown error';
+    console.warn(`⚠️  Failed to read runtime-enrichment context ${safePath} (ignored): ${errorMessage}`);
+    return null;
+  }
+  try {
+    return parseRuntimeEnrichmentContext(data);
+  } catch (e: any) {
+    console.warn(`⚠️  Invalid runtime-enrichment context ${safePath} (ignored): ${e?.message || e}`);
     return null;
   }
 }
@@ -508,6 +553,7 @@ function buildDiffReviewPrompt(
   outputFormat: string,
   additionalContext?: string,
   importGraphSummary?: string,
+  runtimeEnrichmentSummary?: string,
 ): string {
   const formattedDiff = formatDiffContextForPrompt(diffContext);
   
@@ -545,6 +591,11 @@ Developer context reflects the team's stated practices. If you find evidence in 
 
   if (importGraphSummary && importGraphSummary.trim()) {
     prompt += `${importGraphSummary}
+`;
+  }
+
+  if (runtimeEnrichmentSummary && runtimeEnrichmentSummary.trim()) {
+    prompt += `${runtimeEnrichmentSummary}
 `;
   }
 
@@ -622,6 +673,24 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
         );
       }
 
+      // v2.3.0 / sast-ai-app plan §4 + §8.14: optional per-file
+      // production-incident summary from the parent app's
+      // runtimeEnrichmentService. Fail-open on any parse/IO error — the
+      // authoritative gate override lives in the parent app's
+      // prScanProcessor and only depends on matchedFiles, not on this
+      // LLM-prompt advisory block.
+      const runtimeEnrichmentCtx = args.runtime_enrichment_context
+        ? loadRuntimeEnrichmentContextFile(args.runtime_enrichment_context, currentWorkingDir)
+        : null;
+      const runtimeEnrichmentSummary = runtimeEnrichmentCtx
+        ? formatRuntimeEnrichmentContextForPrompt(runtimeEnrichmentCtx)
+        : '';
+      if (runtimeEnrichmentCtx) {
+        console.log(
+          `Using runtime-enrichment context: ${runtimeEnrichmentCtx.files.length} hot file(s)${runtimeEnrichmentCtx.default_branch_sha ? `, sha=${runtimeEnrichmentCtx.default_branch_sha.slice(0, 12)}` : ''}`,
+        );
+      }
+
       const tmpSrcDir = args.src_dir ? validateAndCopySrcDir(args.src_dir, currentWorkingDir) : null;
       const chunkingOpts = getChunkingOptions(confDict, args.environment, args);
       const { batches, skippedFiles, skippedDueToBatches } = splitIntoBatches(diffContext, chunkingOpts);
@@ -635,6 +704,7 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
           args.output_format || 'json',
           args.context,
           importGraphSummary,
+          runtimeEnrichmentSummary,
         );
         const structuredResult = await agentActions.diffReviewerWithOptions(userPrompt, tmpSrcDir, undefined, args.no_tools);
         if (structuredResult) {
@@ -658,6 +728,7 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
               args.output_format || 'json',
               args.context,
               importGraphSummary,
+              runtimeEnrichmentSummary,
             );
             const batchResult = await agentActions.diffReviewerWithOptions(userPrompt, tmpSrcDir, (result) => {
               if (result.total_cost_usd !== undefined && result.total_cost_usd > 0) {

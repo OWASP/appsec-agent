@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - Unreleased
+
+### Added
+- **MCP server wiring for backend-backed live tools (`sast-ai-app` plan §8.17 / v6.0.0):** new `--mcp-server-url <url>` CLI flag plus per-role `mcpServerUrl?: string` parameter on `getDiffReviewerOptions` / `getCodeFixerOptions` / `getFindingValidatorOptions` / `getPrAdversaryOptions`. When the flag is set, the role builders attach `Options.mcpServers = { 'sast-ai-app-internal': { type: 'http', url } }` and extend each subagent's `tools` whitelist with the three v6.0.0 tool names — `mcp__sast-ai-app-internal__queryFindingsHistory`, `mcp__sast-ai-app-internal__queryImportGraph`, `mcp__sast-ai-app-internal__queryRuntimeEnrichment` — so the Claude Agent SDK routes those `tool_use` blocks to the parent app's per-scan in-process MCP server. Server name is intentionally fixed (rather than derived from the URL or environment) so prompt nudges and the cross-cutting `agent_tool_call{tool}` counter family the parent app will ship in `sast-ai-app@5.10.0+` reference stable, deterministic tool names.
+- **Module-level exports `MCP_INTERNAL_SERVER_NAME`, `MCP_INTERNAL_TOOL_NAMES`, `buildMcpInternalToolNames()` from `agent_options.ts`:** single source of truth for the SDK-namespaced tool names, re-used by the test suite and available to downstream tooling that wants to assert on the agent's tool surface without hardcoding the prefix scheme.
+- **Role-compatibility warning in `bin/agent-run.ts`:** `--mcp-server-url` is consumed by `pr_reviewer` / `code_reviewer` / `pr_adversary` / `finding_validator` / `code_fixer` only; other role combinations log a warning and ignore the flag (mirrors `--import-graph-context` / `--runtime-enrichment-context`).
+- **Tests:** new unit suite `src/__tests__/agent_options.mcp.test.ts` (MCP server attachment per role, tool whitelist extension, no-op when URL omitted, server name + tool name invariants). Extended `src/__tests__/agent-run.test.ts` to verify `--mcp-server-url` parses into `args.mcp_server_url` and propagates through to `AgentActions`. New e2e suite `e2e/pr_reviewer_mcp.e2e.test.ts` (3 tests) exercises the full `main()` → `AgentActions` → role builder path with: (1) happy-path mcp-server-url propagation + Options shape + tools-whitelist invariant; (2) no-flag baseline (Options unchanged from v2.3.0); (3) role-gate (mcp-server-url ignored on a non-reviewer role).
+
+### Why a coordinated release with `sast-ai-app@5.10.0` (or wherever §8.17 lands)
+- Same cross-repo sequencing as v5.4.0 / v2.2.0 and v5.7.0 / v2.3.0: the **agent PR lands and publishes first**, then the backend PR merges pinning `appsec-agent@^2.4.0`. The backend's §8.17 wiring spins up an in-process MCP server per scan and passes its URL via `--mcp-server-url`; shipping the backend first would degrade every diff-context scan with a flag the agent doesn't recognize (commander would error out before `main()` ran).
+
+### Scope boundaries (explicitly deferred)
+- **Per-tool authorization.** All three v6.0.0 tools are added to every reasoning role's whitelist — there is no per-role tool subsetting. The model still has to explicitly decide to call them, and the parent app enforces a per-scan tool-call budget. A v2.5.x release can split the lists (e.g. `code_fixer` should not need `queryImportGraph`) once we have observability data on per-tool usefulness.
+- **Stderr tool-call telemetry shim.** The cross-cutting `agent_tool_call{tool, role, result, reason}` counter family lives on the parent-app side (it parses agent stderr / structured assistant-message blocks). The agent itself does not emit telemetry directly; this keeps v2.4.0 a pure wiring change with no new observability dependencies.
+- **Removal of the front-loaded JSON paths.** `--import-graph-context` and `--runtime-enrichment-context` remain fully supported in v2.4.0 — they're the always-available fallback for scans where the MCP server is unreachable, and they let the parent app A/B-compare the live-tool path against the front-loaded path during the §8.17 staged rollout.
+
 ## [2.3.0] - 2026-04-25
 
 ### Added

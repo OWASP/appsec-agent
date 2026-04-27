@@ -58,6 +58,10 @@ program
   .option('-U, --openai-base-url <url>', 'OpenAI API base URL for failover (overrides OPENAI_BASE_URL env). Only used when failover is enabled.')
   .option('--max-turns <n>', 'Max agent turns (tool-use iterations). Overrides per-role default.')
   .option('--no-tools', 'Disable Read/Grep tools for single-turn analysis (use with --diff-context for fastest mode)')
+  .option(
+    '--mcp-server-url <url>',
+    'URL of the per-scan backend MCP server exposing queryFindingsHistory / queryImportGraph / queryRuntimeEnrichment (v2.4.0; sast-ai-app plan §8.17 / v6.0.0). When set, agents call these tools live instead of (or in addition to) the front-loaded JSON paths.',
+  )
   .option('-l, --list_roles', 'List all available roles')
   .option('-v, --version', 'Program version')
   .option('-V, --verbose', 'Verbose mode');
@@ -154,6 +158,7 @@ const args = {
   diff_exclude: Array.isArray(options.diffExclude) && options.diffExclude.length > 0 ? options.diffExclude : undefined,
   max_turns: options.maxTurns !== undefined ? parseInt(options.maxTurns, 10) : undefined,
   no_tools: options.noTools === true,
+  mcp_server_url: options.mcpServerUrl,
 };
 
 // Log context if provided
@@ -191,6 +196,28 @@ if (args.runtime_enrichment_context) {
     console.warn('⚠️  Warning: --runtime-enrichment-context is only consumed by pr_reviewer in diff-context mode.');
     console.warn(`   Current role: ${args.role}${args.diff_context ? '' : ' (no --diff-context supplied)'}. The runtime-enrichment context will be ignored.`);
     console.warn('   Use -r pr_reviewer --diff-context <file> to enable §4 hot-file hints.\n');
+  }
+}
+
+// v2.4.0 / sast-ai-app plan §8.17 (v6.0.0): the MCP server URL is consumed
+// by the four reasoning roles whose Options builders accept it
+// (pr_reviewer / pr_adversary / finding_validator / code_fixer). Other
+// roles silently ignore the flag — same fail-open shape as
+// --import-graph-context. The wiring is in `agent_options.ts`; this block
+// only surfaces a friendly warning when the flag is set on a role that
+// won't pick it up.
+if (args.mcp_server_url) {
+  console.log('Using MCP server URL:', args.mcp_server_url);
+  const mcpAwareRoles = new Set([
+    'pr_reviewer',
+    'code_reviewer',
+    'pr_adversary',
+    'finding_validator',
+    'code_fixer',
+  ]);
+  if (!mcpAwareRoles.has(args.role)) {
+    console.warn('⚠️  Warning: --mcp-server-url is only consumed by pr_reviewer / code_reviewer / pr_adversary / finding_validator / code_fixer.');
+    console.warn(`   Current role: ${args.role}. The MCP server config will be ignored.\n`);
   }
 }
 

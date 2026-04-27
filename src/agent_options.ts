@@ -28,6 +28,76 @@ export interface ToolUsageLog {
   suggestions: string;
 }
 
+/**
+ * v2.4.0 / sast-ai-app plan §8.17 (v6.0.0).
+ *
+ * Server identifier the agent uses to address backend-backed tools served
+ * over MCP. The resulting tool names exposed to the LLM follow the SDK
+ * convention `mcp__<server>__<tool>` and are intentionally fixed (i.e. not
+ * derived from the URL or environment) so prompt nudges and per-tool
+ * counters can reference them by literal name. The matching backend
+ * implementation lives in `sast-ai-app/backend/src/services/mcp/internalToolsServer.ts`.
+ */
+export const MCP_INTERNAL_SERVER_NAME = 'sast-ai-app-internal';
+
+/**
+ * Tools exposed by the in-process MCP server the parent app spins up per
+ * scan. The list deliberately matches the three deferrals tracked under
+ * §8.17: §3.2b `queryFindingsHistory`, §3.1 Stage B `queryImportGraph`
+ * (v5.4.0), §4 `queryRuntimeEnrichment` (v5.7.0). The server may expose
+ * additional tools in v6.x; the agent only enumerates the v6.0.0 set
+ * here so its whitelist is deterministic at this version.
+ */
+export const MCP_INTERNAL_TOOL_NAMES = [
+  'queryFindingsHistory',
+  'queryImportGraph',
+  'queryRuntimeEnrichment',
+] as const;
+
+/**
+ * SDK-namespaced tool names the LLM sees on its tool list when the server
+ * is wired up. Exposed as a helper rather than a constant so callers in
+ * `agent_options.ts` and the test suite share one source of truth.
+ */
+export function buildMcpInternalToolNames(): string[] {
+  return MCP_INTERNAL_TOOL_NAMES.map(
+    (tool) => `mcp__${MCP_INTERNAL_SERVER_NAME}__${tool}`
+  );
+}
+
+/**
+ * Mutate an already-built `Options` object to attach the MCP server config
+ * (top-level `mcpServers`) and extend the named subagent's `tools`
+ * whitelist with the v6.0.0 tool surface. No-op when `mcpServerUrl` is
+ * falsy — preserves the v2.3.0 behaviour for callers that don't pass the
+ * new parameter.
+ *
+ * Mutating in place (rather than returning a fresh object) keeps the
+ * existing role builders' return statements untouched and avoids a deep
+ * clone of the (large) `Options` shape.
+ */
+function attachMcpServerToOptions(
+  options: Options,
+  mcpServerUrl: string | undefined,
+  agentKey: string
+): void {
+  if (!mcpServerUrl) {
+    return;
+  }
+  options.mcpServers = {
+    ...(options.mcpServers ?? {}),
+    [MCP_INTERNAL_SERVER_NAME]: {
+      type: 'http',
+      url: mcpServerUrl,
+    },
+  };
+  const agent = options.agents?.[agentKey] as AgentDefinition | undefined;
+  if (agent) {
+    const existingTools = agent.tools ?? [];
+    agent.tools = [...existingTools, ...buildMcpInternalToolNames()];
+  }
+}
+
 export class AgentOptions {
   private confDict: ConfigDict;
   private environment: string;
@@ -192,6 +262,7 @@ export class AgentOptions {
     maxTurns?: number,
     noTools?: boolean,
     experimentEnabled?: boolean,
+    mcpServerUrl?: string,
   ): Options {
     const roleConfig = this.confDict[this.environment]?.[role];
     
@@ -291,6 +362,8 @@ You have access to Read, Grep, and Write tools:
       };
     }
 
+    attachMcpServerToOptions(options, mcpServerUrl, 'diff-reviewer');
+
     return options;
   }
 
@@ -301,7 +374,11 @@ You have access to Read, Grep, and Write tools:
    * @param role - The role configuration key
    * @param srcDir - Optional source directory path for additional context
    */
-  getCodeFixerOptions(role: string = 'code_fixer', srcDir?: string | null): Options {
+  getCodeFixerOptions(
+    role: string = 'code_fixer',
+    srcDir?: string | null,
+    mcpServerUrl?: string,
+  ): Options {
     const roleConfig = this.confDict[this.environment]?.[role];
     let systemPrompt = roleConfig?.options?.system_prompt ||
       'You are an expert security engineer specializing in fixing vulnerabilities in code. ' +
@@ -331,6 +408,8 @@ You have access to Read, Grep, and Write tools:
         schema: FIX_OUTPUT_SCHEMA
       }
     };
+
+    attachMcpServerToOptions(options, mcpServerUrl, 'code-fixer');
 
     return options;
   }
@@ -413,7 +492,11 @@ You have access to Read, Grep, and Write tools:
     return options;
   }
 
-  getFindingValidatorOptions(role: string = 'finding_validator', srcDir?: string | null): Options {
+  getFindingValidatorOptions(
+    role: string = 'finding_validator',
+    srcDir?: string | null,
+    mcpServerUrl?: string,
+  ): Options {
     const roleConfig = this.confDict[this.environment]?.[role];
     let systemPrompt = roleConfig?.options?.system_prompt ||
       'You are a security expert specializing in vulnerability validation. ' +
@@ -444,6 +527,8 @@ You have access to Read, Grep, and Write tools:
       }
     };
 
+    attachMcpServerToOptions(options, mcpServerUrl, 'finding-validator');
+
     return options;
   }
 
@@ -456,6 +541,7 @@ You have access to Read, Grep, and Write tools:
     srcDir?: string | null,
     maxTurns?: number,
     experimentEnabled?: boolean,
+    mcpServerUrl?: string,
   ): Options {
     const roleConfig = this.confDict[this.environment]?.[role];
     let systemPrompt =
@@ -475,7 +561,7 @@ You have access to Read, Grep, and Write tools:
 
     const resolvedMaxTurns = maxTurns ?? roleConfig?.options?.max_turns ?? 15;
 
-    return {
+    const options: Options = {
       agents: {
         'pr-adversary': {
           description: 'Adversarial second pass: filters PR scan findings by concrete failure paths',
@@ -491,6 +577,10 @@ You have access to Read, Grep, and Write tools:
         schema: SECURITY_REPORT_SCHEMA,
       },
     };
+
+    attachMcpServerToOptions(options, mcpServerUrl, 'pr-adversary');
+
+    return options;
   }
 }
 

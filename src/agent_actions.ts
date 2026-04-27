@@ -39,6 +39,24 @@ export interface AgentArgs {
   diff_exclude?: string[];  // Path patterns to exclude from diff review
   max_turns?: number;  // Override per-role maxTurns (adaptive tool budget)
   no_tools?: boolean;  // Disable Read/Grep tools for single-turn focused-context analysis
+  /**
+   * v2.4.0 / sast-ai-app plan §8.17 (v6.0.0): URL of a per-scan MCP server
+   * exposing backend-backed tools (`queryFindingsHistory`, `queryImportGraph`,
+   * `queryRuntimeEnrichment`). When set, the role builders attach
+   * `Options.mcpServers` and extend each agent's `tools` whitelist with the
+   * three `mcp__sast-ai-app-internal__*` names so the SDK routes those
+   * `tools_use` blocks to the parent app's HTTP server. When omitted, the
+   * agent's tool surface is unchanged from v2.3.0 (Read/Grep/Write/Bash only,
+   * per role) — the front-loaded `--import-graph-context` /
+   * `--runtime-enrichment-context` JSON paths remain in place as the
+   * always-available alternative.
+   *
+   * Server names are intentionally fixed to `sast-ai-app-internal` so the
+   * tool names the SDK exposes to the model are stable across deploys —
+   * a v6.x prompt nudge can mention `mcp__sast-ai-app-internal__queryFindingsHistory`
+   * literally without worrying about the URL the parent app happens to bind.
+   */
+  mcp_server_url?: string;
 }
 
 interface ConversationEntry {
@@ -390,7 +408,11 @@ export class AgentActions {
    */
   async codeFixerWithOptions(userPrompt: string, srcDir?: string | null): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
-    const options = agentOptions.getCodeFixerOptions(this.args.role, srcDir);
+    const options = agentOptions.getCodeFixerOptions(
+      this.args.role,
+      srcDir,
+      this.args.mcp_server_url,
+    );
 
     let cursor: BlinkingCursor | null = null;
     let structuredJson = '';
@@ -561,7 +583,11 @@ export class AgentActions {
    */
   async findingValidatorWithOptions(userPrompt: string, srcDir?: string | null): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
-    const options = agentOptions.getFindingValidatorOptions(this.args.role, srcDir);
+    const options = agentOptions.getFindingValidatorOptions(
+      this.args.role,
+      srcDir,
+      this.args.mcp_server_url,
+    );
 
     let cursor: BlinkingCursor | null = null;
     let structuredJson = '';
@@ -622,6 +648,7 @@ export class AgentActions {
       srcDir,
       this.args.max_turns,
       this.args.experiment_enabled,
+      this.args.mcp_server_url,
     );
 
     let cursor: BlinkingCursor | null = null;
@@ -692,6 +719,7 @@ export class AgentActions {
       this.args.max_turns,
       noTools,
       this.args.experiment_enabled,
+      this.args.mcp_server_url,
     );
 
     let cursor: BlinkingCursor | null = null;

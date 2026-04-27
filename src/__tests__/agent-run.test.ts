@@ -414,5 +414,69 @@ describe('agent-run CLI', () => {
       expect(args.experiment_enabled).toBe(true);
     });
   });
+
+  describe('v2.4.0 flag (--mcp-server-url; sast-ai-app §8.17 / v6.0.0)', () => {
+    it('maps --mcp-server-url onto args.mcp_server_url for the four MCP-aware roles', () => {
+      const { Command } = require('commander');
+      const mockCommand = Command();
+      const url = 'http://127.0.0.1:9999/mcp';
+      const mcpAwareRoles = [
+        'pr_reviewer',
+        'code_reviewer',
+        'pr_adversary',
+        'finding_validator',
+        'code_fixer',
+      ];
+      for (const role of mcpAwareRoles) {
+        mockCommand.opts.mockReturnValue({
+          role,
+          environment: 'default',
+          mcpServerUrl: url,
+        });
+        const options = mockCommand.opts();
+        const args = {
+          role: options.role,
+          environment: options.environment,
+          mcp_server_url: options.mcpServerUrl,
+        };
+        expect(args.mcp_server_url).toBe(url);
+        expect(args.role).toBe(role);
+      }
+    });
+
+    it('leaves args.mcp_server_url undefined when the flag is not supplied (v2.3.0 baseline)', () => {
+      const { Command } = require('commander');
+      const mockCommand = Command();
+      mockCommand.opts.mockReturnValue({
+        role: 'pr_reviewer',
+        environment: 'default',
+      });
+      const options = mockCommand.opts();
+      const args = {
+        role: options.role,
+        environment: options.environment,
+        mcp_server_url: options.mcpServerUrl,
+      };
+      expect(args.mcp_server_url).toBeUndefined();
+    });
+
+    it('still passes the URL through on a non-MCP-aware role (warning is informational only)', () => {
+      const { Command } = require('commander');
+      const mockCommand = Command();
+      const url = 'http://127.0.0.1:9999/mcp';
+      mockCommand.opts.mockReturnValue({
+        role: 'qa_verifier',
+        environment: 'default',
+        mcpServerUrl: url,
+      });
+      const options = mockCommand.opts();
+      const args = {
+        role: options.role,
+        environment: options.environment,
+        mcp_server_url: options.mcpServerUrl,
+      };
+      expect(args.mcp_server_url).toBe(url);
+    });
+  });
 });
 

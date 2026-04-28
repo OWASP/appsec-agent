@@ -60,7 +60,11 @@ program
   .option('--no-tools', 'Disable Read/Grep tools for single-turn analysis (use with --diff-context for fastest mode)')
   .option(
     '--mcp-server-url <url>',
-    'URL of the per-scan backend MCP server exposing queryFindingsHistory / queryImportGraph / queryRuntimeEnrichment (v2.4.0; sast-ai-app plan §8.17 / v6.0.0). When set, agents call these tools live instead of (or in addition to) the front-loaded JSON paths.',
+    'URL of a parent-app-managed per-scan MCP server exposing queryFindingsHistory / queryImportGraph / queryRuntimeEnrichment (v2.4.0). When set, agents call these tools live instead of (or in addition to) the front-loaded JSON paths.',
+  )
+  .option(
+    '--mcp-server-name <name>',
+    'Override for the MCP server identifier used when registering --mcp-server-url with the SDK. Becomes the literal prefix on the tool names the model sees (`mcp__<name>__queryFindingsHistory` etc.). Defaults to "appsec-internal" (v2.4.2). Parent apps with an existing tool-name contract should pass their chosen name explicitly.',
   )
   .option('-l, --list_roles', 'List all available roles')
   .option('-v, --version', 'Program version')
@@ -159,6 +163,7 @@ const args = {
   max_turns: options.maxTurns !== undefined ? parseInt(options.maxTurns, 10) : undefined,
   no_tools: options.noTools === true,
   mcp_server_url: options.mcpServerUrl,
+  mcp_server_name: options.mcpServerName,
 };
 
 // Log context if provided
@@ -199,15 +204,17 @@ if (args.runtime_enrichment_context) {
   }
 }
 
-// v2.4.0 / sast-ai-app plan §8.17 (v6.0.0): the MCP server URL is consumed
-// by the four reasoning roles whose Options builders accept it
-// (pr_reviewer / pr_adversary / finding_validator / code_fixer). Other
-// roles silently ignore the flag — same fail-open shape as
-// --import-graph-context. The wiring is in `agent_options.ts`; this block
-// only surfaces a friendly warning when the flag is set on a role that
-// won't pick it up.
+// v2.4.0: the MCP server URL is consumed by the four reasoning roles
+// whose Options builders accept it (pr_reviewer / pr_adversary /
+// finding_validator / code_fixer). Other roles silently ignore the flag
+// — same fail-open shape as --import-graph-context. The wiring is in
+// `agent_options.ts`; this block only surfaces a friendly warning when
+// the flag is set on a role that won't pick it up.
 if (args.mcp_server_url) {
   console.log('Using MCP server URL:', args.mcp_server_url);
+  if (args.mcp_server_name) {
+    console.log('Using MCP server name override:', args.mcp_server_name);
+  }
   const mcpAwareRoles = new Set([
     'pr_reviewer',
     'code_reviewer',
@@ -219,6 +226,11 @@ if (args.mcp_server_url) {
     console.warn('⚠️  Warning: --mcp-server-url is only consumed by pr_reviewer / code_reviewer / pr_adversary / finding_validator / code_fixer.');
     console.warn(`   Current role: ${args.role}. The MCP server config will be ignored.\n`);
   }
+} else if (args.mcp_server_name) {
+  // --mcp-server-name without --mcp-server-url is a no-op; warn so the
+  // operator notices the misconfiguration instead of silently picking
+  // the front-loaded JSON path.
+  console.warn('⚠️  Warning: --mcp-server-name has no effect unless --mcp-server-url is also set. Ignoring.\n');
 }
 
 // Run main function

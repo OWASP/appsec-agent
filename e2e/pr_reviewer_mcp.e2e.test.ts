@@ -5,12 +5,12 @@
  * also exercise `AgentOptions.getDiffReviewerOptions` directly to verify
  * the SDK-shaped `Options` it would have produced.
  *
- * sast-ai-app plan §8.17 (v6.0.0) anchor: this test pins the wiring
- * contract between the agent and the parent app's per-scan in-process MCP
- * server. If any future refactor drops the `--mcp-server-url` flag, stops
- * propagating `args.mcp_server_url` into `AgentActions`, or breaks the
- * `Options.mcpServers` shape the SDK expects, the failure surfaces here
- * instead of as a silent regression in production scans.
+ * This test pins the wiring contract between the agent and a parent
+ * app's per-scan in-process MCP server. If any future refactor drops
+ * the `--mcp-server-url` flag, stops propagating `args.mcp_server_url`
+ * into `AgentActions`, or breaks the `Options.mcpServers` shape the SDK
+ * expects, the failure surfaces here instead of as a silent regression
+ * in production scans.
  *
  * Three cases:
  *   1. HAPPY PATH — `--mcp-server-url` is supplied. `AgentActions` is
@@ -123,7 +123,7 @@ const VALID_DIFF_CONTEXT = {
 const TEST_MCP_URL = 'http://127.0.0.1:9999/mcp';
 const expectedMcpToolNames = buildMcpInternalToolNames();
 
-describe('e2e pr_reviewer + --mcp-server-url (mocked LLM, v2.4.0 / §8.17)', () => {
+describe('e2e pr_reviewer + --mcp-server-url (mocked LLM, v2.4.0)', () => {
   let testDir: string;
   const outName = 'e2e_pr_reviewer_mcp_out.json';
   let exitMock: jest.Mock;
@@ -226,7 +226,7 @@ describe('e2e pr_reviewer + --mcp-server-url (mocked LLM, v2.4.0 / §8.17)', () 
         [MCP_INTERNAL_SERVER_NAME]: { type: 'http', url: TEST_MCP_URL },
       });
       // The diff-reviewer subagent's tools whitelist is the v2.3.0 list
-      // PLUS the three v6.0.0 backend-backed tools (in that order).
+      // PLUS the three backend-backed tools (in that order).
       const agent = (opts.agents as any)['diff-reviewer'];
       expect(agent.tools).toEqual([
         'Read',

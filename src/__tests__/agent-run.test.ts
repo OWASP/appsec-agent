@@ -415,7 +415,7 @@ describe('agent-run CLI', () => {
     });
   });
 
-  describe('v2.4.0 flag (--mcp-server-url; sast-ai-app §8.17 / v6.0.0)', () => {
+  describe('--mcp-server-url flag (v2.4.0)', () => {
     it('maps --mcp-server-url onto args.mcp_server_url for the four MCP-aware roles', () => {
       const { Command } = require('commander');
       const mockCommand = Command();
@@ -476,6 +476,46 @@ describe('agent-run CLI', () => {
         mcp_server_url: options.mcpServerUrl,
       };
       expect(args.mcp_server_url).toBe(url);
+    });
+  });
+
+  describe('--mcp-server-name flag (v2.4.2)', () => {
+    it('maps --mcp-server-name onto args.mcp_server_name when supplied', () => {
+      const { Command } = require('commander');
+      const mockCommand = Command();
+      mockCommand.opts.mockReturnValue({
+        role: 'pr_reviewer',
+        environment: 'default',
+        mcpServerUrl: 'http://127.0.0.1:9999/mcp',
+        mcpServerName: 'parent-app-internal',
+      });
+      const options = mockCommand.opts();
+      const args = {
+        role: options.role,
+        environment: options.environment,
+        mcp_server_url: options.mcpServerUrl,
+        mcp_server_name: options.mcpServerName,
+      };
+      expect(args.mcp_server_name).toBe('parent-app-internal');
+      expect(args.mcp_server_url).toBe('http://127.0.0.1:9999/mcp');
+    });
+
+    it('leaves args.mcp_server_name undefined when the flag is not supplied (default identifier path)', () => {
+      const { Command } = require('commander');
+      const mockCommand = Command();
+      mockCommand.opts.mockReturnValue({
+        role: 'pr_reviewer',
+        environment: 'default',
+        mcpServerUrl: 'http://127.0.0.1:9999/mcp',
+      });
+      const options = mockCommand.opts();
+      const args = {
+        role: options.role,
+        environment: options.environment,
+        mcp_server_url: options.mcpServerUrl,
+        mcp_server_name: options.mcpServerName,
+      };
+      expect(args.mcp_server_name).toBeUndefined();
     });
   });
 });

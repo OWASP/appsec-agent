@@ -1,20 +1,27 @@
 /**
- * v2.4.0 / sast-ai-app plan §8.17 (v6.0.0).
- *
  * Tests for the MCP-server wiring on the four reasoning role builders:
  * - getDiffReviewerOptions     (pr_reviewer / code_reviewer)
  * - getCodeFixerOptions        (code_fixer)
  * - getFindingValidatorOptions (finding_validator)
  * - getPrAdversaryOptions      (pr_adversary)
  *
- * These tests assert the public Options-shape contract the parent app's
- * §8.17 in-process MCP server depends on. They deliberately do NOT
- * exercise the SDK end-to-end (no model invocation); they pin the wiring
- * step that converts the new `mcpServerUrl` parameter into:
- *   - top-level `Options.mcpServers['sast-ai-app-internal']` of type
- *     `'http'` with the supplied URL, AND
- *   - per-subagent `tools` whitelist extension with the three v6.0.0
- *     `mcp__sast-ai-app-internal__*` tool names.
+ * These tests assert the public Options-shape contract a parent app's
+ * in-process MCP server depends on. They deliberately do NOT exercise
+ * the SDK end-to-end (no model invocation); they pin the wiring step
+ * that converts the `mcpServerUrl` (+ optional `mcpServerName`)
+ * parameters into:
+ *   - top-level `Options.mcpServers[<server-name>]` of type `'http'`
+ *     with the supplied URL, AND
+ *   - per-subagent `tools` whitelist extension with the SDK-namespaced
+ *     `mcp__<server-name>__*` tool names.
+ *
+ * Default-name path (v2.4.2): when `mcpServerName` is omitted the
+ * builders fall back to `DEFAULT_MCP_SERVER_NAME` ("appsec-internal").
+ *
+ * Override path (v2.4.2): when `mcpServerName` is supplied — typically
+ * by a parent app that needs to keep an existing tool-name contract
+ * stable — the value flows through to the keys of `Options.mcpServers`
+ * and the `mcp__<name>__*` prefix on the subagent's tool whitelist.
  *
  * Fail-shape: when `mcpServerUrl` is omitted (the v2.3.0 default), the
  * Options object must be byte-for-byte identical to the v2.3.0 output
@@ -23,6 +30,7 @@
 
 import {
   AgentOptions,
+  DEFAULT_MCP_SERVER_NAME,
   MCP_INTERNAL_SERVER_NAME,
   MCP_INTERNAL_TOOL_NAMES,
   buildMcpInternalToolNames,
@@ -30,6 +38,7 @@ import {
 import { ConfigDict } from '../utils';
 
 const TEST_URL = 'http://localhost:9999/mcp';
+const CUSTOM_SERVER_NAME = 'parent-app-internal';
 
 const baseConfDict: ConfigDict = {
   default: {
@@ -41,19 +50,29 @@ const baseConfDict: ConfigDict = {
   },
 };
 
-const expectedMcpToolNames = [
-  'mcp__sast-ai-app-internal__queryFindingsHistory',
-  'mcp__sast-ai-app-internal__queryImportGraph',
-  'mcp__sast-ai-app-internal__queryRuntimeEnrichment',
+const expectedDefaultMcpToolNames = [
+  'mcp__appsec-internal__queryFindingsHistory',
+  'mcp__appsec-internal__queryImportGraph',
+  'mcp__appsec-internal__queryRuntimeEnrichment',
 ];
 
-describe('AgentOptions MCP wiring (v2.4.0 / §8.17)', () => {
+const expectedCustomMcpToolNames = [
+  `mcp__${CUSTOM_SERVER_NAME}__queryFindingsHistory`,
+  `mcp__${CUSTOM_SERVER_NAME}__queryImportGraph`,
+  `mcp__${CUSTOM_SERVER_NAME}__queryRuntimeEnrichment`,
+];
+
+describe('AgentOptions MCP wiring', () => {
   describe('module-level constants', () => {
-    it('exposes a stable server name (deterministic prompt-nudge target)', () => {
-      expect(MCP_INTERNAL_SERVER_NAME).toBe('sast-ai-app-internal');
+    it('exposes a generic, parent-app-agnostic default server name', () => {
+      expect(DEFAULT_MCP_SERVER_NAME).toBe('appsec-internal');
     });
 
-    it('lists exactly the three v6.0.0 backend-backed tools', () => {
+    it('keeps the legacy MCP_INTERNAL_SERVER_NAME alias in sync with the default', () => {
+      expect(MCP_INTERNAL_SERVER_NAME).toBe(DEFAULT_MCP_SERVER_NAME);
+    });
+
+    it('lists exactly the three backend-backed tools', () => {
       expect(MCP_INTERNAL_TOOL_NAMES).toEqual([
         'queryFindingsHistory',
         'queryImportGraph',
@@ -61,20 +80,26 @@ describe('AgentOptions MCP wiring (v2.4.0 / §8.17)', () => {
       ]);
     });
 
-    it('builds SDK-namespaced tool names matching the literal contract', () => {
-      expect(buildMcpInternalToolNames()).toEqual(expectedMcpToolNames);
+    it('builds default SDK-namespaced tool names matching the literal contract', () => {
+      expect(buildMcpInternalToolNames()).toEqual(expectedDefaultMcpToolNames);
     });
 
-    it('keeps tool names in lockstep with the server name', () => {
-      const namespaced = buildMcpInternalToolNames();
+    it('builds SDK-namespaced tool names against an override server name', () => {
+      expect(buildMcpInternalToolNames(CUSTOM_SERVER_NAME)).toEqual(
+        expectedCustomMcpToolNames,
+      );
+    });
+
+    it('keeps tool names in lockstep with the supplied server name', () => {
+      const namespaced = buildMcpInternalToolNames(CUSTOM_SERVER_NAME);
       for (const tool of namespaced) {
-        expect(tool.startsWith(`mcp__${MCP_INTERNAL_SERVER_NAME}__`)).toBe(true);
+        expect(tool.startsWith(`mcp__${CUSTOM_SERVER_NAME}__`)).toBe(true);
       }
     });
   });
 
   describe('getDiffReviewerOptions (pr_reviewer / code_reviewer)', () => {
-    it('attaches mcpServers and extends diff-reviewer tools when URL is set', () => {
+    it('attaches mcpServers under the default name and extends diff-reviewer tools', () => {
       const ao = new AgentOptions(baseConfDict, 'default');
       const opts = ao.getDiffReviewerOptions(
         'pr_reviewer',
@@ -86,14 +111,38 @@ describe('AgentOptions MCP wiring (v2.4.0 / §8.17)', () => {
         TEST_URL,
       );
       expect(opts.mcpServers).toEqual({
-        [MCP_INTERNAL_SERVER_NAME]: { type: 'http', url: TEST_URL },
+        [DEFAULT_MCP_SERVER_NAME]: { type: 'http', url: TEST_URL },
       });
       const agent = (opts.agents as any)['diff-reviewer'];
       expect(agent.tools).toEqual([
         'Read',
         'Grep',
         'Write',
-        ...expectedMcpToolNames,
+        ...expectedDefaultMcpToolNames,
+      ]);
+    });
+
+    it('honors the mcpServerName override on both mcpServers key and tool prefix', () => {
+      const ao = new AgentOptions(baseConfDict, 'default');
+      const opts = ao.getDiffReviewerOptions(
+        'pr_reviewer',
+        null,
+        undefined,
+        undefined,
+        false,
+        false,
+        TEST_URL,
+        CUSTOM_SERVER_NAME,
+      );
+      expect(opts.mcpServers).toEqual({
+        [CUSTOM_SERVER_NAME]: { type: 'http', url: TEST_URL },
+      });
+      const agent = (opts.agents as any)['diff-reviewer'];
+      expect(agent.tools).toEqual([
+        'Read',
+        'Grep',
+        'Write',
+        ...expectedCustomMcpToolNames,
       ]);
     });
 
@@ -109,7 +158,7 @@ describe('AgentOptions MCP wiring (v2.4.0 / §8.17)', () => {
         TEST_URL,
       );
       const agent = (opts.agents as any)['diff-reviewer'];
-      expect(agent.tools).toEqual(['Write', ...expectedMcpToolNames]);
+      expect(agent.tools).toEqual(['Write', ...expectedDefaultMcpToolNames]);
     });
 
     it('is a no-op when mcpServerUrl is omitted (v2.3.0 baseline)', () => {
@@ -120,7 +169,7 @@ describe('AgentOptions MCP wiring (v2.4.0 / §8.17)', () => {
       expect(agent.tools).toEqual(['Read', 'Grep', 'Write']);
     });
 
-    it('is a no-op when mcpServerUrl is an empty string', () => {
+    it('is a no-op when mcpServerUrl is an empty string (even with a name override)', () => {
       const ao = new AgentOptions(baseConfDict, 'default');
       const opts = ao.getDiffReviewerOptions(
         'pr_reviewer',
@@ -130,6 +179,7 @@ describe('AgentOptions MCP wiring (v2.4.0 / §8.17)', () => {
         false,
         false,
         '',
+        CUSTOM_SERVER_NAME,
       );
       expect(opts.mcpServers).toBeUndefined();
       const agent = (opts.agents as any)['diff-reviewer'];
@@ -138,14 +188,29 @@ describe('AgentOptions MCP wiring (v2.4.0 / §8.17)', () => {
   });
 
   describe('getCodeFixerOptions (code_fixer)', () => {
-    it('attaches mcpServers and extends code-fixer tools when URL is set', () => {
+    it('attaches mcpServers under the default name and extends code-fixer tools', () => {
       const ao = new AgentOptions(baseConfDict, 'default');
       const opts = ao.getCodeFixerOptions('code_fixer', null, TEST_URL);
       expect(opts.mcpServers).toEqual({
-        [MCP_INTERNAL_SERVER_NAME]: { type: 'http', url: TEST_URL },
+        [DEFAULT_MCP_SERVER_NAME]: { type: 'http', url: TEST_URL },
       });
       const agent = (opts.agents as any)['code-fixer'];
-      expect(agent.tools).toEqual(['Read', 'Grep', ...expectedMcpToolNames]);
+      expect(agent.tools).toEqual(['Read', 'Grep', ...expectedDefaultMcpToolNames]);
+    });
+
+    it('honors the mcpServerName override', () => {
+      const ao = new AgentOptions(baseConfDict, 'default');
+      const opts = ao.getCodeFixerOptions(
+        'code_fixer',
+        null,
+        TEST_URL,
+        CUSTOM_SERVER_NAME,
+      );
+      expect(opts.mcpServers).toEqual({
+        [CUSTOM_SERVER_NAME]: { type: 'http', url: TEST_URL },
+      });
+      const agent = (opts.agents as any)['code-fixer'];
+      expect(agent.tools).toEqual(['Read', 'Grep', ...expectedCustomMcpToolNames]);
     });
 
     it('is a no-op when mcpServerUrl is omitted', () => {
@@ -158,7 +223,7 @@ describe('AgentOptions MCP wiring (v2.4.0 / §8.17)', () => {
   });
 
   describe('getFindingValidatorOptions (finding_validator)', () => {
-    it('attaches mcpServers and extends finding-validator tools when URL is set', () => {
+    it('attaches mcpServers under the default name and extends finding-validator tools', () => {
       const ao = new AgentOptions(baseConfDict, 'default');
       const opts = ao.getFindingValidatorOptions(
         'finding_validator',
@@ -166,10 +231,25 @@ describe('AgentOptions MCP wiring (v2.4.0 / §8.17)', () => {
         TEST_URL,
       );
       expect(opts.mcpServers).toEqual({
-        [MCP_INTERNAL_SERVER_NAME]: { type: 'http', url: TEST_URL },
+        [DEFAULT_MCP_SERVER_NAME]: { type: 'http', url: TEST_URL },
       });
       const agent = (opts.agents as any)['finding-validator'];
-      expect(agent.tools).toEqual(['Read', 'Grep', ...expectedMcpToolNames]);
+      expect(agent.tools).toEqual(['Read', 'Grep', ...expectedDefaultMcpToolNames]);
+    });
+
+    it('honors the mcpServerName override', () => {
+      const ao = new AgentOptions(baseConfDict, 'default');
+      const opts = ao.getFindingValidatorOptions(
+        'finding_validator',
+        null,
+        TEST_URL,
+        CUSTOM_SERVER_NAME,
+      );
+      expect(opts.mcpServers).toEqual({
+        [CUSTOM_SERVER_NAME]: { type: 'http', url: TEST_URL },
+      });
+      const agent = (opts.agents as any)['finding-validator'];
+      expect(agent.tools).toEqual(['Read', 'Grep', ...expectedCustomMcpToolNames]);
     });
 
     it('is a no-op when mcpServerUrl is omitted', () => {
@@ -182,7 +262,7 @@ describe('AgentOptions MCP wiring (v2.4.0 / §8.17)', () => {
   });
 
   describe('getPrAdversaryOptions (pr_adversary)', () => {
-    it('attaches mcpServers and extends pr-adversary tools when URL is set', () => {
+    it('attaches mcpServers under the default name and extends pr-adversary tools', () => {
       const ao = new AgentOptions(baseConfDict, 'default');
       const opts = ao.getPrAdversaryOptions(
         'pr_adversary',
@@ -192,10 +272,27 @@ describe('AgentOptions MCP wiring (v2.4.0 / §8.17)', () => {
         TEST_URL,
       );
       expect(opts.mcpServers).toEqual({
-        [MCP_INTERNAL_SERVER_NAME]: { type: 'http', url: TEST_URL },
+        [DEFAULT_MCP_SERVER_NAME]: { type: 'http', url: TEST_URL },
       });
       const agent = (opts.agents as any)['pr-adversary'];
-      expect(agent.tools).toEqual(['Read', 'Grep', ...expectedMcpToolNames]);
+      expect(agent.tools).toEqual(['Read', 'Grep', ...expectedDefaultMcpToolNames]);
+    });
+
+    it('honors the mcpServerName override', () => {
+      const ao = new AgentOptions(baseConfDict, 'default');
+      const opts = ao.getPrAdversaryOptions(
+        'pr_adversary',
+        null,
+        undefined,
+        false,
+        TEST_URL,
+        CUSTOM_SERVER_NAME,
+      );
+      expect(opts.mcpServers).toEqual({
+        [CUSTOM_SERVER_NAME]: { type: 'http', url: TEST_URL },
+      });
+      const agent = (opts.agents as any)['pr-adversary'];
+      expect(agent.tools).toEqual(['Read', 'Grep', ...expectedCustomMcpToolNames]);
     });
 
     it('is a no-op when mcpServerUrl is omitted', () => {
@@ -208,7 +305,7 @@ describe('AgentOptions MCP wiring (v2.4.0 / §8.17)', () => {
   });
 
   describe('cross-role invariants', () => {
-    it('uses the same server name across all four roles (deterministic identifier)', () => {
+    it('uses the default server name across all four roles when no override is given', () => {
       const ao = new AgentOptions(baseConfDict, 'default');
       const builders = [
         ao.getDiffReviewerOptions(
@@ -232,15 +329,49 @@ describe('AgentOptions MCP wiring (v2.4.0 / §8.17)', () => {
       ];
       for (const opts of builders) {
         expect(Object.keys(opts.mcpServers ?? {})).toEqual([
-          MCP_INTERNAL_SERVER_NAME,
+          DEFAULT_MCP_SERVER_NAME,
         ]);
-        const cfg = (opts.mcpServers as any)[MCP_INTERNAL_SERVER_NAME];
+        const cfg = (opts.mcpServers as any)[DEFAULT_MCP_SERVER_NAME];
         expect(cfg.type).toBe('http');
         expect(cfg.url).toBe(TEST_URL);
       }
     });
 
-    it('each role exposes the same v6.0.0 tool surface to the model', () => {
+    it('propagates the mcpServerName override to all four roles consistently', () => {
+      const ao = new AgentOptions(baseConfDict, 'default');
+      const builders = [
+        ao.getDiffReviewerOptions(
+          'pr_reviewer',
+          null,
+          undefined,
+          undefined,
+          false,
+          false,
+          TEST_URL,
+          CUSTOM_SERVER_NAME,
+        ),
+        ao.getCodeFixerOptions('code_fixer', null, TEST_URL, CUSTOM_SERVER_NAME),
+        ao.getFindingValidatorOptions(
+          'finding_validator',
+          null,
+          TEST_URL,
+          CUSTOM_SERVER_NAME,
+        ),
+        ao.getPrAdversaryOptions(
+          'pr_adversary',
+          null,
+          undefined,
+          false,
+          TEST_URL,
+          CUSTOM_SERVER_NAME,
+        ),
+      ];
+      for (const opts of builders) {
+        expect(Object.keys(opts.mcpServers ?? {})).toEqual([CUSTOM_SERVER_NAME]);
+      }
+    });
+
+    it('each role exposes the same tool surface to the model under the default name', () => {
       const ao = new AgentOptions(baseConfDict, 'default');
       const tools: string[][] = [
         ((ao.getDiffReviewerOptions(
@@ -265,7 +396,7 @@ describe('AgentOptions MCP wiring (v2.4.0 / §8.17)', () => {
         ).agents as any)['pr-adversary'].tools as string[]),
       ];
       for (const list of tools) {
-        for (const mcpTool of expectedMcpToolNames) {
+        for (const mcpTool of expectedDefaultMcpToolNames) {
           expect(list).toContain(mcpTool);
         }
       }

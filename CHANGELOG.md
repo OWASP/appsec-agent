@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.2] - 2026-04-28
+
+### Changed
+- **MCP server identifier is no longer hardcoded to a specific parent app.** The default value of the constant exported from `src/agent_options.ts` is now the generic `appsec-internal` (was `sast-ai-app-internal` in v2.4.0–v2.4.1). The matching `buildMcpInternalToolNames()` helper now produces `mcp__appsec-internal__queryFindingsHistory` etc. by default, so `appsec-agent` ships as a parent-app-agnostic package out of the box. Counterpart to the v2.4.1 documentation cleanup, which only touched comments / README and missed the runtime constant — closes the genericization properly.
+- **Genericized JSDoc on the runtime path.** Removed `sast-ai-app plan §8.17 / v6.0.0` references from `src/agent_options.ts`, `src/agent_actions.ts`, `bin/agent-run.ts`, the `pr_reviewer_mcp.e2e.test.ts` header, and the `agent-run.test.ts` describe block. Comments now consistently say "the parent app's per-scan MCP server" without naming a specific consumer.
+
+### Added
+- **`--mcp-server-name <name>` CLI flag (and `mcpServerName` parameter on the four role builders + `mcp_server_name?: string` on `AgentArgs`).** Override the MCP server identifier when registering `--mcp-server-url` with the SDK. Threads through to `Options.mcpServers[<name>]` and the SDK-namespaced tool names (`mcp__<name>__queryFindingsHistory` etc.) on each subagent's whitelist. Defaults to `DEFAULT_MCP_SERVER_NAME` (`appsec-internal`) when omitted; setting `--mcp-server-name` without `--mcp-server-url` warns and is otherwise a no-op.
+- **`DEFAULT_MCP_SERVER_NAME` export** from `src/agent_options.ts` (string literal `appsec-internal`). The legacy `MCP_INTERNAL_SERVER_NAME` export is preserved as an alias of `DEFAULT_MCP_SERVER_NAME` so existing imports keep type-checking — but new code should read `DEFAULT_MCP_SERVER_NAME` and pass `mcpServerName` to override.
+- **Tests.** Rewrote `src/__tests__/agent_options.mcp.test.ts` to assert (a) the new generic default flows through all four role builders; (b) the `mcpServerName` override propagates to both the `mcpServers` map key and the `mcp__<name>__*` tool prefix consistently; (c) the empty-URL fail-shape is preserved even when an override name is set. Added two new cases under `--mcp-server-name flag (v2.4.2)` in `src/__tests__/agent-run.test.ts` covering CLI plumbing into `args.mcp_server_name`.
+
+### Migration (parent apps)
+- **If you depend on the `mcp__sast-ai-app-internal__*` tool-name prefix** (e.g. you have prompt nudges, a counter family, or a server-side `MCP_SERVER_NAME` constant pinned to that string), pass `--mcp-server-name sast-ai-app-internal` when invoking `agent-run`. The agent's tool surface, prompt-nudge target, and SDK registration key all stay byte-for-byte stable.
+- **If you don't care about the literal name** (the common case — the tool list is dynamic, you're only checking `result=ok|failed` on a counter that doesn't read the tool name as a label), no change is required. The flag's default identifier is generic and the rest of the wiring is unchanged.
+- **No breaking change to the CLI surface.** `--mcp-server-url` keeps the v2.4.0 semantics. `--mcp-server-name` is purely additive.
+
+### Why a hotfix
+- v2.4.0 published with a parent-app-specific server name baked into the runtime path despite the package being intended as a shared agent. v2.4.1 cleaned up the docs but left the runtime constant in place — every consumer of `appsec-agent` was registering its MCP server under `sast-ai-app-internal` regardless of which parent app it was running under, polluting prompt nudges and any tool-name-keyed telemetry. v2.4.2 closes that gap without altering existing consumers (parent apps that *want* the old name pass it explicitly, parent apps that don't get a clean generic default).
+
 ## [2.4.0] - Unreleased
 
 ### Added

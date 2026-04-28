@@ -29,24 +29,37 @@ export interface ToolUsageLog {
 }
 
 /**
- * v2.4.0 / sast-ai-app plan §8.17 (v6.0.0).
+ * Default identifier the agent uses to register a parent-app-managed MCP
+ * server with the Claude Agent SDK. The resulting tool names exposed to
+ * the LLM follow the SDK convention `mcp__<server>__<tool>`, so this
+ * value becomes the literal prefix the model sees on its tool list.
  *
- * Server identifier the agent uses to address backend-backed tools served
- * over MCP. The resulting tool names exposed to the LLM follow the SDK
- * convention `mcp__<server>__<tool>` and are intentionally fixed (i.e. not
- * derived from the URL or environment) so prompt nudges and per-tool
- * counters can reference them by literal name. The matching backend
- * implementation lives in `sast-ai-app/backend/src/services/mcp/internalToolsServer.ts`.
+ * The default is intentionally generic (`appsec-internal`) so the
+ * `appsec-agent` package is reusable across parent apps. Callers that
+ * need a different identifier — e.g. to keep an existing prompt-nudge or
+ * counter contract stable — pass `--mcp-server-name <name>` on the CLI
+ * (or `mcpServerName` to the role builders directly), and the override
+ * threads through to both `Options.mcpServers[<name>]` and the namespaced
+ * tool names in the subagent whitelist.
  */
-export const MCP_INTERNAL_SERVER_NAME = 'sast-ai-app-internal';
+export const DEFAULT_MCP_SERVER_NAME = 'appsec-internal';
 
 /**
- * Tools exposed by the in-process MCP server the parent app spins up per
- * scan. The list deliberately matches the three deferrals tracked under
- * §8.17: §3.2b `queryFindingsHistory`, §3.1 Stage B `queryImportGraph`
- * (v5.4.0), §4 `queryRuntimeEnrichment` (v5.7.0). The server may expose
- * additional tools in v6.x; the agent only enumerates the v6.0.0 set
- * here so its whitelist is deterministic at this version.
+ * @deprecated since v2.4.2 — historical alias for the default server name.
+ * Kept exported so existing imports keep type-checking; new code should
+ * read `DEFAULT_MCP_SERVER_NAME` (and pass an override via
+ * `mcpServerName` when a specific identifier is required).
+ */
+export const MCP_INTERNAL_SERVER_NAME = DEFAULT_MCP_SERVER_NAME;
+
+/**
+ * Tools exposed by the per-scan in-process MCP server the parent app
+ * stands up. Pinned at this set (`queryFindingsHistory`,
+ * `queryImportGraph`, `queryRuntimeEnrichment`) so the agent's tool
+ * whitelist is deterministic at the current version; parent apps that
+ * expose a different surface should fork or extend this list rather
+ * than rely on dynamic discovery (the SDK would otherwise have to round
+ * trip the server before constructing the whitelist).
  */
 export const MCP_INTERNAL_TOOL_NAMES = [
   'queryFindingsHistory',
@@ -58,35 +71,46 @@ export const MCP_INTERNAL_TOOL_NAMES = [
  * SDK-namespaced tool names the LLM sees on its tool list when the server
  * is wired up. Exposed as a helper rather than a constant so callers in
  * `agent_options.ts` and the test suite share one source of truth.
+ *
+ * @param serverName - Override for the MCP server identifier. Defaults
+ *   to `DEFAULT_MCP_SERVER_NAME` (`appsec-internal`).
  */
-export function buildMcpInternalToolNames(): string[] {
+export function buildMcpInternalToolNames(
+  serverName: string = DEFAULT_MCP_SERVER_NAME,
+): string[] {
   return MCP_INTERNAL_TOOL_NAMES.map(
-    (tool) => `mcp__${MCP_INTERNAL_SERVER_NAME}__${tool}`
+    (tool) => `mcp__${serverName}__${tool}`
   );
 }
 
 /**
  * Mutate an already-built `Options` object to attach the MCP server config
  * (top-level `mcpServers`) and extend the named subagent's `tools`
- * whitelist with the v6.0.0 tool surface. No-op when `mcpServerUrl` is
- * falsy — preserves the v2.3.0 behaviour for callers that don't pass the
- * new parameter.
+ * whitelist with the backend-backed tool surface. No-op when
+ * `mcpServerUrl` is falsy — preserves the pre-v2.4.0 behaviour for
+ * callers that don't pass the new parameter.
  *
  * Mutating in place (rather than returning a fresh object) keeps the
  * existing role builders' return statements untouched and avoids a deep
  * clone of the (large) `Options` shape.
+ *
+ * @param mcpServerName - Override for the server identifier. Defaults
+ *   to `DEFAULT_MCP_SERVER_NAME` (`appsec-internal`); pass the parent
+ *   app's chosen name to keep tool-name contracts stable.
  */
 function attachMcpServerToOptions(
   options: Options,
   mcpServerUrl: string | undefined,
-  agentKey: string
+  agentKey: string,
+  mcpServerName: string = DEFAULT_MCP_SERVER_NAME,
 ): void {
   if (!mcpServerUrl) {
     return;
   }
+  const serverName = mcpServerName || DEFAULT_MCP_SERVER_NAME;
   options.mcpServers = {
     ...(options.mcpServers ?? {}),
-    [MCP_INTERNAL_SERVER_NAME]: {
+    [serverName]: {
       type: 'http',
       url: mcpServerUrl,
     },
@@ -94,7 +118,7 @@ function attachMcpServerToOptions(
   const agent = options.agents?.[agentKey] as AgentDefinition | undefined;
   if (agent) {
     const existingTools = agent.tools ?? [];
-    agent.tools = [...existingTools, ...buildMcpInternalToolNames()];
+    agent.tools = [...existingTools, ...buildMcpInternalToolNames(serverName)];
   }
 }
 
@@ -263,6 +287,7 @@ export class AgentOptions {
     noTools?: boolean,
     experimentEnabled?: boolean,
     mcpServerUrl?: string,
+    mcpServerName?: string,
   ): Options {
     const roleConfig = this.confDict[this.environment]?.[role];
     
@@ -362,7 +387,7 @@ You have access to Read, Grep, and Write tools:
       };
     }
 
-    attachMcpServerToOptions(options, mcpServerUrl, 'diff-reviewer');
+    attachMcpServerToOptions(options, mcpServerUrl, 'diff-reviewer', mcpServerName);
 
     return options;
   }
@@ -378,6 +403,7 @@ You have access to Read, Grep, and Write tools:
     role: string = 'code_fixer',
     srcDir?: string | null,
     mcpServerUrl?: string,
+    mcpServerName?: string,
   ): Options {
     const roleConfig = this.confDict[this.environment]?.[role];
     let systemPrompt = roleConfig?.options?.system_prompt ||
@@ -409,7 +435,7 @@ You have access to Read, Grep, and Write tools:
       }
     };
 
-    attachMcpServerToOptions(options, mcpServerUrl, 'code-fixer');
+    attachMcpServerToOptions(options, mcpServerUrl, 'code-fixer', mcpServerName);
 
     return options;
   }
@@ -496,6 +522,7 @@ You have access to Read, Grep, and Write tools:
     role: string = 'finding_validator',
     srcDir?: string | null,
     mcpServerUrl?: string,
+    mcpServerName?: string,
   ): Options {
     const roleConfig = this.confDict[this.environment]?.[role];
     let systemPrompt = roleConfig?.options?.system_prompt ||
@@ -527,7 +554,7 @@ You have access to Read, Grep, and Write tools:
       }
     };
 
-    attachMcpServerToOptions(options, mcpServerUrl, 'finding-validator');
+    attachMcpServerToOptions(options, mcpServerUrl, 'finding-validator', mcpServerName);
 
     return options;
   }
@@ -542,6 +569,7 @@ You have access to Read, Grep, and Write tools:
     maxTurns?: number,
     experimentEnabled?: boolean,
     mcpServerUrl?: string,
+    mcpServerName?: string,
   ): Options {
     const roleConfig = this.confDict[this.environment]?.[role];
     let systemPrompt =
@@ -578,7 +606,7 @@ You have access to Read, Grep, and Write tools:
       },
     };
 
-    attachMcpServerToOptions(options, mcpServerUrl, 'pr-adversary');
+    attachMcpServerToOptions(options, mcpServerUrl, 'pr-adversary', mcpServerName);
 
     return options;
   }

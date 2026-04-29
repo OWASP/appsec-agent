@@ -4,6 +4,8 @@ A TypeScript package that provides AI-powered agents for Application Security (A
 
 **📦 Available on npm**: Install with `npm install appsec-agent`
 
+**🌐 Looking for a full web dashboard?** Check out [**AI Threat Modeler**](https://github.com/yangsec888/ai-threat-modeler/) — the parent application that bundles `appsec-agent` into a Dockerized Next.js + Express stack with authentication, an interactive threat-aware Data Flow Diagram canvas, risk registry exports (PDF/CSV/JSON), and a chat UI. It's the easiest way to use this agent without writing code.
+
 ## 🚀 Features
 
 - **AI-Powered AppSec Automation**: Leverage Claude's capabilities for application security
@@ -27,6 +29,7 @@ A TypeScript package that provides AI-powered agents for Application Security (A
 - [Usage Examples](#usage-examples)
 - [Development](#development)
 - [Testing](#testing)
+- [Related Projects](#related-projects)
 
 ## 🛠 Installation
 
@@ -645,8 +648,39 @@ All tests pass including:
 - ✅ 5 QA verifier tests
 - ✅ Full coverage of core functionality
 
+## 🔗 Related Projects
+
+### [AI Threat Modeler](https://github.com/yangsec888/ai-threat-modeler/) — Parent Application
+
+`appsec-agent` powers [**AI Threat Modeler**](https://github.com/yangsec888/ai-threat-modeler/), a full open-source web application for AppSec automation. If you'd like to use these agents through a polished UI rather than the CLI or library API, the parent app is the recommended way to get started.
+
+Highlights:
+
+- 🐳 **One-command setup** with `docker-compose up -d --build`
+- 🖥️ **Next.js web dashboard** with authentication (JWT, bcrypt, role-based access) and admin-managed Anthropic API credentials
+- 🧵 **Threat Modeling workflow** — upload a repository ZIP and get a structured JSON threat model (powered by `appsec-agent` v1.6+) with:
+  - Interactive threat-aware **Data Flow Diagrams** (React Flow canvas with pan/zoom, search, filters, trust boundaries)
+  - Sortable threat tables with STRIDE category and severity badges
+  - Risk Registry with cross-referenced threat IDs
+  - Export to **PDF** (DFD with embedded vector SVG, and Threat Model), **CSV** (Risk Registry), or **raw JSON**
+- 💬 **Chat interface** with persistent conversation history, backed by `appsec-agent` interactive mode
+- 📚 **OpenAPI 3.0 / Swagger** docs at `/api-docs`
+- 🧪 Comprehensive backend, frontend, and Playwright E2E test coverage
+
+Quick start:
+
+```bash
+git clone https://github.com/yangsec888/ai-threat-modeler.git
+cd ai-threat-modeler
+docker-compose up -d --build
+# Then open http://localhost:3000  (default login: admin / admin)
+```
+
+See the [AI Threat Modeler README](https://github.com/yangsec888/ai-threat-modeler/blob/main/README.md) and [SETUP.md](https://github.com/yangsec888/ai-threat-modeler/blob/main/SETUP.md) for full details.
+
 ## 📚 References
 
+- [AI Threat Modeler (parent app)](https://github.com/yangsec888/ai-threat-modeler/)
 - [Claude Agent SDK Documentation](https://docs.claude.com/en/api/agent-sdk)
 - [Anthropic API Documentation](https://docs.anthropic.com/)
 - [Claude Code Documentation](https://docs.anthropic.com/claude-code)

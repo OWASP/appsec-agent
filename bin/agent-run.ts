@@ -12,6 +12,7 @@ import { Command } from 'commander';
 // Both compiled (dist/bin/ → dist/src/) and source (bin/ → src/) use ../src relative path
 const { loadYaml, listRoles, printVersionInfo, getProjectRoot } = require(path.join(__dirname, '../src/utils'));
 const { main } = require(path.join(__dirname, '../src/main'));
+const { resolveAgentRunMcpFields } = require(path.join(__dirname, '../src/resolveAgentRunMcpEnv'));
 
 const program = new Command();
 
@@ -138,6 +139,11 @@ if (!isValidModel) {
 }
 
 // Prepare args (chunking: CLI overrides config; main will merge with conf)
+const mcpFields = resolveAgentRunMcpFields({
+  mcpServerUrl: options.mcpServerUrl,
+  mcpServerName: options.mcpServerName,
+});
+
 const args = {
   role: options.role,
   environment: options.environment,
@@ -162,8 +168,7 @@ const args = {
   diff_exclude: Array.isArray(options.diffExclude) && options.diffExclude.length > 0 ? options.diffExclude : undefined,
   max_turns: options.maxTurns !== undefined ? parseInt(options.maxTurns, 10) : undefined,
   no_tools: options.noTools === true,
-  mcp_server_url: options.mcpServerUrl,
-  mcp_server_name: options.mcpServerName,
+  ...mcpFields,
 };
 
 // Log context if provided
@@ -227,10 +232,12 @@ if (args.mcp_server_url) {
     console.warn(`   Current role: ${args.role}. The MCP server config will be ignored.\n`);
   }
 } else if (args.mcp_server_name) {
-  // --mcp-server-name without --mcp-server-url is a no-op; warn so the
+  // --mcp-server-name without a resolved MCP URL is a no-op; warn so the
   // operator notices the misconfiguration instead of silently picking
   // the front-loaded JSON path.
-  console.warn('⚠️  Warning: --mcp-server-name has no effect unless --mcp-server-url is also set. Ignoring.\n');
+  console.warn(
+    '⚠️  Warning: --mcp-server-name has no effect unless --mcp-server-url or SAST_INTERNAL_TOOLS_MCP_URL is set. Ignoring.\n',
+  );
 }
 
 // Run main function

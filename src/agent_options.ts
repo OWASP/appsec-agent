@@ -125,17 +125,22 @@ function attachMcpServerToOptions(
   mcpServerUrl: string | undefined,
   agentKey: string,
   mcpServerName: string = DEFAULT_MCP_SERVER_NAME,
+  mcpServerBearer?: string,
 ): void {
   if (!mcpServerUrl) {
     return;
   }
   const serverName = mcpServerName || DEFAULT_MCP_SERVER_NAME;
+  const httpEntry: { type: 'http'; url: string; headers?: Record<string, string> } = {
+    type: 'http',
+    url: mcpServerUrl,
+  };
+  if (mcpServerBearer) {
+    httpEntry.headers = { Authorization: `Bearer ${mcpServerBearer}` };
+  }
   options.mcpServers = {
     ...(options.mcpServers ?? {}),
-    [serverName]: {
-      type: 'http',
-      url: mcpServerUrl,
-    },
+    [serverName]: httpEntry,
   };
   const agent = options.agents?.[agentKey] as AgentDefinition | undefined;
   if (agent) {
@@ -310,6 +315,7 @@ export class AgentOptions {
     experimentEnabled?: boolean,
     mcpServerUrl?: string,
     mcpServerName?: string,
+    mcpServerBearer?: string,
   ): Options {
     const roleConfig = this.confDict[this.environment]?.[role];
     
@@ -413,7 +419,13 @@ You have access to Read, Grep, and Write tools:
       };
     }
 
-    attachMcpServerToOptions(options, mcpServerUrl, 'diff-reviewer', mcpServerName);
+    attachMcpServerToOptions(
+      options,
+      mcpServerUrl,
+      'diff-reviewer',
+      mcpServerName,
+      mcpServerBearer,
+    );
 
     return options;
   }
@@ -430,6 +442,7 @@ You have access to Read, Grep, and Write tools:
     srcDir?: string | null,
     mcpServerUrl?: string,
     mcpServerName?: string,
+    mcpServerBearer?: string,
   ): Options {
     const roleConfig = this.confDict[this.environment]?.[role];
     let systemPrompt = roleConfig?.options?.system_prompt ||
@@ -461,7 +474,13 @@ You have access to Read, Grep, and Write tools:
       }
     };
 
-    attachMcpServerToOptions(options, mcpServerUrl, 'code-fixer', mcpServerName);
+    attachMcpServerToOptions(
+      options,
+      mcpServerUrl,
+      'code-fixer',
+      mcpServerName,
+      mcpServerBearer,
+    );
 
     return options;
   }
@@ -549,6 +568,7 @@ You have access to Read, Grep, and Write tools:
     srcDir?: string | null,
     mcpServerUrl?: string,
     mcpServerName?: string,
+    mcpServerBearer?: string,
   ): Options {
     const roleConfig = this.confDict[this.environment]?.[role];
     let systemPrompt = roleConfig?.options?.system_prompt ||
@@ -580,7 +600,13 @@ You have access to Read, Grep, and Write tools:
       }
     };
 
-    attachMcpServerToOptions(options, mcpServerUrl, 'finding-validator', mcpServerName);
+    attachMcpServerToOptions(
+      options,
+      mcpServerUrl,
+      'finding-validator',
+      mcpServerName,
+      mcpServerBearer,
+    );
 
     return options;
   }
@@ -596,6 +622,7 @@ You have access to Read, Grep, and Write tools:
     experimentEnabled?: boolean,
     mcpServerUrl?: string,
     mcpServerName?: string,
+    mcpServerBearer?: string,
   ): Options {
     const roleConfig = this.confDict[this.environment]?.[role];
     let systemPrompt =
@@ -632,7 +659,13 @@ You have access to Read, Grep, and Write tools:
       },
     };
 
-    attachMcpServerToOptions(options, mcpServerUrl, 'pr-adversary', mcpServerName);
+    attachMcpServerToOptions(
+      options,
+      mcpServerUrl,
+      'pr-adversary',
+      mcpServerName,
+      mcpServerBearer,
+    );
 
     return options;
   }

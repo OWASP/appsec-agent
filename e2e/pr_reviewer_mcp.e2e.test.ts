@@ -12,7 +12,11 @@
  * expects, the failure surfaces here instead of as a silent regression
  * in production scans.
  *
- * Three cases:
+ * Additional cases (v2.4.5 parent env — same merge as `bin/agent-run` via
+ * `resolveAgentRunMcpFields`): env URL + bearer, env URL precedence over CLI,
+ * and `Options.mcpServers` with `Authorization` when bearer is set.
+ *
+ * Three CLI-flag cases:
  *   1. HAPPY PATH — `--mcp-server-url` is supplied. `AgentActions` is
  *      constructed with `args.mcp_server_url` set, `diffReviewerWithOptions`
  *      is invoked, and the role builder produces an `Options` object with
@@ -46,6 +50,7 @@ import {
   MCP_INTERNAL_SERVER_NAME,
   buildMcpInternalToolNames,
 } from '../src/agent_options';
+import { resolveAgentRunMcpFields } from '../src/resolveAgentRunMcpEnv';
 
 jest.mock('../src/agent_actions', () => ({
   AgentActions: jest.fn(),
@@ -337,5 +342,117 @@ describe('e2e pr_reviewer + --mcp-server-url (mocked LLM, v2.4.0)', () => {
     } finally {
       process.chdir(prevCwd);
     }
+  });
+
+  describe('v2.4.5 SAST_INTERNAL_TOOLS_MCP_* (matches bin/agent-run merge)', () => {
+    let savedMcpEnv: { url?: string; bearer?: string };
+
+    beforeEach(() => {
+      savedMcpEnv = {
+        url: process.env.SAST_INTERNAL_TOOLS_MCP_URL,
+        bearer: process.env.SAST_INTERNAL_TOOLS_MCP_BEARER,
+      };
+      delete process.env.SAST_INTERNAL_TOOLS_MCP_URL;
+      delete process.env.SAST_INTERNAL_TOOLS_MCP_BEARER;
+    });
+
+    afterEach(() => {
+      if (savedMcpEnv.url !== undefined) {
+        process.env.SAST_INTERNAL_TOOLS_MCP_URL = savedMcpEnv.url;
+      } else {
+        delete process.env.SAST_INTERNAL_TOOLS_MCP_URL;
+      }
+      if (savedMcpEnv.bearer !== undefined) {
+        process.env.SAST_INTERNAL_TOOLS_MCP_BEARER = savedMcpEnv.bearer;
+      } else {
+        delete process.env.SAST_INTERNAL_TOOLS_MCP_BEARER;
+      }
+    });
+
+    it('threads env URL + bearer through resolveAgentRunMcpFields + main()', async () => {
+      process.env.SAST_INTERNAL_TOOLS_MCP_URL = TEST_MCP_URL;
+      process.env.SAST_INTERNAL_TOOLS_MCP_BEARER = 'opaque-parent-token';
+
+      const diffPath = path.join(testDir, 'diff-context.json');
+      fs.writeFileSync(diffPath, JSON.stringify(VALID_DIFF_CONTEXT), 'utf-8');
+
+      const prevCwd = process.cwd();
+      try {
+        process.chdir(testDir);
+
+        await main(confDict as any, {
+          role: 'pr_reviewer',
+          environment: 'default',
+          diff_context: diffPath,
+          output_file: outName,
+          output_format: 'json',
+          ...resolveAgentRunMcpFields({
+            mcpServerUrl: undefined,
+            mcpServerName: undefined,
+          }),
+        } as any);
+
+        expect(AgentActions).toHaveBeenCalledTimes(1);
+        const passedArgs = (AgentActions as jest.MockedClass<typeof AgentActions>).mock
+          .calls[0][2] as AgentArgs;
+        expect(passedArgs.mcp_server_url).toBe(TEST_MCP_URL);
+        expect(passedArgs.mcp_server_bearer).toBe('opaque-parent-token');
+        expect(mockAgentActions.diffReviewerWithOptions).toHaveBeenCalledTimes(1);
+        expect(exitMock).toHaveBeenCalledWith(0);
+
+        const ao = new AgentOptions(confDict as any, 'default');
+        const opts = ao.getDiffReviewerOptions(
+          'pr_reviewer',
+          null,
+          'json',
+          undefined,
+          false,
+          false,
+          TEST_MCP_URL,
+          undefined,
+          'opaque-parent-token',
+        );
+        expect(opts.mcpServers).toEqual({
+          [MCP_INTERNAL_SERVER_NAME]: {
+            type: 'http',
+            url: TEST_MCP_URL,
+            headers: { Authorization: 'Bearer opaque-parent-token' },
+          },
+        });
+      } finally {
+        process.chdir(prevCwd);
+      }
+    });
+
+    it('prefers SAST_INTERNAL_TOOLS_MCP_URL over args.mcp_server_url (CLI)', async () => {
+      process.env.SAST_INTERNAL_TOOLS_MCP_URL = TEST_MCP_URL;
+      const cliWouldBe = 'http://127.0.0.1:1/mcp';
+
+      const diffPath = path.join(testDir, 'diff-context.json');
+      fs.writeFileSync(diffPath, JSON.stringify(VALID_DIFF_CONTEXT), 'utf-8');
+
+      const prevCwd = process.cwd();
+      try {
+        process.chdir(testDir);
+
+        await main(confDict as any, {
+          role: 'pr_reviewer',
+          environment: 'default',
+          diff_context: diffPath,
+          output_file: outName,
+          output_format: 'json',
+          ...resolveAgentRunMcpFields({
+            mcpServerUrl: cliWouldBe,
+            mcpServerName: undefined,
+          }),
+        } as any);
+
+        const passedArgs = (AgentActions as jest.MockedClass<typeof AgentActions>).mock
+          .calls[0][2] as AgentArgs;
+        expect(passedArgs.mcp_server_url).toBe(TEST_MCP_URL);
+      } finally {
+        process.chdir(prevCwd);
+      }
+    });
   });
 });

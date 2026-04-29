@@ -123,6 +123,28 @@ describe('AgentOptions MCP wiring', () => {
       ]);
     });
 
+    it('adds Authorization Bearer on mcpServers when mcpServerBearer is set (v2.4.5+)', () => {
+      const ao = new AgentOptions(baseConfDict, 'default');
+      const opts = ao.getDiffReviewerOptions(
+        'pr_reviewer',
+        null,
+        undefined,
+        undefined,
+        false,
+        false,
+        TEST_URL,
+        undefined,
+        'opaque-per-scan-secret',
+      );
+      expect(opts.mcpServers).toEqual({
+        [DEFAULT_MCP_SERVER_NAME]: {
+          type: 'http',
+          url: TEST_URL,
+          headers: { Authorization: 'Bearer opaque-per-scan-secret' },
+        },
+      });
+    });
+
     it('honors the mcpServerName override on both mcpServers key and tool prefix', () => {
       const ao = new AgentOptions(baseConfDict, 'default');
       const opts = ao.getDiffReviewerOptions(

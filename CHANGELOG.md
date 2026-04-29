@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.5] - 2026-04-29
+
+### Added — MCP HTTP Bearer (sast-ai-app v6.1.x)
+
+- **`attachMcpServerToOptions` / role builders** — Optional **`mcpServerBearer`** on `getDiffReviewerOptions`, `getCodeFixerOptions`, `getFindingValidatorOptions`, `getPrAdversaryOptions`. When set, the `http` MCP entry includes **`headers: { Authorization: 'Bearer …' }`** (Claude Agent SDK `McpHttpServerConfig`).
+- **`AgentArgs`** — **`mcp_server_bearer?: string`**, populated from env in **`bin/agent-run.ts`**.
+- **Env resolution** — **`SAST_INTERNAL_TOOLS_MCP_URL`** (preferred over CLI `--mcp-server-url` when both are set) and **`SAST_INTERNAL_TOOLS_MCP_BEARER`** map into `mcp_server_url` / `mcp_server_bearer` for `main()`.
+
+### Tests
+
+- **`agent_options.mcp.test.ts`** — Asserts Bearer header shape when bearer is supplied.
+
 ## [2.4.4] - 2026-04-28
 
 ### Added

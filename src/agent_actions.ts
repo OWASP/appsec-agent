@@ -68,6 +68,11 @@ export interface AgentArgs {
    * Introduced in v2.4.2.
    */
   mcp_server_name?: string;
+  /**
+   * Bearer for `SAST_INTERNAL_TOOLS_MCP_URL` HTTP MCP (sast-ai-app v6.1.x).
+   * Set from env in agent-run; sent as Authorization header on MCP requests.
+   */
+  mcp_server_bearer?: string;
 }
 
 interface ConversationEntry {
@@ -424,6 +429,7 @@ export class AgentActions {
       srcDir,
       this.args.mcp_server_url,
       this.args.mcp_server_name,
+      this.args.mcp_server_bearer,
     );
 
     let cursor: BlinkingCursor | null = null;
@@ -600,6 +606,7 @@ export class AgentActions {
       srcDir,
       this.args.mcp_server_url,
       this.args.mcp_server_name,
+      this.args.mcp_server_bearer,
     );
 
     let cursor: BlinkingCursor | null = null;
@@ -663,6 +670,7 @@ export class AgentActions {
       this.args.experiment_enabled,
       this.args.mcp_server_url,
       this.args.mcp_server_name,
+      this.args.mcp_server_bearer,
     );
 
     let cursor: BlinkingCursor | null = null;
@@ -735,6 +743,7 @@ export class AgentActions {
       this.args.experiment_enabled,
       this.args.mcp_server_url,
       this.args.mcp_server_name,
+      this.args.mcp_server_bearer,
     );
 
     let cursor: BlinkingCursor | null = null;

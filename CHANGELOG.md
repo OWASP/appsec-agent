@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.3] - 2026-04-28
+
+### Added
+- **`pr_reviewer` system-prompt nudge for MCP phase 2 (parent-app §8.17 staged ladder):** when `--mcp-server-url` is set, `getDiffReviewerOptions` appends a short instruction block that names the live SDK tools `mcp__<server>__queryFindingsHistory` and `mcp__<server>__queryImportGraph` so the model is steered toward reachability and findings-history lookups instead of guessing. `queryRuntimeEnrichment` is deliberately omitted from the nudge until phase 3. New exported helper `buildPrReviewerMcpNudgeSystemPromptSuffix()` builds the same suffix for tests or downstream snapshot tooling.
+- **Tests:** extended `src/__tests__/agent_options.mcp.test.ts` (nudge presence, server-name override, `code_reviewer` role does not get the `pr_reviewer` nudge, no MCP URL → no nudge) and `e2e/pr_reviewer_mcp.e2e.test.ts` (assert system `prompt` contains the phase-2 tool ids when MCP is wired).
+
 ## [2.4.2] - 2026-04-28
 
 ### Changed

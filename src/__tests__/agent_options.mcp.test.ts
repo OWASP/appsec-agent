@@ -34,6 +34,7 @@ import {
   MCP_INTERNAL_SERVER_NAME,
   MCP_INTERNAL_TOOL_NAMES,
   buildMcpInternalToolNames,
+  buildPrReviewerMcpNudgeSystemPromptSuffix,
 } from '../agent_options';
 import { ConfigDict } from '../utils';
 
@@ -184,6 +185,82 @@ describe('AgentOptions MCP wiring', () => {
       expect(opts.mcpServers).toBeUndefined();
       const agent = (opts.agents as any)['diff-reviewer'];
       expect(agent.tools).toEqual(['Read', 'Grep', 'Write']);
+    });
+
+    describe('pr_reviewer MCP system-prompt nudge (§8.17 phase 2)', () => {
+      it('appends findings-history + import-graph nudge when MCP URL is set', () => {
+        const ao = new AgentOptions(baseConfDict, 'default');
+        const opts = ao.getDiffReviewerOptions(
+          'pr_reviewer',
+          null,
+          undefined,
+          undefined,
+          false,
+          false,
+          TEST_URL,
+        );
+        const prompt = (opts.agents as any)['diff-reviewer'].prompt as string;
+        expect(prompt).toContain('**Backend-backed MCP tools:**');
+        expect(prompt).toContain(
+          '`mcp__appsec-internal__queryFindingsHistory`',
+        );
+        expect(prompt).toContain('`mcp__appsec-internal__queryImportGraph`');
+        expect(prompt).not.toContain('queryRuntimeEnrichment');
+      });
+
+      it('uses mcpServerName in the nudge tool ids', () => {
+        const ao = new AgentOptions(baseConfDict, 'default');
+        const opts = ao.getDiffReviewerOptions(
+          'pr_reviewer',
+          null,
+          undefined,
+          undefined,
+          false,
+          false,
+          TEST_URL,
+          CUSTOM_SERVER_NAME,
+        );
+        const prompt = (opts.agents as any)['diff-reviewer'].prompt as string;
+        expect(prompt).toContain(
+          `\`mcp__${CUSTOM_SERVER_NAME}__queryFindingsHistory\``,
+        );
+        expect(prompt).toContain(
+          `\`mcp__${CUSTOM_SERVER_NAME}__queryImportGraph\``,
+        );
+      });
+
+      it('does not append the pr_reviewer nudge for code_reviewer even when MCP URL is set', () => {
+        const ao = new AgentOptions(baseConfDict, 'default');
+        const opts = ao.getDiffReviewerOptions(
+          'code_reviewer',
+          null,
+          undefined,
+          undefined,
+          false,
+          false,
+          TEST_URL,
+        );
+        const prompt = (opts.agents as any)['diff-reviewer'].prompt as string;
+        expect(prompt).not.toContain('**Backend-backed MCP tools:**');
+      });
+
+      it('does not append the nudge when mcpServerUrl is omitted', () => {
+        const ao = new AgentOptions(baseConfDict, 'default');
+        const opts = ao.getDiffReviewerOptions('pr_reviewer');
+        const prompt = (opts.agents as any)['diff-reviewer'].prompt as string;
+        expect(prompt).not.toContain('**Backend-backed MCP tools:**');
+      });
+
+      it('buildPrReviewerMcpNudgeSystemPromptSuffix is stable for direct callers', () => {
+        const suffix = buildPrReviewerMcpNudgeSystemPromptSuffix(CUSTOM_SERVER_NAME);
+        expect(suffix).toContain(
+          `\`mcp__${CUSTOM_SERVER_NAME}__queryFindingsHistory\``,
+        );
+        expect(suffix).toContain(
+          `\`mcp__${CUSTOM_SERVER_NAME}__queryImportGraph\``,
+        );
+        expect(suffix).not.toContain('queryRuntimeEnrichment');
+      });
     });
   });
 

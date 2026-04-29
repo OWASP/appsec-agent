@@ -5,7 +5,11 @@
  */
 
 export { AgentActions, AgentArgs } from './agent_actions';
-export { AgentOptions, ToolUsageLog } from './agent_options';
+export {
+  AgentOptions,
+  ToolUsageLog,
+  buildPrReviewerMcpNudgeSystemPromptSuffix,
+} from './agent_options';
 export { main } from './main';
 export * from './utils';
 export {

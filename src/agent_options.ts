@@ -84,6 +84,27 @@ export function buildMcpInternalToolNames(
 }
 
 /**
+ * System-prompt suffix for `pr_reviewer` when `--mcp-server-url` is set.
+ * §8.17 staged ladder phase 2: steer the model toward live
+ * `queryFindingsHistory` and `queryImportGraph` by exact SDK tool id.
+ * `queryRuntimeEnrichment` stays off the nudge until phase 3.
+ *
+ * @param mcpServerName - Same override as `attachMcpServerToOptions`
+ *   (`DEFAULT_MCP_SERVER_NAME` when omitted).
+ */
+export function buildPrReviewerMcpNudgeSystemPromptSuffix(
+  mcpServerName: string = DEFAULT_MCP_SERVER_NAME,
+): string {
+  const name = mcpServerName || DEFAULT_MCP_SERVER_NAME;
+  const findingsTool = `mcp__${name}__queryFindingsHistory`;
+  const importGraphTool = `mcp__${name}__queryImportGraph`;
+  return `
+
+**Backend-backed MCP tools:** Call \`${findingsTool}\` when prior findings, dismissals, or fingerprint history for the changed files or CWE would affect severity or confidence. Call \`${importGraphTool}\` with the PR file paths when you need authoritative import-graph reachability (callers, entry points) instead of inferring from the diff alone. Prefer these tools over guessing.
+`;
+}
+
+/**
  * Mutate an already-built `Options` object to attach the MCP server config
  * (top-level `mcpServers`) and extend the named subagent's `tools`
  * whitelist with the backend-backed tool surface. No-op when
@@ -360,6 +381,10 @@ You have access to Read, Grep, and Write tools:
       systemPrompt += `
 
 **Experiment (treatment arm):** Apply stricter false-positive controls. Before reporting a finding, require a concrete failure or exploit path visible from the diff or verified in-repo (Grep/Read). Prefer MEDIUM over HIGH when evidence is mostly circumstantial.`;
+    }
+
+    if (mcpServerUrl && role === 'pr_reviewer') {
+      systemPrompt += buildPrReviewerMcpNudgeSystemPromptSuffix(mcpServerName);
     }
 
     const resolvedMaxTurns = maxTurns

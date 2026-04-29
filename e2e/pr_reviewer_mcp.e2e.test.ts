@@ -234,6 +234,12 @@ describe('e2e pr_reviewer + --mcp-server-url (mocked LLM, v2.4.0)', () => {
         'Write',
         ...expectedMcpToolNames,
       ]);
+      // §8.17 phase 2: system prompt nudge names findings-history +
+      // import-graph tools (not runtime enrichment until phase 3).
+      expect(agent.prompt).toContain('**Backend-backed MCP tools:**');
+      expect(agent.prompt).toContain('`mcp__appsec-internal__queryImportGraph`');
+      expect(agent.prompt).toContain('`mcp__appsec-internal__queryFindingsHistory`');
+      expect(agent.prompt).not.toContain('queryRuntimeEnrichment');
     } finally {
       process.chdir(prevCwd);
     }
@@ -277,6 +283,7 @@ describe('e2e pr_reviewer + --mcp-server-url (mocked LLM, v2.4.0)', () => {
       for (const mcpTool of expectedMcpToolNames) {
         expect(agent.tools).not.toContain(mcpTool);
       }
+      expect(agent.prompt).not.toContain('**Backend-backed MCP tools:**');
     } finally {
       process.chdir(prevCwd);
     }

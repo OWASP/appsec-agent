@@ -85,9 +85,9 @@ export function buildMcpInternalToolNames(
 
 /**
  * System-prompt suffix for `pr_reviewer` when `--mcp-server-url` is set.
- * §8.17 staged ladder phase 2: steer the model toward live
- * `queryFindingsHistory` and `queryImportGraph` by exact SDK tool id.
- * `queryRuntimeEnrichment` stays off the nudge until phase 3.
+ * §8.17 staged ladder phase 3: steer the model toward all three live tools by
+ * exact SDK tool id — `queryFindingsHistory`, `queryImportGraph`,
+ * `queryRuntimeEnrichment`.
  *
  * @param mcpServerName - Same override as `attachMcpServerToOptions`
  *   (`DEFAULT_MCP_SERVER_NAME` when omitted).
@@ -98,9 +98,10 @@ export function buildPrReviewerMcpNudgeSystemPromptSuffix(
   const name = mcpServerName || DEFAULT_MCP_SERVER_NAME;
   const findingsTool = `mcp__${name}__queryFindingsHistory`;
   const importGraphTool = `mcp__${name}__queryImportGraph`;
+  const runtimeTool = `mcp__${name}__queryRuntimeEnrichment`;
   return `
 
-**Backend-backed MCP tools:** Call \`${findingsTool}\` when prior findings, dismissals, or fingerprint history for the changed files or CWE would affect severity or confidence. Call \`${importGraphTool}\` with the PR file paths when you need authoritative import-graph reachability (callers, entry points) instead of inferring from the diff alone. Prefer these tools over guessing.
+**Backend-backed MCP tools:** Call \`${findingsTool}\` when prior findings, dismissals, or fingerprint history for the changed files or CWE would affect severity or confidence. Call \`${importGraphTool}\` with the PR file paths when you need authoritative import-graph reachability (callers, entry points) instead of inferring from the diff alone. Call \`${runtimeTool}\` with the changed file paths when you need runtime-incident or hot-files signal for operational risk instead of guessing from the diff alone. Prefer these tools over guessing.
 `;
 }
 

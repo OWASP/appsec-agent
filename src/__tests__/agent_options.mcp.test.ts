@@ -187,8 +187,8 @@ describe('AgentOptions MCP wiring', () => {
       expect(agent.tools).toEqual(['Read', 'Grep', 'Write']);
     });
 
-    describe('pr_reviewer MCP system-prompt nudge (§8.17 phase 2)', () => {
-      it('appends findings-history + import-graph nudge when MCP URL is set', () => {
+    describe('pr_reviewer MCP system-prompt nudge (§8.17 phase 3)', () => {
+      it('appends findings-history + import-graph + runtime-enrichment nudge when MCP URL is set', () => {
         const ao = new AgentOptions(baseConfDict, 'default');
         const opts = ao.getDiffReviewerOptions(
           'pr_reviewer',
@@ -205,7 +205,9 @@ describe('AgentOptions MCP wiring', () => {
           '`mcp__appsec-internal__queryFindingsHistory`',
         );
         expect(prompt).toContain('`mcp__appsec-internal__queryImportGraph`');
-        expect(prompt).not.toContain('queryRuntimeEnrichment');
+        expect(prompt).toContain(
+          '`mcp__appsec-internal__queryRuntimeEnrichment`',
+        );
       });
 
       it('uses mcpServerName in the nudge tool ids', () => {
@@ -226,6 +228,9 @@ describe('AgentOptions MCP wiring', () => {
         );
         expect(prompt).toContain(
           `\`mcp__${CUSTOM_SERVER_NAME}__queryImportGraph\``,
+        );
+        expect(prompt).toContain(
+          `\`mcp__${CUSTOM_SERVER_NAME}__queryRuntimeEnrichment\``,
         );
       });
 
@@ -259,7 +264,9 @@ describe('AgentOptions MCP wiring', () => {
         expect(suffix).toContain(
           `\`mcp__${CUSTOM_SERVER_NAME}__queryImportGraph\``,
         );
-        expect(suffix).not.toContain('queryRuntimeEnrichment');
+        expect(suffix).toContain(
+          `\`mcp__${CUSTOM_SERVER_NAME}__queryRuntimeEnrichment\``,
+        );
       });
     });
   });

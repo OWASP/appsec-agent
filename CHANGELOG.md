@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4] - 2026-04-28
+
+### Added
+- **`pr_reviewer` MCP system-prompt nudge — §8.17 phase 3:** `buildPrReviewerMcpNudgeSystemPromptSuffix()` / `getDiffReviewerOptions` now also names `mcp__<server>__queryRuntimeEnrichment` and nudges the model to use live runtime-incident / hot-files signal for changed paths. Completes the staged ladder alongside `queryFindingsHistory` and `queryImportGraph` (v2.4.3).
+- **Tests:** `agent_options.mcp.test.ts` and `e2e/pr_reviewer_mcp.e2e.test.ts` updated to assert all three tool ids in the system prompt when `--mcp-server-url` is set for `pr_reviewer`.
+
 ## [2.4.3] - 2026-04-28
 
 ### Added

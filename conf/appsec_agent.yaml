@@ -59,6 +59,15 @@ default: &default
     options:
       output_format: "json"
       verbose: False
+  learned_guidance_synthesizer:
+    options:
+      # Pure-transform role: condenses bucketed dismissal-signal inputs into
+      # short class-level policy bullets (parent-app plan §3.8 / CLLG).
+      # Tools are forced to [] in agent_options.ts; max_turns kept at 1 since
+      # the role has nothing to fetch and one structured-JSON response is enough.
+      max_turns: 1
+      output_format: "json"
+      verbose: False
 
 
 development:

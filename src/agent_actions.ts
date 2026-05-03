@@ -29,6 +29,8 @@ export interface AgentArgs {
   import_graph_context?: string;
   /** v2.3.0 / sast-ai-app plan §4 + §8.14: per-file production-incident summary JSON (pr_reviewer only). */
   runtime_enrichment_context?: string;
+  /** v2.5.0 / parent-app plan §3.8: bucketed dismissal-signal JSON for the learned_guidance_synthesizer role. */
+  inputs?: string;
   /** A/B: treatment arm for pr_reviewer (stricter false-positive instructions). */
   experiment_enabled?: boolean;
   model?: string;  // Claude model selection: sonnet, opus, haiku
@@ -652,6 +654,84 @@ export class AgentActions {
         }
       }
       console.error('Error during finding validation:', error);
+      throw error;
+    }
+    console.log();
+    return structuredJson;
+  }
+
+  /**
+   * learned_guidance_synthesizer (v2.5.0 / parent-app plan §3.8): pure-transform
+   * role; reads no tools, runs at most 1 turn, returns structured JSON via the
+   * SDK `outputFormat.json_schema` mechanism. Cost line is printed identically
+   * to every other role so the parent app's existing `Cost: $X.XXXX` extractor
+   * (`learnedGuidanceSynthesizer.parseAgentMetrics`) populates the
+   * `learned_guidance_synthesis_runs.cost_usd` column.
+   */
+  async learnedGuidanceSynthesizerWithOptions(userPrompt: string): Promise<string> {
+    const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
+    const options = agentOptions.getLearnedGuidanceSynthesizerOptions(this.args.role);
+
+    let cursor: BlinkingCursor | null = null;
+    let structuredJson = '';
+    let tokensIn = 0;
+    let tokensOut = 0;
+
+    try {
+      cursor = new BlinkingCursor();
+      cursor.start();
+      try {
+        for await (const message of llmQuery({ prompt: userPrompt, options })) {
+          if (message.type === 'stream_event') {
+            if (cursor) cursor.stop();
+          } else if (message.type === 'assistant') {
+            if (cursor) cursor.stop();
+            const assistantMsg = message as SDKAssistantMessage;
+            if (this.args.verbose && assistantMsg.message.content) {
+              for (const block of assistantMsg.message.content) {
+                if (block.type === 'text') {
+                  console.log(`Claude: ${block.text}`);
+                }
+              }
+            }
+          } else if (message.type === 'result') {
+            if (cursor) cursor.stop();
+            const resultMsg = message as SDKResultMessage;
+            const resultAny = resultMsg as any;
+            if (resultAny.structured_output) {
+              structuredJson = JSON.stringify(resultAny.structured_output, null, 2);
+            }
+            // Mirror the per-token logging used implicitly by other roles via
+            // the SDK; surfacing them here lets the parent app's
+            // `parseAgentMetrics` populate `tokens_input` / `tokens_output`
+            // alongside `cost_usd`. SDKResultMessage's `usage` field is the
+            // same shape Anthropic's API returns.
+            const usage = (resultAny.usage ?? resultAny.message?.usage) as
+              | { input_tokens?: number; output_tokens?: number }
+              | undefined;
+            if (usage) {
+              if (typeof usage.input_tokens === 'number') tokensIn += usage.input_tokens;
+              if (typeof usage.output_tokens === 'number') tokensOut += usage.output_tokens;
+            }
+            if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
+              console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);
+            }
+            if (tokensIn > 0) console.log(`Tokens input: ${tokensIn}`);
+            if (tokensOut > 0) console.log(`Tokens output: ${tokensOut}`);
+          }
+        }
+      } finally {
+        if (cursor) cursor.stop();
+      }
+    } catch (error) {
+      if (cursor) {
+        try {
+          cursor.stop();
+        } catch {
+          // ignore
+        }
+      }
+      console.error('Error during learned-guidance synthesis:', error);
       throw error;
     }
     console.log();

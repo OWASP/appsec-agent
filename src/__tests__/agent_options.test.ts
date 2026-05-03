@@ -666,6 +666,76 @@ describe('AgentOptions', () => {
     });
   });
 
+  describe('getLearnedGuidanceSynthesizerOptions (v2.5.0 / parent-app plan §3.8)', () => {
+    it('returns no tools, maxTurns 1, and the structured-JSON schema', () => {
+      const agentOptions = new AgentOptions(mockConfDict, environment);
+      const options = agentOptions.getLearnedGuidanceSynthesizerOptions(
+        'learned_guidance_synthesizer',
+      );
+
+      expect(options.agents).toBeDefined();
+      expect(options.agents?.['learned-guidance-synthesizer']).toBeDefined();
+      expect(options.agents?.['learned-guidance-synthesizer'].tools).toEqual([]);
+      expect((options.agents?.['learned-guidance-synthesizer'] as any).maxTurns).toBe(1);
+      expect(options.permissionMode).toBe('bypassPermissions');
+      expect((options.outputFormat as any).type).toBe('json_schema');
+      const schema = (options.outputFormat as any).schema;
+      expect(schema.required).toEqual(['bullets']);
+      expect(schema.additionalProperties).toBe(false);
+    });
+
+    it('uses the default system prompt when config is missing', () => {
+      const emptyConfDict: ConfigDict = { default: {} };
+      const agentOptions = new AgentOptions(emptyConfDict, environment);
+      const options = agentOptions.getLearnedGuidanceSynthesizerOptions();
+
+      const prompt = options.agents?.['learned-guidance-synthesizer'].prompt as string;
+      expect(prompt).toContain('summarizing patterns');
+      expect(prompt).toContain('no Read/Grep tools');
+    });
+
+    it('honors a custom system prompt from config', () => {
+      const confWithSynth: ConfigDict = {
+        default: {
+          ...mockConfDict.default,
+          learned_guidance_synthesizer: {
+            options: { system_prompt: 'Custom synth prompt' },
+          },
+        },
+      };
+      const agentOptions = new AgentOptions(confWithSynth, environment);
+      const options = agentOptions.getLearnedGuidanceSynthesizerOptions(
+        'learned_guidance_synthesizer',
+      );
+
+      expect(options.agents?.['learned-guidance-synthesizer'].prompt).toBe('Custom synth prompt');
+    });
+
+    it('honors max_turns override from config', () => {
+      const conf: ConfigDict = {
+        default: {
+          ...mockConfDict.default,
+          learned_guidance_synthesizer: { options: { max_turns: 3 } },
+        },
+      };
+      const agentOptions = new AgentOptions(conf, environment);
+      const options = agentOptions.getLearnedGuidanceSynthesizerOptions(
+        'learned_guidance_synthesizer',
+      );
+
+      expect((options.agents?.['learned-guidance-synthesizer'] as any).maxTurns).toBe(3);
+    });
+
+    it('schema constrains bullet length and confidence range', () => {
+      const agentOptions = new AgentOptions(mockConfDict, environment);
+      const options = agentOptions.getLearnedGuidanceSynthesizerOptions();
+      const props = (options.outputFormat as any).schema.properties.bullets.items.properties;
+      expect(props.bullet.maxLength).toBe(300);
+      expect(props.confidence.minimum).toBe(0);
+      expect(props.confidence.maximum).toBe(1);
+    });
+  });
+
   describe('getFindingValidatorOptions', () => {
     it('should return options with agent configuration and structured output', () => {
       const confWithValidator: ConfigDict = {

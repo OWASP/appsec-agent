@@ -1,9 +1,9 @@
 {
   "name": "appsec-agent",
-  "version": "2.4.5",
+  "version": "2.5.0",
   "description": "TypeScript package for AppSec AI Agent management",
   "author": "Sam Li",
-  "date": "Apr 28 2026",
+  "date": "May 03 2026",
   "license": "MIT",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",

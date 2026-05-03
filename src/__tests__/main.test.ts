@@ -59,6 +59,7 @@ describe('main', () => {
       findingValidatorWithOptions: jest.fn().mockResolvedValue(''),
       prAdversaryWithOptions: jest.fn().mockResolvedValue(''),
       contextExtractorWithOptions: jest.fn().mockResolvedValue(''),
+      learnedGuidanceSynthesizerWithOptions: jest.fn().mockResolvedValue(''),
     } as any;
 
     (AgentActions as jest.MockedClass<typeof AgentActions>).mockImplementation(() => mockAgentActions);
@@ -84,6 +85,8 @@ describe('main', () => {
       'retest_verdict.json',
       'pr_adversary_empty_test_out.json',
       'pr_adversary_run_test_out.json',
+      'learned_guidance_run_test_out.json',
+      'learned_guidance_no_output_test.json',
     ]) {
       if (fs.existsSync(f)) {
         fs.removeSync(f);
@@ -879,6 +882,135 @@ describe('main', () => {
       if (fs.existsSync(outName)) {
         fs.removeSync(outName);
       }
+    });
+  });
+
+  describe('learned_guidance_synthesizer (v2.5.0 / parent-app plan §3.8)', () => {
+    let inputsPath: string;
+    const sample = {
+      buckets: [
+        {
+          cwe: 'CWE-79',
+          signal_count: 6,
+          example_dismissal_reasons: [
+            'React auto-escapes JSX values',
+            'output already runs through dompurify',
+          ],
+        },
+        {
+          cwe: 'CWE-352',
+          signal_count: 5,
+          example_dismissal_reasons: ['csurf middleware mounted in app.ts'],
+        },
+      ],
+    };
+
+    beforeEach(() => {
+      inputsPath = path.join(testDir, 'cllg_inputs.json');
+      fs.writeFileSync(inputsPath, JSON.stringify(sample), 'utf-8');
+    });
+
+    it('should exit when --inputs is missing', async () => {
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      exitMock.mockImplementationOnce((code?: number) => {
+        throw new Error(`process.exit(${code})`);
+      });
+      await expect(
+        main(mockConfDict, { role: 'learned_guidance_synthesizer', environment: 'default' }),
+      ).rejects.toThrow('process.exit(1)');
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('--inputs is required'),
+      );
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('should exit when --inputs file is missing', async () => {
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      exitMock.mockImplementationOnce((code?: number) => {
+        throw new Error(`process.exit(${code})`);
+      });
+      await expect(
+        main(mockConfDict, {
+          role: 'learned_guidance_synthesizer',
+          environment: 'default',
+          inputs: path.join(testDir, 'does-not-exist.json'),
+        }),
+      ).rejects.toThrow('process.exit(1)');
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Learned-guidance inputs file not found'),
+      );
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('should exit when --inputs JSON fails schema validation', async () => {
+      const badPath = path.join(testDir, 'bad.json');
+      fs.writeFileSync(badPath, JSON.stringify({ buckets: [] }), 'utf-8');
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      exitMock.mockImplementationOnce((code?: number) => {
+        throw new Error(`process.exit(${code})`);
+      });
+      await expect(
+        main(mockConfDict, {
+          role: 'learned_guidance_synthesizer',
+          environment: 'default',
+          inputs: badPath,
+        }),
+      ).rejects.toThrow('process.exit(1)');
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Invalid learned-guidance inputs'),
+      );
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('should call learnedGuidanceSynthesizerWithOptions with a prompt containing each CWE bucket', async () => {
+      const outName = 'learned_guidance_run_test_out.json';
+      mockAgentActions.learnedGuidanceSynthesizerWithOptions.mockResolvedValue(
+        JSON.stringify({
+          bullets: [
+            { cwe: 'CWE-79', bullet: 'Trust React JSX auto-escaping in src/views/.', confidence: 0.85 },
+          ],
+        }),
+      );
+
+      await main(mockConfDict, {
+        role: 'learned_guidance_synthesizer',
+        environment: 'default',
+        inputs: inputsPath,
+        output_file: outName,
+        output_format: 'json',
+      });
+
+      expect(mockAgentActions.learnedGuidanceSynthesizerWithOptions).toHaveBeenCalled();
+      const prompt = mockAgentActions.learnedGuidanceSynthesizerWithOptions.mock.calls[0][0];
+      expect(prompt).toContain('CWE-79');
+      expect(prompt).toContain('CWE-352');
+      expect(prompt).toContain('React auto-escapes');
+      expect(prompt).toContain('csurf middleware');
+
+      const written = JSON.parse(fs.readFileSync(outName, 'utf-8'));
+      expect(written.bullets).toHaveLength(1);
+      expect(written.bullets[0].cwe).toBe('CWE-79');
+
+      expect(exitMock).toHaveBeenCalledWith(0);
+      if (fs.existsSync(outName)) fs.removeSync(outName);
+    });
+
+    it('should write the empty-bullets shell when the agent returns no structured output (fail-closed)', async () => {
+      const outName = 'learned_guidance_no_output_test.json';
+      mockAgentActions.learnedGuidanceSynthesizerWithOptions.mockResolvedValue('');
+
+      await main(mockConfDict, {
+        role: 'learned_guidance_synthesizer',
+        environment: 'default',
+        inputs: inputsPath,
+        output_file: outName,
+        output_format: 'json',
+      });
+
+      const written = JSON.parse(fs.readFileSync(outName, 'utf-8'));
+      expect(written).toEqual({ bullets: [] });
+      expect(exitMock).toHaveBeenCalledWith(0);
+      if (fs.existsSync(outName)) fs.removeSync(outName);
     });
   });
 

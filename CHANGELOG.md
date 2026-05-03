@@ -5,6 +5,84 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-05-03
+
+### Added — `learned_guidance_synthesizer` role (parent-app plan §3.8 / CLLG)
+
+New pure-transform role that condenses bucketed dismissal/outcome/feedback signals into short class-level policy bullets the parent app's `pr_reviewer` reads at scan time. Closes the cross-repo dependency carried as a TODO on the parent app at v6.2.0 — once `appsec-agent@^2.5.0` is pinned and deployed, ops can flip `quality_tier_learned_guidance_enabled` per-project on the parent side.
+
+- **New role string** `learned_guidance_synthesizer` — dispatched in `src/main.ts` alongside the existing roles. Tools forced to `[]` (no Read/Grep, no MCP server, no source-tree access — operates purely on the `--inputs` JSON). `maxTurns: 1` since the role has nothing to fetch and one structured-JSON response is enough.
+
+- **New CLI flag `--inputs <file>`** ([`bin/agent-run.ts`](bin/agent-run.ts)) — required when `-r learned_guidance_synthesizer` is set, ignored (with a friendly warning) on every other role per the same fail-open shape as `--import-graph-context` / `--runtime-enrichment-context`. Path is run through the existing `validateInputFilePath` traversal guard before the loader sees it.
+
+- **New schema module [`src/schemas/learned_guidance.ts`](src/schemas/learned_guidance.ts)**:
+  - `parseLearnedGuidanceInputs` — strict validator on the `--inputs` JSON. Top-level shape: `{ buckets: [{ cwe: string, signal_count: number, example_dismissal_reasons: string[] }] }`. Caps: ≤ 200 buckets, ≤ 200 reasons per bucket, reasons truncated at 2 KB each, CWE id ≤ 64 chars. Empty `buckets[]` rejected (the parent app's `MIN_BUCKET_SIZE = 5` filter should never let an empty file reach us).
+  - `loadLearnedGuidanceInputs` — read + parse + validate convenience wrapper matching the `loadRetestContext` etc. pattern.
+  - `buildLearnedGuidanceUserPrompt` — emits a markdown-formatted prompt with one `#### CWE-XXX — N signals` block per bucket; reminds the model of the positive-form rule, the 300-char cap, the `[0,1]` confidence scale, and the explicit "return zero bullets if reasons disagree" instruction.
+  - `LEARNED_GUIDANCE_OUTPUT_SCHEMA` — JSON Schema enforced via `Options.outputFormat.json_schema` so the SDK rejects malformed completions before they ever reach the parent app's `extractBulletsFromAgentOutput`. Cap: ≤ 50 bullets, `bullet` ≤ 300 chars, `confidence` ∈ `[0, 1]`, `additionalProperties: false` everywhere.
+  - `MAX_BULLET_LEN = 300` exported in lockstep with the parent app's `MAX_BULLET_LEN` constant in `learnedGuidanceSynthesizer.ts`.
+  - `emptyLearnedGuidanceOutput()` — `{ bullets: [] }` shell used by the fail-closed branch of `main.ts` when the SDK returns no `structured_output`.
+
+- **`AgentOptions.getLearnedGuidanceSynthesizerOptions`** ([`src/agent_options.ts`](src/agent_options.ts)) — builds the per-role `Options`. Tools `[]`, `maxTurns: 1`, `permissionMode: 'bypassPermissions'`, `outputFormat: { type: 'json_schema', schema: LEARNED_GUIDANCE_OUTPUT_SCHEMA }`. Honors `roleConfig.options.system_prompt` and `max_turns` overrides from `appsec_agent.yaml`.
+
+- **`AgentActions.learnedGuidanceSynthesizerWithOptions`** ([`src/agent_actions.ts`](src/agent_actions.ts)) — runs the SDK query, returns the `structured_output` JSON string, and prints the per-role `Cost: $X.XXXX` plus `Tokens input: N` / `Tokens output: N` lines. The cost line is the EXACT format the parent app's `parseAgentMetrics` regex (`/Cost:\s*\$?([\d.]+)/i`) consumes, so `learned_guidance_synthesis_runs.cost_usd` populates without code changes on the parent side. Token lines mirror the parent's `TOKENS_IN_RE` / `TOKENS_OUT_RE` regexes for the same reason.
+
+- **`AgentArgs.inputs?: string`** ([`src/agent_actions.ts`](src/agent_actions.ts)) — new optional field, populated from `options.inputs` in `bin/agent-run.ts`, threaded into `main.ts` for the new role's dispatch branch.
+
+- **`main.ts` dispatch branch** — exits with a clear message + non-zero status when `--inputs` is missing, the file is unreadable, or schema validation fails (parent app records `outcome=agent_error` in those cases and stays fail-closed). On success, writes the structured JSON to `args.output_file` (default `learned_guidance_bullets.json`) per the parent's `runSynthesizerAgent` spawn contract (`-o <outputFileName>` cwd-relative). On empty `structured_output`, writes `{ bullets: [] }` so the contract is symmetric across success / no-bullet paths.
+
+- **`conf/appsec_agent.yaml`** — new `learned_guidance_synthesizer` entry with `max_turns: 1`, `output_format: "json"`, `verbose: false`, and a header comment explaining the tool restriction lives in code, not config.
+
+### Cross-repo contract (verified against the parent app v6.2.0 `learnedGuidanceSynthesizer.runSynthesizerAgent`)
+
+The parent app spawns this role like:
+
+```
+node <agent-run-path> -r learned_guidance_synthesizer \
+                     --inputs <inputFile> \
+                     -o <outputFileName> \
+                     -f json \
+                     -m <modelAlias>
+```
+
+from a per-run temp working directory it owns. **Input file** shape (parent writes it; matches `parseLearnedGuidanceInputs`):
+
+```jsonc
+{
+  "buckets": [
+    { "cwe": "CWE-79", "signal_count": 12, "example_dismissal_reasons": [ "..." ] },
+    ...
+  ]
+}
+```
+
+**Output file** shape (this role writes; matches the parent's `extractBulletsFromAgentOutput` Zod gate):
+
+```jsonc
+{
+  "bullets": [
+    { "cwe": "CWE-79", "bullet": "≤300 char positive-form rule", "confidence": 0.85 },
+    ...
+  ]
+}
+```
+
+The parent applies its own confidence floor (`MIN_CONFIDENCE = 0.6`) and active-bullet cap (`MAX_ACTIVE_BULLETS_PER_PROJECT = 12`) on top of this output, so the role is allowed to return up to 50 bullets and let the parent rank + truncate. Bullets below 0.6 confidence are silently dropped on the parent side; the system prompt nudges the model to skip those rather than emit them.
+
+### Tests
+
+- **New unit suite [`src/__tests__/schemas/learned_guidance.test.ts`](src/__tests__/schemas/learned_guidance.test.ts)** — 19 cases covering `parseLearnedGuidanceInputs` happy + reject paths (top-level / per-bucket / over-cap), `loadLearnedGuidanceInputs` round-trip + missing-file + bad-JSON, `buildLearnedGuidanceUserPrompt` content (CWE label, signal pluralization, conservative copy on empty reasons, char-cap mention, newline flattening), `LEARNED_GUIDANCE_OUTPUT_SCHEMA` structural assertions, and `emptyLearnedGuidanceOutput` symmetric-fallback shape.
+
+- **`src/__tests__/main.test.ts`** — 5 new cases in a `learned_guidance_synthesizer` describe block: missing `--inputs`, missing inputs file, schema-invalid inputs, success-path prompt assertions (CWE labels + reason text), and the fail-closed empty-bullets shell when the agent returns no structured output.
+
+- **`src/__tests__/agent_options.test.ts`** — 5 new cases on `getLearnedGuidanceSynthesizerOptions` (tools / maxTurns / schema shape; default vs custom system prompt; max_turns override; bullet length + confidence range constraints).
+
+- 515/515 unit tests pass; tsc clean.
+
+### Risk
+
+Pure addition: no existing code path changes behavior. All existing roles, tests, and CLI flags are untouched. The parent app's master flag `quality_tier_learned_guidance_enabled` ships default-off (parent app v6.2.0); until ops flips it for a specific project, this role is never invoked. Bump from `2.4.5 → 2.5.0` reflects the new public surface area (new role, new CLI flag, new schema module, two new exported helpers).
+
 ## [2.4.5] - 2026-04-29
 
 ### Added — MCP HTTP Bearer (sast-ai-app v6.1.x)

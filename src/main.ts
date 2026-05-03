@@ -31,6 +31,11 @@ import {
   formatRuntimeEnrichmentContextForPrompt,
   type RuntimeEnrichmentContext,
 } from './schemas/runtime_enrichment';
+import {
+  buildLearnedGuidanceUserPrompt,
+  parseLearnedGuidanceInputs,
+  type LearnedGuidanceInputs,
+} from './schemas/learned_guidance';
 
 /**
  * Validate and copy source directory, exiting on validation failure
@@ -193,6 +198,45 @@ function loadRuntimeEnrichmentContextFile(
     console.warn(`⚠️  Invalid runtime-enrichment context ${safePath} (ignored): ${e?.message || e}`);
     return null;
   }
+}
+
+/**
+ * Load and validate learned-guidance synthesizer inputs (v2.5.0 / parent-app
+ * plan §3.8). On any path / parse / validation error we log and exit non-zero
+ * so the parent app's spawn wrapper records `outcome=agent_error` and stays
+ * fail-closed (no bullets persisted).
+ */
+function loadLearnedGuidanceInputsFile(inputsPath: string, cwd: string): LearnedGuidanceInputs {
+  const resolvedPath = validateInputFilePath(inputsPath, cwd);
+  if (!resolvedPath) {
+    const safePath = sanitizePathForError(inputsPath);
+    console.error(`Error: Invalid learned-guidance inputs path: ${safePath}`);
+    console.error('The path must be valid and relative paths cannot contain directory traversal sequences.');
+    process.exit(1);
+  }
+  const safePath = sanitizePathForError(resolvedPath);
+  if (!fs.existsSync(resolvedPath)) {
+    console.error(`Error: Learned-guidance inputs file not found: ${safePath}`);
+    process.exit(1);
+  }
+  let data: unknown;
+  try {
+    const content = fs.readFileSync(resolvedPath, 'utf-8');
+    data = JSON.parse(content);
+  } catch (error: any) {
+    const errorMessage = error?.message || 'Unknown error';
+    console.error(`Error: Failed to read learned-guidance inputs file ${safePath}: ${errorMessage}`);
+    process.exit(1);
+  }
+  try {
+    return parseLearnedGuidanceInputs(data);
+  } catch (e: any) {
+    console.error(`Error: Invalid learned-guidance inputs: ${e?.message || e}`);
+    process.exit(1);
+  }
+  // Unreachable; satisfies the type checker for callers that have run
+  // `process.exit` mocked out (jest tests).
+  throw new Error('unreachable');
 }
 
 /**
@@ -997,6 +1041,44 @@ Use sequential IDs: node-001/flow-001/tb-001 for DFD elements, THREAT-001 for th
         console.log(`Adversarial report written to ${outputFile}`);
       }
       cleanupTmpDir(tmpSrcDir);
+    }
+
+  } else if (args.role === 'learned_guidance_synthesizer') {
+    console.log('Running Learned Guidance Synthesizer (v2.5.0 / parent-app plan §3.8)');
+
+    if (!args.inputs) {
+      console.error('Error: --inputs is required for the learned_guidance_synthesizer role.');
+      process.exit(1);
+    }
+
+    const inputs = loadLearnedGuidanceInputsFile(args.inputs, currentWorkingDir);
+    if (args.output_format && args.output_format.toLowerCase() !== 'json') {
+      console.warn('learned_guidance_synthesizer always emits JSON (structured); ignoring -f for file content.');
+    }
+    const outputFile = validateOutputFile(
+      args.output_file || 'learned_guidance_bullets.json',
+      currentWorkingDir,
+    );
+
+    console.log(
+      `Synthesizing bullets for ${inputs.buckets.length} CWE bucket(s) (` +
+        inputs.buckets.map((b) => `${b.cwe}=${b.signal_count}`).join(', ') +
+        ')',
+    );
+
+    const userPrompt = buildLearnedGuidanceUserPrompt(inputs);
+    const structuredResult = await agentActions.learnedGuidanceSynthesizerWithOptions(userPrompt);
+    if (structuredResult) {
+      fs.writeFileSync(outputFile, structuredResult, 'utf-8');
+      console.log(`Learned-guidance bullets written to ${outputFile}`);
+    } else {
+      // Fail-closed: emit an empty bullets array so the parent app sees a
+      // valid (zero-result) JSON file rather than a missing one. The
+      // parent's `extractBulletsFromAgentOutput` handles both, but
+      // writing the empty shape keeps the contract symmetric across
+      // success / no-bullet paths.
+      fs.writeFileSync(outputFile, JSON.stringify({ bullets: [] }, null, 2), 'utf-8');
+      console.log(`Synthesizer returned no structured output; wrote empty bullets to ${outputFile}`);
     }
 
   } else if (args.role === 'context_extractor') {

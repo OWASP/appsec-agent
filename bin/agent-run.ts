@@ -45,6 +45,10 @@ program
     'JSON file with per-file production-incident summary for hot files (v2.3.0 / sast-ai-app plan §4 + §8.14; use with -r pr_reviewer)',
   )
   .option(
+    '--inputs <file>',
+    'JSON file with bucketed dismissal-signal inputs for learned_guidance_synthesizer (v2.5.0 / parent-app plan §3.8; use with -r learned_guidance_synthesizer)',
+  )
+  .option(
     '--experiment-enabled',
     'A/B treatment arm: stricter FP controls for pr_reviewer diff mode; optional variant for pr_adversary',
   )
@@ -160,6 +164,7 @@ const args = {
   adversarial_context: options.adversarialContext,
   import_graph_context: options.importGraphContext,
   runtime_enrichment_context: options.runtimeEnrichmentContext,
+  inputs: options.inputs,
   experiment_enabled: options.experimentEnabled === true,
   model: model,
   diff_max_tokens_per_batch: options.diffMaxTokens !== undefined ? parseInt(options.diffMaxTokens, 10) : undefined,
@@ -206,6 +211,18 @@ if (args.runtime_enrichment_context) {
     console.warn('⚠️  Warning: --runtime-enrichment-context is only consumed by pr_reviewer in diff-context mode.');
     console.warn(`   Current role: ${args.role}${args.diff_context ? '' : ' (no --diff-context supplied)'}. The runtime-enrichment context will be ignored.`);
     console.warn('   Use -r pr_reviewer --diff-context <file> to enable §4 hot-file hints.\n');
+  }
+}
+
+// v2.5.0 / parent-app plan §3.8: --inputs is only consumed by the
+// learned_guidance_synthesizer role. Other roles silently ignore it
+// (fail-open).
+if (args.inputs) {
+  console.log('Using learned-guidance inputs file:', args.inputs);
+  if (args.role !== 'learned_guidance_synthesizer') {
+    console.warn('⚠️  Warning: --inputs is only consumed by learned_guidance_synthesizer.');
+    console.warn(`   Current role: ${args.role}. The inputs file will be ignored.`);
+    console.warn('   Use -r learned_guidance_synthesizer to enable §3.8 CLLG synthesis.\n');
   }
 }
 

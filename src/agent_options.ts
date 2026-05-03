@@ -12,6 +12,7 @@ import { FIX_OUTPUT_SCHEMA } from './schemas/security_fix';
 import { QA_VERDICT_SCHEMA } from './schemas/qa_context';
 import { RETEST_VERDICT_SCHEMA } from './schemas/finding_validator';
 import { CONTEXT_EXTRACTION_SCHEMA } from './schemas/context_extraction';
+import { LEARNED_GUIDANCE_OUTPUT_SCHEMA } from './schemas/learned_guidance';
 
 const FIX_CODE_VS_OPTIONS_GUIDANCE = `
 
@@ -607,6 +608,61 @@ You have access to Read, Grep, and Write tools:
       mcpServerName,
       mcpServerBearer,
     );
+
+    return options;
+  }
+
+  /**
+   * learned_guidance_synthesizer (v2.5.0 / parent-app plan §3.8): pure-transform
+   * role that condenses bucketed dismissal/outcome/feedback signals into a short
+   * list of class-level policy bullets the pr_reviewer reads next scan.
+   *
+   * Tools: NONE — the agent must work from the provided buckets only. No
+   * source-tree access, no MCP server. The parent app's `runSynthesizerAgent`
+   * spawns this from a temp working directory anyway, so even if a tool were
+   * attached it would have nothing to read.
+   *
+   * Output schema (LEARNED_GUIDANCE_OUTPUT_SCHEMA):
+   *   { bullets: [{ cwe, bullet (≤300 chars), confidence (0..1) }] }
+   *
+   * Confidence floor and active-bullet cap are enforced by the parent app
+   * (`MIN_CONFIDENCE = 0.6`, `MAX_ACTIVE_BULLETS_PER_PROJECT = 12`); this
+   * role is allowed to return up to 50 bullets and the parent ranks +
+   * truncates.
+   */
+  getLearnedGuidanceSynthesizerOptions(role: string = 'learned_guidance_synthesizer'): Options {
+    const roleConfig = this.confDict[this.environment]?.[role];
+    const systemPrompt =
+      roleConfig?.options?.system_prompt ||
+      'You are a senior application security engineer summarizing patterns from past PR-scan ' +
+        'dismissals into class-level policy bullets that a future code reviewer can apply to AVOID ' +
+        'raising the same false-positive class again. You operate ONLY on the buckets provided in ' +
+        'the user prompt — you have no Read/Grep tools, no source-tree access, and no MCP server. ' +
+        'Emit one bullet per CWE bucket where the example reasons converge on a specific, citable ' +
+        'pattern (file path, library, framework feature). When the reasons disagree or are too ' +
+        'vague to ground a specific rule, OMIT that bucket entirely — it is better to return zero ' +
+        'bullets than a bullet the reviewer cannot act on. Output is constrained to the required ' +
+        'JSON schema; emit nothing else.';
+
+    const resolvedMaxTurns = roleConfig?.options?.max_turns ?? 1;
+
+    const options: Options = {
+      agents: {
+        'learned-guidance-synthesizer': {
+          description:
+            'Synthesizes class-level learned-guidance bullets from per-CWE dismissal-signal buckets',
+          prompt: systemPrompt,
+          tools: [],
+          model: this.model,
+          maxTurns: resolvedMaxTurns,
+        } as AgentDefinition,
+      },
+      permissionMode: 'bypassPermissions',
+      outputFormat: {
+        type: 'json_schema',
+        schema: LEARNED_GUIDANCE_OUTPUT_SCHEMA,
+      },
+    };
 
     return options;
   }

@@ -4,7 +4,7 @@ import {
   type CodebaseGraphContext,
 } from '../../schemas/codebase_graph';
 
-describe('codebase_graph schema (v2.6.0 / sast-ai-app plan §8.18 Phase 2)', () => {
+describe('codebase_graph schema (v2.6.0 / parent-app plan §8.18 Phase 2)', () => {
   describe('parseCodebaseGraphContext', () => {
     it('parses a minimal valid payload', () => {
       const ctx = parseCodebaseGraphContext({
@@ -154,11 +154,11 @@ describe('codebase_graph schema (v2.6.0 / sast-ai-app plan §8.18 Phase 2)', () 
         default_branch_sha: 'abc123',
         parsed_at: '2026-05-12T20:00:00Z',
         files: [{ file: 'a.ts', blast_radius_files_count: 1 }],
-        metadata: { project_name: 'sast-ai-app' },
+        metadata: { project_name: 'example-app' },
       });
       expect(ctx.default_branch_sha).toBe('abc123');
       expect(ctx.parsed_at).toBe('2026-05-12T20:00:00Z');
-      expect(ctx.metadata?.project_name).toBe('sast-ai-app');
+      expect(ctx.metadata?.project_name).toBe('example-app');
     });
 
     it('rejects non-object input', () => {

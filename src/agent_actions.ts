@@ -29,7 +29,7 @@ export interface AgentArgs {
   import_graph_context?: string;
   /** v2.3.0 / sast-ai-app plan §4 + §8.14: per-file production-incident summary JSON (pr_reviewer only). */
   runtime_enrichment_context?: string;
-  /** v2.6.0 / sast-ai-app plan §8.18 Phase 2: per-changed-file structural-graph summary (callers/callees/blast-radius) JSON (pr_reviewer only). */
+  /** v2.6.0 / parent-app plan §8.18 Phase 2: per-changed-file structural-graph summary (callers/callees/blast-radius) JSON (pr_reviewer only). */
   codebase_graph_context?: string;
   /** v2.5.0 / parent-app plan §3.8: bucketed dismissal-signal JSON for the learned_guidance_synthesizer role. */
   inputs?: string;

@@ -46,7 +46,7 @@ program
   )
   .option(
     '--codebase-graph-context <file>',
-    'JSON file with per-changed-file structural-graph summary (callers/callees/blast-radius) sourced from codebase-memory-mcp (v2.6.0 / sast-ai-app plan §8.18 Phase 2; use with -r pr_reviewer)',
+    'JSON file with per-changed-file structural-graph summary (callers/callees/blast-radius) sourced from codebase-memory-mcp (v2.6.0 / parent-app plan §8.18 Phase 2; use with -r pr_reviewer)',
   )
   .option(
     '--inputs <file>',
@@ -219,7 +219,7 @@ if (args.runtime_enrichment_context) {
   }
 }
 
-// v2.6.0 / sast-ai-app plan §8.18 Phase 2: codebase-graph context is only
+// v2.6.0 / parent-app plan §8.18 Phase 2: codebase-graph context is only
 // consumed by the pr_reviewer diff-mode prompt. Same role-gate as
 // --import-graph-context / --runtime-enrichment-context — other roles
 // simply ignore it (fail-open).

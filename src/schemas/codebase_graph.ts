@@ -1,5 +1,5 @@
 /**
- * Codebase-graph context input (v2.6.0 / sast-ai-app plan §8.18 Phase 2) —
+ * Codebase-graph context input (v2.6.0 / parent-app plan §8.18 Phase 2) —
  * per-changed-file structural-graph summary passed to `pr_reviewer` so the LLM
  * can factor symbol-level callers/callees and downstream blast-radius into its
  * severity + confidence calls.
@@ -14,7 +14,7 @@
  *                        outbound CALLS edges within the configured depth.
  *
  * The parent app's `composeCodebaseGraphContextPayload`
- * (`sast-ai-app/backend/src/services/codebaseGraph/`) does the cbm MCP queries
+ * (`<parent-app>/backend/src/services/codebaseGraph/`) does the cbm MCP queries
  * (`search_graph` to find symbols defined in each changed file →
  * `trace_path(direction=both, mode=calls, depth=2)` per symbol) and writes the
  * JSON file. The agent here only parses + formats it for the prompt — no MCP

@@ -206,7 +206,7 @@ function loadRuntimeEnrichmentContextFile(
 }
 
 /**
- * Load and validate a codebase-graph context JSON file (v2.6.0 / sast-ai-app
+ * Load and validate a codebase-graph context JSON file (v2.6.0 / parent-app
  * plan §8.18 Phase 2). On any parse/IO error we log and return `null`
  * (fail-open): the downstream scan should not be blocked by a bad
  * codebase-graph payload; the parent app's `composeCodebaseGraphContextPayload`
@@ -786,7 +786,7 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
         );
       }
 
-      // v2.6.0 / sast-ai-app plan §8.18 Phase 2: optional per-changed-file
+      // v2.6.0 / parent-app plan §8.18 Phase 2: optional per-changed-file
       // structural-graph summary (callers/callees/blast-radius) from the
       // parent app's composeCodebaseGraphContextPayload. Fail-open on any
       // parse/IO error — Phase 2 is purely advisory; the cbm artifact

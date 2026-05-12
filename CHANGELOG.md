@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.6.0] - 2026-05-12
 
-### Added — `--codebase-graph-context <file>` for `pr_reviewer` (sast-ai-app plan §8.18 Phase 2)
+### Added — `--codebase-graph-context <file>` for `pr_reviewer` (parent-app plan §8.18 Phase 2)
 
 Third structural-context family for the `pr_reviewer` diff-mode prompt, alongside `--import-graph-context` (v2.2.0, file-level inbound import counts via SCIP) and `--runtime-enrichment-context` (v2.3.0, per-file production-incident counts). Distinct from those: this context is **symbol-level** (cbm tree-sitter graph; 155 languages) and surfaces **callers + callees + downstream blast-radius** per changed file, sourced from the parent app's [`codebase-memory-mcp`](https://github.com/DeusData/codebase-memory-mcp) (cbm) artifact via the `search_graph` + `trace_path(direction=both, mode=calls)` MCP tools.
 
@@ -46,7 +46,7 @@ from a per-PR working directory. **Input file** shape (parent writes it; matches
   "default_branch_sha": "cafebabedeadbeefcafebabedeadbeef00000003",
   "parsed_at": "2026-05-12T20:00:00Z",
   "coverage": "full",
-  "metadata": { "project_name": "sast-ai-app" },
+  "metadata": { "project_name": "example-app" },
   "files": [
     {
       "file": "backend/src/services/payments.ts",

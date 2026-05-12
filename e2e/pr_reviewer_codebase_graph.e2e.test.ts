@@ -1,7 +1,7 @@
 /**
  * E2E (integration): `pr_reviewer` diff-context path through `main()` with
  * temp `diff-context.json` + `codebase-graph-context.json`, no live LLM —
- * `AgentActions` is mocked. Validates the v2.6.0 (sast-ai-app plan §8.18
+ * `AgentActions` is mocked. Validates the v2.6.0 (parent-app plan §8.18
  * Phase 2) wiring: file → loadCodebaseGraphContextFile →
  * formatCodebaseGraphContextForPrompt → buildDiffReviewPrompt →
  * diffReviewerWithOptions → output file.

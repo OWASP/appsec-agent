@@ -13,7 +13,11 @@ import { splitIntoBatches, ChunkingOptions } from './diff_chunking';
 import { mergeBatchReports } from './diff_report_merge';
 import { FixContext } from './schemas/security_fix';
 import { loadQaContext, QaContext } from './schemas/qa_context';
-import { loadRetestContext, RetestContext } from './schemas/finding_validator';
+import {
+  loadRetestContext,
+  RetestContext,
+  RetestContextValidationError,
+} from './schemas/finding_validator';
 import { loadExtractionContext, ExtractionContext } from './schemas/context_extraction';
 import {
   parseAdversarialPassContext,
@@ -1047,7 +1051,20 @@ Use sequential IDs: node-001/flow-001/tb-001 for DFD elements, THREAT-001 for th
       process.exit(1);
     }
 
-    const retestContext = loadRetestContext(args.retest_context, currentWorkingDir);
+    // Route caller-input validation failures to exit code 2 + a structured
+    // stderr signal (already printed inside loadRetestContext via fail()).
+    // Without this catch, validation errors would propagate through the
+    // default unhandled-exception path and exit code 1, which parent apps
+    // can't tell apart from a real agent crash.
+    let retestContext: RetestContext;
+    try {
+      retestContext = loadRetestContext(args.retest_context, currentWorkingDir);
+    } catch (e) {
+      if (e instanceof RetestContextValidationError) {
+        process.exit(2);
+      }
+      throw e;
+    }
     const outputFile = validateOutputFile(
       args.output_file || 'retest_verdict.json',
       currentWorkingDir

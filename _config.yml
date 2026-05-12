@@ -1,0 +1,28 @@
+title: AppSec Agent
+description: TypeScript package providing AI-powered agents for Application Security tasks, built on the Claude Agent SDK.
+theme: jekyll-theme-cayman
+show_downloads: true
+google_analytics:
+plugins:
+  - jekyll-relative-links
+  - jekyll-seo-tag
+relative_links:
+  enabled: true
+  collections: true
+include:
+  - CHANGELOG.md
+  - docs
+exclude:
+  - node_modules
+  - dist
+  - bin
+  - src
+  - e2e
+  - conf
+  - jest.config.js
+  - tsconfig.json
+  - package.json
+  - package-lock.json
+  - .gitignore
+  - .npmignore
+  - .npmrc

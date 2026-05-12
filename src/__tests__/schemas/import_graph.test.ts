@@ -71,12 +71,12 @@ describe('import_graph schema (v5.4.0 / plan §3.1 Stage B)', () => {
         parsed_at: '2026-04-24T20:00:00Z',
         coverage: 'partial',
         files: [{ file: 'a.ts', inbound_prod_import_count: 1 }],
-        metadata: { project_name: 'sast-ai-app' },
+        metadata: { project_name: 'example-parent-app' },
       });
       expect(ctx.default_branch_sha).toBe('abc123');
       expect(ctx.parsed_at).toBe('2026-04-24T20:00:00Z');
       expect(ctx.coverage).toBe('partial');
-      expect(ctx.metadata?.project_name).toBe('sast-ai-app');
+      expect(ctx.metadata?.project_name).toBe('example-parent-app');
     });
 
     it('rejects non-object input', () => {

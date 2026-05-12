@@ -1,7 +1,7 @@
 /**
  * E2E (integration): `pr_adversary` path through `main()` with temp adversarial JSON,
  * no live LLM — AgentActions is mocked. Validates file → parse → prompt → output wiring
- * for sast-ai v5.3.0 / quality plan §8.7.
+ * for parent-app v5.3.0 / quality plan §8.7.
  */
 import * as path from 'path';
 import * as os from 'os';

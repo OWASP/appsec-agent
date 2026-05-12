@@ -2,7 +2,7 @@
  * Finding Validator Context and Verdict Schemas
  *
  * Defines the input context and output verdict for the finding_validator role.
- * RetestContext is assembled by sast-ai-app and passed via --retest-context JSON file.
+ * RetestContext is assembled by the parent app and passed via --retest-context JSON file.
  * RetestVerdict is the structured output returned by the finding_validator agent.
  */
 
@@ -10,7 +10,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 // ---------------------------------------------------------------------------
-// Input: context provided by sast-ai-app via --retest-context JSON file
+// Input: context provided by the parent app via --retest-context JSON file
 // ---------------------------------------------------------------------------
 
 export interface RetestContextFinding {
@@ -64,7 +64,7 @@ export const RETEST_CONTEXT_INVALID_SIGNAL = '[finding_validator] retest_context
  * default unhandled-exception path that surfaces as exit code 1 + a Node
  * stack trace.
  *
- * Parent apps (e.g., sast-ai-app's `findingRetestService`) historically
+ * Parent apps (e.g., a `findingRetestService` spawn wrapper) historically
  * captured only the last N chars of stderr, which truncated the
  * throwing-site frame and left only the bottom-of-stack
  * `Module._compile` / `executeUserEntryPoint` frames in their logs.

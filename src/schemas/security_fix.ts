@@ -2,14 +2,14 @@
  * JSON Schema and TypeScript interfaces for Security Fix Output
  *
  * Defines the structured output schema for the code_fixer agent role.
- * The agent receives a FixContext (enriched finding data from sast-ai-app)
+ * The agent receives a FixContext (enriched finding data from the parent app)
  * and returns a FixOutput (structured fix via Claude SDK outputFormat).
  *
  * Author: Sam Li
  */
 
 // ---------------------------------------------------------------------------
-// Input: context provided by sast-ai-app via --fix-context JSON file
+// Input: context provided by the parent app via --fix-context JSON file
 // ---------------------------------------------------------------------------
 
 export interface FixContextFinding {

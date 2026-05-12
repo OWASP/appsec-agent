@@ -2,7 +2,7 @@
  * Context Extraction Schemas
  *
  * Defines the input context and output for the context_extractor role.
- * ExtractionContext is assembled by sast-ai-app and passed via --extract-context JSON file.
+ * ExtractionContext is assembled by the parent app and passed via --extract-context JSON file.
  * The structured output contains project intelligence fields used to reduce false positives.
  */
 
@@ -10,7 +10,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 // ---------------------------------------------------------------------------
-// Input: context provided by sast-ai-app via --extract-context JSON file
+// Input: context provided by the parent app via --extract-context JSON file
 // ---------------------------------------------------------------------------
 
 export interface ExtractionContextFile {

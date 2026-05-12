@@ -42,7 +42,7 @@ program
   )
   .option(
     '--runtime-enrichment-context <file>',
-    'JSON file with per-file production-incident summary for hot files (v2.3.0 / sast-ai-app plan §4 + §8.14; use with -r pr_reviewer)',
+    'JSON file with per-file production-incident summary for hot files (v2.3.0 / parent-app plan §4 + §8.14; use with -r pr_reviewer)',
   )
   .option(
     '--codebase-graph-context <file>',
@@ -207,7 +207,7 @@ if (args.import_graph_context) {
   }
 }
 
-// v2.3.0 / sast-ai-app plan §4 + §8.14: runtime-enrichment context is only
+// v2.3.0 / parent-app plan §4 + §8.14: runtime-enrichment context is only
 // consumed by the pr_reviewer diff-mode prompt. Same role-gate as
 // --import-graph-context — other roles simply ignore it (fail-open).
 if (args.runtime_enrichment_context) {

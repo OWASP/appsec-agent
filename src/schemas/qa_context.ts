@@ -2,7 +2,7 @@
  * QA Verification Context and Verdict Schemas
  * 
  * Defines the input context and output verdict for the qa_verifier role.
- * QaContext is assembled by sast-ai-app and passed via --qa-context JSON file.
+ * QaContext is assembled by the parent app and passed via --qa-context JSON file.
  * QaVerdict is the structured output returned by the qa_verifier agent.
  */
 

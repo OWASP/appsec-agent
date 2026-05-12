@@ -1,12 +1,12 @@
 /**
- * Runtime-enrichment context input (v2.3.0 / sast-ai-app plan §4 + §8.14) —
+ * Runtime-enrichment context input (v2.3.0 / parent-app plan §4 + §8.14) —
  * per-file production-incident summary passed to `pr_reviewer` so the LLM can
  * factor incident history into its severity + confidence calls.
  *
  * The authoritative post-LLM gate override lives in the parent app
- * (`sast-ai-app/backend/src/routes/prScanProcessor.ts` — partition findings
- * into hot/cold and apply the §4 transform `medium → low / 0.6 → 0.4` per
- * file). The context here is advisory — it lets the LLM see what the
+ * (a `prScanProcessor`-style route — partition findings into hot/cold and
+ * apply the §4 transform `medium → low / 0.6 → 0.4` per file). The context
+ * here is advisory — it lets the LLM see what the
  * post-pass will see and avoid raising HIGH-confidence findings on
  * operationally-fragile files that the gate-override will then have to
  * "rescue" anyway, AND avoid suppressing low-severity findings on hot files

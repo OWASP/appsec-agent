@@ -4,7 +4,7 @@
  * into its confidence calls.
  *
  * The authoritative post-LLM confidence downrank lives in the parent app
- * (`sast-ai-app/backend/src/services/importGraphDecision.ts`). The context
+ * (an `importGraphDecision`-style service). The context
  * here is advisory — it lets the LLM see what the post-pass will see and
  * avoid raising a HIGH-confidence finding on an unreachable helper file.
  *

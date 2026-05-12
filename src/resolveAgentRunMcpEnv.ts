@@ -1,7 +1,7 @@
 /**
  * MCP URL / Bearer resolution for `bin/agent-run.ts` (v2.4.5+).
  *
- * Parent apps (e.g. sast-ai-app v6.1.x) pass `SAST_INTERNAL_TOOLS_MCP_URL` and
+ * Parent apps (v6.1.x+) pass `SAST_INTERNAL_TOOLS_MCP_URL` and
  * `SAST_INTERNAL_TOOLS_MCP_BEARER` so the listener URL is not on argv. CLI
  * `--mcp-server-url` remains for ad-hoc use; env wins for the URL when both are set.
  */

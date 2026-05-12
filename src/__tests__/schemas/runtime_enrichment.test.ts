@@ -4,7 +4,7 @@ import {
   type RuntimeEnrichmentContext,
 } from '../../schemas/runtime_enrichment';
 
-describe('runtime_enrichment schema (v2.3.0 / sast-ai-app plan §4 + §8.14)', () => {
+describe('runtime_enrichment schema (v2.3.0 / parent-app plan §4 + §8.14)', () => {
   describe('parseRuntimeEnrichmentContext', () => {
     it('parses a minimal valid payload', () => {
       const ctx = parseRuntimeEnrichmentContext({
@@ -79,11 +79,11 @@ describe('runtime_enrichment schema (v2.3.0 / sast-ai-app plan §4 + §8.14)', (
         default_branch_sha: 'abc123',
         parsed_at: '2026-04-25T20:00:00Z',
         files: [{ file: 'a.ts', incident_count: 1 }],
-        metadata: { project_name: 'sast-ai-app' },
+        metadata: { project_name: 'example-parent-app' },
       });
       expect(ctx.default_branch_sha).toBe('abc123');
       expect(ctx.parsed_at).toBe('2026-04-25T20:00:00Z');
-      expect(ctx.metadata?.project_name).toBe('sast-ai-app');
+      expect(ctx.metadata?.project_name).toBe('example-parent-app');
     });
 
     it('rejects non-object input', () => {

@@ -13,7 +13,11 @@ import { splitIntoBatches, ChunkingOptions } from './diff_chunking';
 import { mergeBatchReports } from './diff_report_merge';
 import { FixContext } from './schemas/security_fix';
 import { loadQaContext, QaContext } from './schemas/qa_context';
-import { loadRetestContext, RetestContext } from './schemas/finding_validator';
+import {
+  loadRetestContext,
+  RetestContext,
+  RetestContextValidationError,
+} from './schemas/finding_validator';
 import { loadExtractionContext, ExtractionContext } from './schemas/context_extraction';
 import {
   parseAdversarialPassContext,
@@ -167,7 +171,7 @@ function loadImportGraphContextFile(importGraphContextPath: string, cwd: string)
 
 /**
  * Load and validate a runtime-enrichment context JSON file (v2.3.0 /
- * sast-ai-app plan §4 + §8.14). On any parse/IO error we log and return
+ * parent-app plan §4 + §8.14). On any parse/IO error we log and return
  * `null` (fail-open): the downstream scan should not be blocked by a bad
  * runtime-enrichment payload; the authoritative gate override lives in the
  * parent app's `prScanProcessor` and only depends on `matchedFiles`, not
@@ -603,7 +607,7 @@ function buildContextExtractorPrompt(ctx: ExtractionContext): string {
   parts.push('2. **security_context**: List specific security defenses found in dependencies and config: auth frameworks (passport, next-auth), encryption (bcrypt, argon2), validation (zod, joi), CSRF/XSS protection (helmet, csurf), rate limiting, ORM usage (Prisma, SQLAlchemy — note these use parameterized queries), CI security scanning (CodeQL, Snyk, Trivy). Be concrete with library names.');
   parts.push('3. **deployment_context**: How the project is built and deployed: CI/CD system (GitHub Actions, Codefresh, Jenkins), container runtime (Docker, ECS, Kubernetes), cloud provider, environments, infrastructure (Terraform, Helm). Extract from CI configs, Dockerfiles, and infra files.');
   parts.push('4. **developer_context**: Extract ONLY security-relevant rules from developer guidance files (CLAUDE.md, AGENTS.md, .cursor/rules/). Include: PHI/PII handling rules, SQL injection prevention, auth patterns, input validation requirements, compliance mandates (HIPAA, SOX, GDPR). EXCLUDE: generic coding style, formatting, naming conventions, component patterns, UI guidelines.');
-  parts.push('5. **suggested_exclusions**: Based on the repository tree structure, suggest glob patterns for directories/files that should be EXCLUDED from security scanning. Only suggest project-specific patterns not already in the standard preset (which covers: node_modules, vendor, .git, __pycache__, dist, build, coverage, tests, __tests__, e2e, spec, helm, terraform, .codefresh, .next, test files like *.test.ts, *.spec.ts, *.stories.ts). Study the tree structure carefully at ALL nesting depths. Look for: generated/compiled output dirs, vendored third-party copies, large asset directories (images, fonts, resources), documentation-only dirs, migration/seed scripts, example/sample code, log/temp/runtime dirs (logs, uploads, work-dir, data), IDE/editor config (.cursor, .vscode, .idea), CI/utility scripts that are not application code. Use specific paths from the tree (e.g., "backend/scripts/**", "packages/vscode-sast-ai/resources/**", "sre/**"). Return as comma-separated glob patterns. Return empty string if no project-specific exclusions are needed.');
+  parts.push('5. **suggested_exclusions**: Based on the repository tree structure, suggest glob patterns for directories/files that should be EXCLUDED from security scanning. Only suggest project-specific patterns not already in the standard preset (which covers: node_modules, vendor, .git, __pycache__, dist, build, coverage, tests, __tests__, e2e, spec, helm, terraform, .codefresh, .next, test files like *.test.ts, *.spec.ts, *.stories.ts). Study the tree structure carefully at ALL nesting depths. Look for: generated/compiled output dirs, vendored third-party copies, large asset directories (images, fonts, resources), documentation-only dirs, migration/seed scripts, example/sample code, log/temp/runtime dirs (logs, uploads, work-dir, data), IDE/editor config (.cursor, .vscode, .idea), CI/utility scripts that are not application code. Use specific paths from the tree (e.g., "backend/scripts/**", "packages/desktop-app/resources/**", "sre/**"). Return as comma-separated glob patterns. Return empty string if no project-specific exclusions are needed.');
   parts.push('\nReturn empty strings for fields where no relevant information is found. Be concise but specific.');
 
   return parts.join('\n');
@@ -768,7 +772,7 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
         );
       }
 
-      // v2.3.0 / sast-ai-app plan §4 + §8.14: optional per-file
+      // v2.3.0 / parent-app plan §4 + §8.14: optional per-file
       // production-incident summary from the parent app's
       // runtimeEnrichmentService. Fail-open on any parse/IO error — the
       // authoritative gate override lives in the parent app's
@@ -1047,7 +1051,20 @@ Use sequential IDs: node-001/flow-001/tb-001 for DFD elements, THREAT-001 for th
       process.exit(1);
     }
 
-    const retestContext = loadRetestContext(args.retest_context, currentWorkingDir);
+    // Route caller-input validation failures to exit code 2 + a structured
+    // stderr signal (already printed inside loadRetestContext via fail()).
+    // Without this catch, validation errors would propagate through the
+    // default unhandled-exception path and exit code 1, which parent apps
+    // can't tell apart from a real agent crash.
+    let retestContext: RetestContext;
+    try {
+      retestContext = loadRetestContext(args.retest_context, currentWorkingDir);
+    } catch (e) {
+      if (e instanceof RetestContextValidationError) {
+        process.exit(2);
+      }
+      throw e;
+    }
     const outputFile = validateOutputFile(
       args.output_file || 'retest_verdict.json',
       currentWorkingDir

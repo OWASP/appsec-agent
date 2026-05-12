@@ -23,11 +23,11 @@ export interface AgentArgs {
   qa_context?: string;   // Path to JSON file with QA context for qa_verifier role
   retest_context?: string; // Path to JSON file with retest context for finding_validator role
   extract_context?: string; // Path to JSON file with extraction context for context_extractor role
-  /** v5.3.0: candidate findings JSON for pr_adversary second pass (sast-ai `adversarialPassService`) */
+  /** v5.3.0: candidate findings JSON for pr_adversary second pass (parent-app `adversarialPassService`) */
   adversarial_context?: string;
   /** v5.4.0 / plan §3.1 Stage B: import-graph reachability summary JSON (pr_reviewer only). */
   import_graph_context?: string;
-  /** v2.3.0 / sast-ai-app plan §4 + §8.14: per-file production-incident summary JSON (pr_reviewer only). */
+  /** v2.3.0 / parent-app plan §4 + §8.14: per-file production-incident summary JSON (pr_reviewer only). */
   runtime_enrichment_context?: string;
   /** v2.6.0 / parent-app plan §8.18 Phase 2: per-changed-file structural-graph summary (callers/callees/blast-radius) JSON (pr_reviewer only). */
   codebase_graph_context?: string;
@@ -73,7 +73,7 @@ export interface AgentArgs {
    */
   mcp_server_name?: string;
   /**
-   * Bearer for `SAST_INTERNAL_TOOLS_MCP_URL` HTTP MCP (sast-ai-app v6.1.x).
+   * Bearer for `SAST_INTERNAL_TOOLS_MCP_URL` HTTP MCP (parent app v6.1.x+).
    * Set from env in agent-run; sent as Authorization header on MCP requests.
    */
   mcp_server_bearer?: string;

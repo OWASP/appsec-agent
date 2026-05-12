@@ -1,7 +1,7 @@
 /**
  * E2E (integration): `pr_reviewer` diff-context path through `main()` with
  * temp `diff-context.json` + `runtime-enrichment-context.json`, no live
- * LLM — `AgentActions` is mocked. Validates the v2.3.0 (sast-ai-app plan
+ * LLM — `AgentActions` is mocked. Validates the v2.3.0 (parent-app plan
  * §4 + §8.14) wiring: file → loadRuntimeEnrichmentContextFile →
  * formatRuntimeEnrichmentContextForPrompt → buildDiffReviewPrompt →
  * diffReviewerWithOptions → output file.

@@ -687,7 +687,7 @@ See the [AI Threat Modeler README](https://github.com/yangsec888/ai-threat-model
 
 ## 📄 License
 
-This project is licensed under the MIT License.
+This project is licensed under the [Apache License 2.0](LICENSE) — see the `LICENSE` file for details.
 
 ## 👥 Author
 

@@ -5,6 +5,75 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] - 2026-05-12
+
+### Added — `--codebase-graph-context <file>` for `pr_reviewer` (parent-app plan §8.18 Phase 2)
+
+Third structural-context family for the `pr_reviewer` diff-mode prompt, alongside `--import-graph-context` (v2.2.0, file-level inbound import counts via SCIP) and `--runtime-enrichment-context` (v2.3.0, per-file production-incident counts). Distinct from those: this context is **symbol-level** (cbm tree-sitter graph; 155 languages) and surfaces **callers + callees + downstream blast-radius** per changed file, sourced from the parent app's [`codebase-memory-mcp`](https://github.com/DeusData/codebase-memory-mcp) (cbm) artifact via the `search_graph` + `trace_path(direction=both, mode=calls)` MCP tools.
+
+Phase 2 is purely advisory — the cbm artifact remains shadow-only on the parent side until §8.18 Phase 4 decides whether the structural-graph signal feeds a hard gate. This release is the cross-repo predecessor to the parent app's v6.6.0; per the §8 cross-repo sequencing rule, the agent ships first so the parent can pin to `^2.6.0` when v6.6.0 cuts.
+
+- **New CLI flag `--codebase-graph-context <file>`** ([`bin/agent-run.ts`](bin/agent-run.ts)) — JSON file with per-changed-file structural-graph summary. Same role-gate as the other two structural contexts: only consumed by `pr_reviewer` in `--diff-context` mode; other roles emit a friendly warning and ignore the flag (fail-open). Path is run through the existing `validateInputFilePath` traversal guard before the loader sees it.
+
+- **New schema module [`src/schemas/codebase_graph.ts`](src/schemas/codebase_graph.ts)**:
+  - `parseCodebaseGraphContext` — strict validator on the JSON. Top-level shape: `{ default_branch_sha?, parsed_at?, coverage?, files: [{ file, symbols_changed?, callers?, callees?, blast_radius_files_count, graph_status? }], metadata? }`. Caps mirror import-graph (≤ 500 files; ≤ 20 callers / callees / symbols_changed per file). `coverage` is one of `full | partial | none | empty`; `graph_status` per file is one of `ok | no_symbols | missing | partial`. Fractional `blast_radius_files_count` is floored; negatives clamped to 0.
+  - `formatCodebaseGraphContextForPrompt` — emits a markdown advisory block with header (`### Codebase-graph context (symbol-level callers/callees, plan §8.18 Phase 2)`), the §8.18 Phase 2 advisory thresholds (`callers ≥ 1`, `blast radius ≥ 5`), the truncated default-branch SHA when present, an optional coverage banner when coverage is non-`full`, and a per-file table sorted by `blast_radius_files_count` desc. Each row truncates the callers/callees lists to 3 entries with a `(+N)` suffix to bound the prompt budget. Empty `files: []` short-circuits to the empty string so the LLM never sees a bare advisory header.
+  - **§8.5 PHI gate (defensive):** the schema accepts only the structural-edge fields above; any extras on per-file entries (`comment_text`, `doc_string`, etc.) are silently dropped before the LLM sees them. cbm cannot produce PHI by construction (its input is source-code text from CapsuleHealth-owned repos), but the schema enforces the same minimization invariant as `runtime_enrichment` so a future cbm version emitting comment/doc-string text in its query responses still cannot leak structurally-extraneous data into the prompt.
+
+- **`AgentArgs.codebase_graph_context?: string`** ([`src/agent_actions.ts`](src/agent_actions.ts)) — new optional field, populated from `options.codebaseGraphContext` in `bin/agent-run.ts`, threaded into `main.ts` for the `pr_reviewer` diff-mode dispatch branch.
+
+- **`main.ts` diff-mode dispatch** — new `loadCodebaseGraphContextFile()` follows the runtime-enrichment fail-open shape (path traversal guard → exists check → JSON parse → schema parse → catch + warn + null on any failure). `buildDiffReviewPrompt` gains a seventh optional parameter `codebaseGraphSummary?: string`; both the single-batch and multi-batch call sites pass it. The summary is appended to the prompt **after** the runtime-enrichment block and **before** the output-format directive — so the LLM reads structural-graph context as the last advisory block before it starts the review (the most-recently-read context tends to anchor stronger).
+
+### Cross-repo contract (verified against the parent app's planned v6.6.0)
+
+The parent app spawns `pr_reviewer` with the new flag like:
+
+```
+node <agent-run-path> -r pr_reviewer \
+                     --diff-context <diffFile> \
+                     --import-graph-context <igFile> \
+                     --runtime-enrichment-context <reFile> \
+                     --codebase-graph-context <cgFile> \
+                     -o <outputFileName> \
+                     -f json \
+                     -m <modelAlias>
+```
+
+from a per-PR working directory. **Input file** shape (parent writes it; matches `parseCodebaseGraphContext`):
+
+```jsonc
+{
+  "default_branch_sha": "cafebabedeadbeefcafebabedeadbeef00000003",
+  "parsed_at": "2026-05-12T20:00:00Z",
+  "coverage": "full",
+  "metadata": { "project_name": "example-app" },
+  "files": [
+    {
+      "file": "backend/src/services/payments.ts",
+      "symbols_changed": ["PaymentsService.charge"],
+      "callers": ["routes/api/payments.handlePost", "routes/webhooks/stripe.handler"],
+      "callees": ["db.transaction", "audit.recordPayment"],
+      "blast_radius_files_count": 47,
+      "graph_status": "ok"
+    },
+    ...
+  ]
+}
+```
+
+Empty `files: []` is the parent-app contract for "cbm head row exists but no changed file produced traceable symbols" — the formatter short-circuits and the LLM sees no advisory block. Empty cbm artifact (head row missing) is handled the same way with `coverage: "empty"` for ops visibility on the parent's `codebase_graph_context_injected{coverage}` counter.
+
+### Tests
+
+- **New unit suite [`src/__tests__/schemas/codebase_graph.test.ts`](src/__tests__/schemas/codebase_graph.test.ts)** — 21 cases covering `parseCodebaseGraphContext` happy + reject paths (top-level / per-entry / over-cap / per-list-truncation / empty-string-stripping / invalid-graph-status / coverage-enum / extras-dropping), `formatCodebaseGraphContextForPrompt` (empty short-circuit, sort order, truncation suffix, advisory thresholds, SHA + coverage banner conditional rendering).
+- **New e2e suite [`e2e/pr_reviewer_codebase_graph.e2e.test.ts`](e2e/pr_reviewer_codebase_graph.e2e.test.ts)** — 3 cases mirroring the v2.3.0 runtime-enrichment e2e shape: happy-path injection (header + thresholds + sort order + truncated SHA + table rows), fail-open on malformed payload (no header, scan still runs, warning logged), empty-files short-circuit (no header, scan proceeds normally).
+
+### Non-goals for this release
+
+- Live MCP `queryCodebaseGraph` tool exposure to the agent — that's §8.18 Phase 3 (`appsec-agent@^2.7.0`), bounded 4-kind enum (`callers | callees | reachable_from_entry | semantic_search`) routed through the parent's `internalToolsServer.ts` proxy with project-scope closure, never raw Cypher.
+- Integrating cbm's `query_graph` (raw Cypher) or `detect_changes` MCP tools — Phase 2 is read-only on a static JSON path; advanced query primitives are Phase 3 territory.
+- Touching the existing `--import-graph-context` (file-level SCIP) or `--runtime-enrichment-context` (production-incident) wiring — both stay byte-for-byte; the new flag adds a third independent advisory block.
+
 ## [2.5.0] - 2026-05-03
 
 ### Added — `learned_guidance_synthesizer` role (parent-app plan §3.8 / CLLG)

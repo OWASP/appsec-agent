@@ -45,6 +45,10 @@ program
     'JSON file with per-file production-incident summary for hot files (v2.3.0 / sast-ai-app plan §4 + §8.14; use with -r pr_reviewer)',
   )
   .option(
+    '--codebase-graph-context <file>',
+    'JSON file with per-changed-file structural-graph summary (callers/callees/blast-radius) sourced from codebase-memory-mcp (v2.6.0 / parent-app plan §8.18 Phase 2; use with -r pr_reviewer)',
+  )
+  .option(
     '--inputs <file>',
     'JSON file with bucketed dismissal-signal inputs for learned_guidance_synthesizer (v2.5.0 / parent-app plan §3.8; use with -r learned_guidance_synthesizer)',
   )
@@ -164,6 +168,7 @@ const args = {
   adversarial_context: options.adversarialContext,
   import_graph_context: options.importGraphContext,
   runtime_enrichment_context: options.runtimeEnrichmentContext,
+  codebase_graph_context: options.codebaseGraphContext,
   inputs: options.inputs,
   experiment_enabled: options.experimentEnabled === true,
   model: model,
@@ -211,6 +216,19 @@ if (args.runtime_enrichment_context) {
     console.warn('⚠️  Warning: --runtime-enrichment-context is only consumed by pr_reviewer in diff-context mode.');
     console.warn(`   Current role: ${args.role}${args.diff_context ? '' : ' (no --diff-context supplied)'}. The runtime-enrichment context will be ignored.`);
     console.warn('   Use -r pr_reviewer --diff-context <file> to enable §4 hot-file hints.\n');
+  }
+}
+
+// v2.6.0 / parent-app plan §8.18 Phase 2: codebase-graph context is only
+// consumed by the pr_reviewer diff-mode prompt. Same role-gate as
+// --import-graph-context / --runtime-enrichment-context — other roles
+// simply ignore it (fail-open).
+if (args.codebase_graph_context) {
+  console.log('Using codebase-graph context file:', args.codebase_graph_context);
+  if (!(args.role === 'pr_reviewer' && args.diff_context)) {
+    console.warn('⚠️  Warning: --codebase-graph-context is only consumed by pr_reviewer in diff-context mode.');
+    console.warn(`   Current role: ${args.role}${args.diff_context ? '' : ' (no --diff-context supplied)'}. The codebase-graph context will be ignored.`);
+    console.warn('   Use -r pr_reviewer --diff-context <file> to enable §8.18 Phase 2 structural-graph hints.\n');
   }
 }
 

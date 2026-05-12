@@ -32,6 +32,11 @@ import {
   type RuntimeEnrichmentContext,
 } from './schemas/runtime_enrichment';
 import {
+  parseCodebaseGraphContext,
+  formatCodebaseGraphContextForPrompt,
+  type CodebaseGraphContext,
+} from './schemas/codebase_graph';
+import {
   buildLearnedGuidanceUserPrompt,
   parseLearnedGuidanceInputs,
   type LearnedGuidanceInputs,
@@ -196,6 +201,46 @@ function loadRuntimeEnrichmentContextFile(
     return parseRuntimeEnrichmentContext(data);
   } catch (e: any) {
     console.warn(`⚠️  Invalid runtime-enrichment context ${safePath} (ignored): ${e?.message || e}`);
+    return null;
+  }
+}
+
+/**
+ * Load and validate a codebase-graph context JSON file (v2.6.0 / parent-app
+ * plan §8.18 Phase 2). On any parse/IO error we log and return `null`
+ * (fail-open): the downstream scan should not be blocked by a bad
+ * codebase-graph payload; the parent app's `composeCodebaseGraphContextPayload`
+ * is the authoritative producer and Phase 2 is purely advisory until Phase 4
+ * decides whether the structural-graph signal feeds a hard gate.
+ */
+function loadCodebaseGraphContextFile(
+  codebaseGraphContextPath: string,
+  cwd: string,
+): CodebaseGraphContext | null {
+  const resolvedPath = validateInputFilePath(codebaseGraphContextPath, cwd);
+  if (!resolvedPath) {
+    const safePath = sanitizePathForError(codebaseGraphContextPath);
+    console.warn(`⚠️  Invalid codebase-graph context path (ignored): ${safePath}`);
+    return null;
+  }
+  const safePath = sanitizePathForError(resolvedPath);
+  if (!fs.existsSync(resolvedPath)) {
+    console.warn(`⚠️  Codebase-graph context file not found (ignored): ${safePath}`);
+    return null;
+  }
+  let data: unknown;
+  try {
+    const content = fs.readFileSync(resolvedPath, 'utf-8');
+    data = JSON.parse(content);
+  } catch (error: any) {
+    const errorMessage = error?.message || 'Unknown error';
+    console.warn(`⚠️  Failed to read codebase-graph context ${safePath} (ignored): ${errorMessage}`);
+    return null;
+  }
+  try {
+    return parseCodebaseGraphContext(data);
+  } catch (e: any) {
+    console.warn(`⚠️  Invalid codebase-graph context ${safePath} (ignored): ${e?.message || e}`);
     return null;
   }
 }
@@ -598,6 +643,7 @@ function buildDiffReviewPrompt(
   additionalContext?: string,
   importGraphSummary?: string,
   runtimeEnrichmentSummary?: string,
+  codebaseGraphSummary?: string,
 ): string {
   const formattedDiff = formatDiffContextForPrompt(diffContext);
   
@@ -640,6 +686,11 @@ Developer context reflects the team's stated practices. If you find evidence in 
 
   if (runtimeEnrichmentSummary && runtimeEnrichmentSummary.trim()) {
     prompt += `${runtimeEnrichmentSummary}
+`;
+  }
+
+  if (codebaseGraphSummary && codebaseGraphSummary.trim()) {
+    prompt += `${codebaseGraphSummary}
 `;
   }
 
@@ -735,6 +786,24 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
         );
       }
 
+      // v2.6.0 / parent-app plan §8.18 Phase 2: optional per-changed-file
+      // structural-graph summary (callers/callees/blast-radius) from the
+      // parent app's composeCodebaseGraphContextPayload. Fail-open on any
+      // parse/IO error — Phase 2 is purely advisory; the cbm artifact
+      // itself is shadow-only on the parent side until Phase 4 decides
+      // whether the structural-graph signal feeds a hard gate.
+      const codebaseGraphCtx = args.codebase_graph_context
+        ? loadCodebaseGraphContextFile(args.codebase_graph_context, currentWorkingDir)
+        : null;
+      const codebaseGraphSummary = codebaseGraphCtx
+        ? formatCodebaseGraphContextForPrompt(codebaseGraphCtx)
+        : '';
+      if (codebaseGraphCtx) {
+        console.log(
+          `Using codebase-graph context: ${codebaseGraphCtx.files.length} file(s), coverage=${codebaseGraphCtx.coverage ?? 'full'}${codebaseGraphCtx.default_branch_sha ? `, sha=${codebaseGraphCtx.default_branch_sha.slice(0, 12)}` : ''}`,
+        );
+      }
+
       const tmpSrcDir = args.src_dir ? validateAndCopySrcDir(args.src_dir, currentWorkingDir) : null;
       const chunkingOpts = getChunkingOptions(confDict, args.environment, args);
       const { batches, skippedFiles, skippedDueToBatches } = splitIntoBatches(diffContext, chunkingOpts);
@@ -749,6 +818,7 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
           args.context,
           importGraphSummary,
           runtimeEnrichmentSummary,
+          codebaseGraphSummary,
         );
         const structuredResult = await agentActions.diffReviewerWithOptions(userPrompt, tmpSrcDir, undefined, args.no_tools);
         if (structuredResult) {
@@ -773,6 +843,7 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
               args.context,
               importGraphSummary,
               runtimeEnrichmentSummary,
+              codebaseGraphSummary,
             );
             const batchResult = await agentActions.diffReviewerWithOptions(userPrompt, tmpSrcDir, (result) => {
               if (result.total_cost_usd !== undefined && result.total_cost_usd > 0) {

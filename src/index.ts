@@ -60,3 +60,10 @@ export {
   formatRuntimeEnrichmentContextForPrompt,
 } from './schemas/runtime_enrichment';
 
+export {
+  type CodebaseGraphContext,
+  type CodebaseGraphFileEntry,
+  parseCodebaseGraphContext,
+  formatCodebaseGraphContextForPrompt,
+} from './schemas/codebase_graph';
+

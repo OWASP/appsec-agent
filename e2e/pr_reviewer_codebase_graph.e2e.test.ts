@@ -272,6 +272,165 @@ describe('e2e pr_reviewer + --codebase-graph-context (mocked LLM)', () => {
     }
   });
 
+  it('fails open on a directory-traversal path (no summary, scan still runs, warning logged)', async () => {
+    // validateInputFilePath rejects a relative path with `../` segments
+    // before the loader ever calls fs.existsSync, so the loader hits its
+    // earliest fail-open branch. Same fail-open contract as the
+    // schema-invalid case: scan proceeds, no header in prompt, warning
+    // logged so ops can spot the misconfiguration in agent logs.
+    const diffPath = path.join(testDir, 'diff-context.json');
+    fs.writeFileSync(diffPath, JSON.stringify(VALID_DIFF_CONTEXT), 'utf-8');
+    const traversalPath = '../../etc/codebase-graph-context.json';
+
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+    const prevCwd = process.cwd();
+    try {
+      process.chdir(testDir);
+
+      await main(confDict as any, {
+        role: 'pr_reviewer',
+        environment: 'default',
+        diff_context: diffPath,
+        codebase_graph_context: traversalPath,
+        output_file: outName,
+        output_format: 'json',
+      } as any);
+
+      expect(mockAgentActions.diffReviewerWithOptions).toHaveBeenCalledTimes(1);
+      const userPrompt = mockAgentActions.diffReviewerWithOptions.mock.calls[0][0] as string;
+      expect(userPrompt).not.toContain('### Codebase-graph context');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Invalid codebase-graph context path'),
+      );
+      expect(exitMock).toHaveBeenCalledWith(0);
+    } finally {
+      process.chdir(prevCwd);
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('fails open when the codebase-graph context file is missing (no summary, scan still runs)', async () => {
+    // The path passes validateInputFilePath (it's an absolute path under
+    // testDir) but fs.existsSync returns false. Distinct from the
+    // directory-traversal case above and the malformed-JSON / schema-
+    // invalid cases — exercises the file-not-found fail-open branch.
+    const diffPath = path.join(testDir, 'diff-context.json');
+    const cgPath = path.join(testDir, 'no-such-codebase-graph.json');
+    fs.writeFileSync(diffPath, JSON.stringify(VALID_DIFF_CONTEXT), 'utf-8');
+
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+    const prevCwd = process.cwd();
+    try {
+      process.chdir(testDir);
+
+      await main(confDict as any, {
+        role: 'pr_reviewer',
+        environment: 'default',
+        diff_context: diffPath,
+        codebase_graph_context: cgPath,
+        output_file: outName,
+        output_format: 'json',
+      } as any);
+
+      expect(mockAgentActions.diffReviewerWithOptions).toHaveBeenCalledTimes(1);
+      const userPrompt = mockAgentActions.diffReviewerWithOptions.mock.calls[0][0] as string;
+      expect(userPrompt).not.toContain('### Codebase-graph context');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Codebase-graph context file not found'),
+      );
+      expect(exitMock).toHaveBeenCalledWith(0);
+    } finally {
+      process.chdir(prevCwd);
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('fails open when the codebase-graph context file is not valid JSON', async () => {
+    // The file exists but its content fails JSON.parse before the schema
+    // validator ever sees it. Exercises the JSON-parse fail-open branch
+    // (a distinct warning string from the schema-invalid case so ops can
+    // distinguish "corrupt bytes" from "wrong shape" in logs).
+    const diffPath = path.join(testDir, 'diff-context.json');
+    const cgPath = path.join(testDir, 'codebase-graph-context.json');
+    fs.writeFileSync(diffPath, JSON.stringify(VALID_DIFF_CONTEXT), 'utf-8');
+    fs.writeFileSync(cgPath, '{not json — definitely not parseable\n', 'utf-8');
+
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+    const prevCwd = process.cwd();
+    try {
+      process.chdir(testDir);
+
+      await main(confDict as any, {
+        role: 'pr_reviewer',
+        environment: 'default',
+        diff_context: diffPath,
+        codebase_graph_context: cgPath,
+        output_file: outName,
+        output_format: 'json',
+      } as any);
+
+      expect(mockAgentActions.diffReviewerWithOptions).toHaveBeenCalledTimes(1);
+      const userPrompt = mockAgentActions.diffReviewerWithOptions.mock.calls[0][0] as string;
+      expect(userPrompt).not.toContain('### Codebase-graph context');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to read codebase-graph context'),
+      );
+      expect(exitMock).toHaveBeenCalledWith(0);
+    } finally {
+      process.chdir(prevCwd);
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('injects the codebase-graph summary into EVERY batch when the PR diff chunks across multiple batches', async () => {
+    // Multi-batch chunking path: the same `codebaseGraphSummary` is passed
+    // to each batch's `buildDiffReviewPrompt`, so the LLM sees the
+    // structural advisory in every batch's prompt (not just the first).
+    // Trigger chunking with a tiny per-batch token cap — splitIntoBatches
+    // falls back to "one file per batch" via the graceful-degradation
+    // branch when any single file alone exceeds the cap.
+    const diffPath = path.join(testDir, 'diff-context.json');
+    const cgPath = path.join(testDir, 'codebase-graph-context.json');
+    fs.writeFileSync(diffPath, JSON.stringify(VALID_DIFF_CONTEXT), 'utf-8');
+    fs.writeFileSync(cgPath, JSON.stringify(VALID_CODEBASE_GRAPH_CTX), 'utf-8');
+
+    const prevCwd = process.cwd();
+    try {
+      process.chdir(testDir);
+
+      await main(confDict as any, {
+        role: 'pr_reviewer',
+        environment: 'default',
+        diff_context: diffPath,
+        codebase_graph_context: cgPath,
+        output_file: outName,
+        output_format: 'json',
+        diff_max_tokens_per_batch: 10,
+        diff_max_batches: 5,
+      } as any);
+
+      // Three files in VALID_DIFF_CONTEXT → three batches (one per file).
+      expect(mockAgentActions.diffReviewerWithOptions).toHaveBeenCalledTimes(3);
+      const prompts = mockAgentActions.diffReviewerWithOptions.mock.calls.map(
+        (c) => c[0] as string,
+      );
+      // Every batch's prompt must contain the codebase-graph header and
+      // the §8.18 Phase 2 advisory thresholds — guards against a refactor
+      // that drops `codebaseGraphSummary` from the multi-batch
+      // `buildDiffReviewPrompt` call (line 846 in main.ts).
+      for (const p of prompts) {
+        expect(p).toContain(
+          '### Codebase-graph context (symbol-level callers/callees, plan §8.18 Phase 2)',
+        );
+        expect(p).toContain('callers ≥ 1');
+        expect(p).toContain('blast radius ≥ 5');
+      }
+      expect(exitMock).toHaveBeenCalledWith(0);
+    } finally {
+      process.chdir(prevCwd);
+    }
+  });
+
   it('omits the advisory block entirely when files list is empty (no traceable overlap)', async () => {
     const diffPath = path.join(testDir, 'diff-context.json');
     const cgPath = path.join(testDir, 'codebase-graph-context.json');

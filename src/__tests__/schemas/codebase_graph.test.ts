@@ -161,6 +161,17 @@ describe('codebase_graph schema (v2.6.0 / parent-app plan §8.18 Phase 2)', () =
       expect(ctx.metadata?.project_name).toBe('example-app');
     });
 
+    it('silently drops non-string project_name to undefined (defensive validator)', () => {
+      const ctx = parseCodebaseGraphContext({
+        files: [{ file: 'a.ts', blast_radius_files_count: 1 }],
+        metadata: { project_name: 42 },
+      });
+      // Metadata object is preserved but the bad field collapses to undefined,
+      // mirroring how invalid `graph_status` / `coverage` values are dropped
+      // rather than thrown. Forensic metadata should never be load-bearing.
+      expect(ctx.metadata).toEqual({ project_name: undefined });
+    });
+
     it('rejects non-object input', () => {
       expect(() => parseCodebaseGraphContext(null)).toThrow(/must be a JSON object/);
       expect(() => parseCodebaseGraphContext('x')).toThrow(/must be a JSON object/);
@@ -260,6 +271,26 @@ describe('codebase_graph schema (v2.6.0 / parent-app plan §8.18 Phase 2)', () =
       expect(out).toContain('`a.fn`, `b.fn`, `c.fn` (+2)');
       // Empty list renders as em-dash.
       expect(out).toContain('| `src/hot.ts` | `a.fn`, `b.fn`, `c.fn` (+2) | `x.fn`, `y.fn` | 47 | ok |');
+    });
+
+    it('truncates a long callees list with `(+N)` suffix and renders em-dash for empty callers', () => {
+      // Symmetric to the callers `(+N)` assertion in the table test above —
+      // ensures the formatter applies the same 3-entry truncation contract
+      // to both edge directions. Also covers the `f.callers === undefined`
+      // em-dash branch alongside the populated callees branch.
+      const out = formatCodebaseGraphContextForPrompt({
+        files: [
+          {
+            file: 'src/wide.ts',
+            blast_radius_files_count: 9,
+            callees: ['x.fn', 'y.fn', 'z.fn', 'w.fn', 'v.fn'],
+          },
+        ],
+      });
+      expect(out).toContain('`x.fn`, `y.fn`, `z.fn` (+2)');
+      // Callers absent → row renders em-dash in that column. Match against
+      // the surrounding pipes so we don't false-match an em-dash elsewhere.
+      expect(out).toContain('| `src/wide.ts` | — |');
     });
 
     it('teaches the LLM the §8.18 Phase 2 advisory thresholds', () => {

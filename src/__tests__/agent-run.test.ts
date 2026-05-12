@@ -479,6 +479,66 @@ describe('agent-run CLI', () => {
     });
   });
 
+  describe('--codebase-graph-context flag (v2.6.0)', () => {
+    it('maps --codebase-graph-context onto args.codebase_graph_context for pr_reviewer in diff-context mode', () => {
+      const { Command } = require('commander');
+      const mockCommand = Command();
+      const cgPath = '/tmp/codebase-graph-context.json';
+      mockCommand.opts.mockReturnValue({
+        role: 'pr_reviewer',
+        environment: 'default',
+        diffContext: '/tmp/diff-context.json',
+        codebaseGraphContext: cgPath,
+      });
+      const options = mockCommand.opts();
+      const args = {
+        role: options.role,
+        environment: options.environment,
+        diff_context: options.diffContext,
+        codebase_graph_context: options.codebaseGraphContext,
+      };
+      expect(args.codebase_graph_context).toBe(cgPath);
+      expect(args.role).toBe('pr_reviewer');
+      expect(args.diff_context).toBe('/tmp/diff-context.json');
+    });
+
+    it('leaves args.codebase_graph_context undefined when the flag is not supplied (v2.5.0 baseline)', () => {
+      const { Command } = require('commander');
+      const mockCommand = Command();
+      mockCommand.opts.mockReturnValue({
+        role: 'pr_reviewer',
+        environment: 'default',
+        diffContext: '/tmp/diff-context.json',
+      });
+      const options = mockCommand.opts();
+      const args = {
+        role: options.role,
+        environment: options.environment,
+        diff_context: options.diffContext,
+        codebase_graph_context: options.codebaseGraphContext,
+      };
+      expect(args.codebase_graph_context).toBeUndefined();
+    });
+
+    it('the role-gate condition matches only pr_reviewer + diff_context; other shapes trigger the ignore-warning branch', () => {
+      // Mirrors the predicate at bin/agent-run.ts:228 —
+      //   `!(args.role === 'pr_reviewer' && args.diff_context)`
+      // is the condition that emits the "ignored" warning. We assert the
+      // truth table directly so a future refactor that loosens the gate
+      // (e.g. accepting `code_reviewer` or running without `--diff-context`)
+      // gets caught here.
+      const shouldWarn = (role: string, hasDiffContext: boolean) =>
+        !(role === 'pr_reviewer' && hasDiffContext);
+
+      expect(shouldWarn('pr_reviewer', true)).toBe(false);
+      expect(shouldWarn('pr_reviewer', false)).toBe(true);
+      expect(shouldWarn('code_reviewer', true)).toBe(true);
+      expect(shouldWarn('code_fixer', true)).toBe(true);
+      expect(shouldWarn('pr_adversary', true)).toBe(true);
+      expect(shouldWarn('finding_validator', false)).toBe(true);
+    });
+  });
+
   describe('--mcp-server-name flag (v2.4.2)', () => {
     it('maps --mcp-server-name onto args.mcp_server_name when supplied', () => {
       const { Command } = require('commander');

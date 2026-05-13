@@ -55,12 +55,14 @@ const expectedDefaultMcpToolNames = [
   'mcp__appsec-internal__queryFindingsHistory',
   'mcp__appsec-internal__queryImportGraph',
   'mcp__appsec-internal__queryRuntimeEnrichment',
+  'mcp__appsec-internal__queryCodebaseGraph',
 ];
 
 const expectedCustomMcpToolNames = [
   `mcp__${CUSTOM_SERVER_NAME}__queryFindingsHistory`,
   `mcp__${CUSTOM_SERVER_NAME}__queryImportGraph`,
   `mcp__${CUSTOM_SERVER_NAME}__queryRuntimeEnrichment`,
+  `mcp__${CUSTOM_SERVER_NAME}__queryCodebaseGraph`,
 ];
 
 describe('AgentOptions MCP wiring', () => {
@@ -73,11 +75,12 @@ describe('AgentOptions MCP wiring', () => {
       expect(MCP_INTERNAL_SERVER_NAME).toBe(DEFAULT_MCP_SERVER_NAME);
     });
 
-    it('lists exactly the three backend-backed tools', () => {
+    it('lists exactly the four backend-backed tools', () => {
       expect(MCP_INTERNAL_TOOL_NAMES).toEqual([
         'queryFindingsHistory',
         'queryImportGraph',
         'queryRuntimeEnrichment',
+        'queryCodebaseGraph',
       ]);
     });
 
@@ -209,8 +212,8 @@ describe('AgentOptions MCP wiring', () => {
       expect(agent.tools).toEqual(['Read', 'Grep', 'Write']);
     });
 
-    describe('pr_reviewer MCP system-prompt nudge (§8.17 phase 3)', () => {
-      it('appends findings-history + import-graph + runtime-enrichment nudge when MCP URL is set', () => {
+    describe('pr_reviewer MCP system-prompt nudge (§8.17 + §8.18 Phase 3)', () => {
+      it('appends all four live-tool nudges when MCP URL is set', () => {
         const ao = new AgentOptions(baseConfDict, 'default');
         const opts = ao.getDiffReviewerOptions(
           'pr_reviewer',
@@ -230,6 +233,7 @@ describe('AgentOptions MCP wiring', () => {
         expect(prompt).toContain(
           '`mcp__appsec-internal__queryRuntimeEnrichment`',
         );
+        expect(prompt).toContain('`mcp__appsec-internal__queryCodebaseGraph`');
       });
 
       it('uses mcpServerName in the nudge tool ids', () => {
@@ -253,6 +257,9 @@ describe('AgentOptions MCP wiring', () => {
         );
         expect(prompt).toContain(
           `\`mcp__${CUSTOM_SERVER_NAME}__queryRuntimeEnrichment\``,
+        );
+        expect(prompt).toContain(
+          `\`mcp__${CUSTOM_SERVER_NAME}__queryCodebaseGraph\``,
         );
       });
 
@@ -288,6 +295,9 @@ describe('AgentOptions MCP wiring', () => {
         );
         expect(suffix).toContain(
           `\`mcp__${CUSTOM_SERVER_NAME}__queryRuntimeEnrichment\``,
+        );
+        expect(suffix).toContain(
+          `\`mcp__${CUSTOM_SERVER_NAME}__queryCodebaseGraph\``,
         );
       });
     });

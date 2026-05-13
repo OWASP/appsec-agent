@@ -67,3 +67,11 @@ export {
   formatCodebaseGraphContextForPrompt,
 } from './schemas/codebase_graph';
 
+export {
+  CODEBASE_GRAPH_QUERY_KINDS,
+  type CodebaseGraphQueryKind,
+  queryCodebaseGraphToolArgsSchema,
+  type QueryCodebaseGraphToolArgs,
+  parseQueryCodebaseGraphToolArgs,
+} from './schemas/mcp_query_codebase_graph';
+

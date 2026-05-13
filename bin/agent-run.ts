@@ -69,7 +69,7 @@ program
   .option('--no-tools', 'Disable Read/Grep tools for single-turn analysis (use with --diff-context for fastest mode)')
   .option(
     '--mcp-server-url <url>',
-    'URL of a parent-app-managed per-scan MCP server exposing queryFindingsHistory / queryImportGraph / queryRuntimeEnrichment (v2.4.0). When set, agents call these tools live instead of (or in addition to) the front-loaded JSON paths.',
+    'URL of a parent-app-managed per-scan MCP server exposing queryFindingsHistory / queryImportGraph / queryRuntimeEnrichment / queryCodebaseGraph (v2.4.0 wire + v2.7.0 fourth tool). When set, agents call these tools live instead of (or in addition to) the front-loaded JSON paths.',
   )
   .option(
     '--mcp-server-name <name>',

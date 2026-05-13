@@ -56,16 +56,17 @@ export const MCP_INTERNAL_SERVER_NAME = DEFAULT_MCP_SERVER_NAME;
 /**
  * Tools exposed by the per-scan in-process MCP server the parent app
  * stands up. Pinned at this set (`queryFindingsHistory`,
- * `queryImportGraph`, `queryRuntimeEnrichment`) so the agent's tool
- * whitelist is deterministic at the current version; parent apps that
- * expose a different surface should fork or extend this list rather
- * than rely on dynamic discovery (the SDK would otherwise have to round
- * trip the server before constructing the whitelist).
+ * `queryImportGraph`, `queryRuntimeEnrichment`, `queryCodebaseGraph`) so
+ * the agent's tool whitelist is deterministic at the current version;
+ * parent apps that expose a different surface should fork or extend this
+ * list rather than rely on dynamic discovery (the SDK would otherwise have
+ * to round-trip the server before constructing the whitelist).
  */
 export const MCP_INTERNAL_TOOL_NAMES = [
   'queryFindingsHistory',
   'queryImportGraph',
   'queryRuntimeEnrichment',
+  'queryCodebaseGraph',
 ] as const;
 
 /**
@@ -86,9 +87,10 @@ export function buildMcpInternalToolNames(
 
 /**
  * System-prompt suffix for `pr_reviewer` when `--mcp-server-url` is set.
- * §8.17 staged ladder phase 3: steer the model toward all three live tools by
- * exact SDK tool id — `queryFindingsHistory`, `queryImportGraph`,
- * `queryRuntimeEnrichment`.
+ * Steers the model toward all live parent-app MCP tools by exact SDK tool id
+ * — `queryFindingsHistory`, `queryImportGraph`, `queryRuntimeEnrichment`, and
+ * `queryCodebaseGraph` (parent-app plan §8.18 Phase 3: bounded structural graph
+ * queries; no raw Cypher).
  *
  * @param mcpServerName - Same override as `attachMcpServerToOptions`
  *   (`DEFAULT_MCP_SERVER_NAME` when omitted).
@@ -100,9 +102,10 @@ export function buildPrReviewerMcpNudgeSystemPromptSuffix(
   const findingsTool = `mcp__${name}__queryFindingsHistory`;
   const importGraphTool = `mcp__${name}__queryImportGraph`;
   const runtimeTool = `mcp__${name}__queryRuntimeEnrichment`;
+  const codebaseGraphTool = `mcp__${name}__queryCodebaseGraph`;
   return `
 
-**Backend-backed MCP tools:** Call \`${findingsTool}\` when prior findings, dismissals, or fingerprint history for the changed files or CWE would affect severity or confidence. Call \`${importGraphTool}\` with the PR file paths when you need authoritative import-graph reachability (callers, entry points) instead of inferring from the diff alone. Call \`${runtimeTool}\` with the changed file paths when you need runtime-incident or hot-files signal for operational risk instead of guessing from the diff alone. Prefer these tools over guessing.
+**Backend-backed MCP tools:** Call \`${findingsTool}\` when prior findings, dismissals, or fingerprint history for the changed files or CWE would affect severity or confidence. Call \`${importGraphTool}\` with the PR file paths when you need authoritative import-graph reachability (callers, entry points) instead of inferring from the diff alone. Call \`${runtimeTool}\` with the changed file paths when you need runtime-incident or hot-files signal for operational risk instead of guessing from the diff alone. Call \`${codebaseGraphTool}\` with \`kind\` + \`target\` when you need symbol-level call-graph signal (callers, callees, reachability, or structural symbol search) from the parent-indexed default-branch graph instead of guessing from the diff alone. Prefer these tools over guessing.
 `;
 }
 

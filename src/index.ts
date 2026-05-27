@@ -47,6 +47,17 @@ export {
   emptySecurityReport,
 } from './schemas/adversarial_pass';
 export {
+  type FpAdversaryPassContext,
+  type FpAdversaryPassFinding,
+  type FpAdversaryVerdict,
+  type FpAdversaryReport,
+  FP_ADVERSARY_REPORT_SCHEMA,
+  parseFpAdversaryPassContext,
+  buildFpAdversaryUserPrompt,
+  toFpAdversaryFindings,
+  emptyFpAdversaryReport,
+} from './schemas/fp_adversary_pass';
+export {
   type ImportGraphContext,
   type ImportGraphFileEntry,
   parseImportGraphContext,

@@ -13,6 +13,7 @@ import { QA_VERDICT_SCHEMA } from './schemas/qa_context';
 import { RETEST_VERDICT_SCHEMA } from './schemas/finding_validator';
 import { CONTEXT_EXTRACTION_SCHEMA } from './schemas/context_extraction';
 import { LEARNED_GUIDANCE_OUTPUT_SCHEMA } from './schemas/learned_guidance';
+import { FP_ADVERSARY_REPORT_SCHEMA } from './schemas/fp_adversary_pass';
 
 const FIX_CODE_VS_OPTIONS_GUIDANCE = `
 
@@ -86,11 +87,17 @@ export function buildMcpInternalToolNames(
 }
 
 /**
- * System-prompt suffix for `pr_reviewer` when `--mcp-server-url` is set.
- * Steers the model toward all live parent-app MCP tools by exact SDK tool id
- * — `queryFindingsHistory`, `queryImportGraph`, `queryRuntimeEnrichment`, and
- * `queryCodebaseGraph` (parent-app plan §8.18 Phase 3: bounded structural graph
- * queries; no raw Cypher).
+ * System-prompt suffix for `pr_reviewer` / `code_reviewer` when
+ * `--mcp-server-url` is set. Steers the model toward all live parent-app
+ * MCP tools by exact SDK tool id — `queryFindingsHistory`,
+ * `queryImportGraph`, `queryRuntimeEnrichment`, and `queryCodebaseGraph`
+ * (parent-app plan §8.18 Phase 3: bounded structural graph queries; no raw
+ * Cypher).
+ *
+ * v2.8.0: extended to `code_reviewer` (full-repo, Lane 2). Previously only
+ * `pr_reviewer` received the nudge; `code_reviewer` had MCP attached only
+ * through `getDiffReviewerOptions` when called with `--diff-context`, never
+ * through `getCodeReviewerOptions`. Closing that gap is the B5a deliverable.
  *
  * @param mcpServerName - Same override as `attachMcpServerToOptions`
  *   (`DEFAULT_MCP_SERVER_NAME` when omitted).
@@ -227,16 +234,40 @@ export class AgentOptions {
 
   /**
    * Get options for security code reviewer
+   *
+   * v2.8.0 (B5a fix): now accepts MCP server params and calls
+   * `attachMcpServerToOptions` to wire the parent-app per-scan MCP server.
+   * Previously the backend pushed `--mcp-server-name` to the spawn but the
+   * SDK was never told MCP tools existed — the full-repo code_reviewer ran
+   * without `queryFindingsHistory` / `queryImportGraph` /
+   * `queryCodebaseGraph` / `queryRuntimeEnrichment` access despite the
+   * parent app starting the server. Mirror's `getDiffReviewerOptions`
+   * pattern and includes the same system-prompt nudge as `pr_reviewer` so
+   * the agent discovers the tools.
+   *
    * @param role - The role configuration key
    * @param outputFormat - Output format (json, markdown, etc.)
+   * @param mcpServerUrl - Parent-app per-scan MCP server URL
+   * @param mcpServerName - Override for the MCP server identifier
+   * @param mcpServerBearer - Bearer token for MCP HTTP requests
    */
-  getCodeReviewerOptions(role: string = 'code_reviewer', outputFormat?: string): Options {
+  getCodeReviewerOptions(
+    role: string = 'code_reviewer',
+    outputFormat?: string,
+    mcpServerUrl?: string,
+    mcpServerName?: string,
+    mcpServerBearer?: string,
+  ): Options {
     const roleConfig = this.confDict[this.environment]?.[role];
     let systemPrompt = roleConfig?.options?.system_prompt || 
       'You are an Application Security (AppSec) expert assistant. You are responsible for performing a thorough code review. List out all the potential security and privacy issues found in the code.';
 
     if (outputFormat?.toLowerCase() === 'json') {
       systemPrompt += FIX_CODE_VS_OPTIONS_GUIDANCE;
+    }
+
+    if (mcpServerUrl) {
+      systemPrompt += buildPrReviewerMcpNudgeSystemPromptSuffix(mcpServerName);
     }
 
     const resolvedMaxTurns = roleConfig?.options?.max_turns ?? 30;
@@ -261,6 +292,14 @@ export class AgentOptions {
         schema: SECURITY_REPORT_SCHEMA
       };
     }
+
+    attachMcpServerToOptions(
+      options,
+      mcpServerUrl,
+      'code-reviewer',
+      mcpServerName,
+      mcpServerBearer,
+    );
 
     return options;
   }
@@ -722,6 +761,80 @@ You have access to Read, Grep, and Write tools:
       options,
       mcpServerUrl,
       'pr-adversary',
+      mcpServerName,
+      mcpServerBearer,
+    );
+
+    return options;
+  }
+
+  /**
+   * fp_adversary (v2.8.0 / sast-ai-app full-repo Phase 2.5): second pass that
+   * filters first-pass `code_reviewer` findings on full-repo scans by emitting
+   * per-finding `(fingerprint, verdict, confidence, rationale)` verdicts. Output
+   * is constrained to FP_ADVERSARY_REPORT_SCHEMA so the verdict contract stays
+   * model-independent across Claude upgrades.
+   *
+   * Differences from `getPrAdversaryOptions`:
+   * - Output schema is the dedicated `fp_adversary_report` (not
+   *   SECURITY_REPORT_SCHEMA) — verdicts round-trip on `fingerprint`, not `id`.
+   * - No `experiment_enabled` plumbing (Lane-2 deliberately omits A/B per M4).
+   * - System prompt references the four structured posture fields and
+   *   `similar_dismissed` precedent that the parent app threads in via
+   *   `--adversarial-context`.
+   */
+  getFpAdversaryOptions(
+    role: string = 'fp_adversary',
+    srcDir?: string | null,
+    maxTurns?: number,
+    mcpServerUrl?: string,
+    mcpServerName?: string,
+    mcpServerBearer?: string,
+  ): Options {
+    const roleConfig = this.confDict[this.environment]?.[role];
+    let systemPrompt =
+      roleConfig?.options?.system_prompt ||
+      'You are a senior application security engineer performing an adversarial false-positive review on a full-repository security scan. ' +
+        'For each candidate finding, return a verdict (confirm or dismiss) with a numeric 0.0-1.0 confidence and a concrete rationale. ' +
+        'Weight the supplied project posture (security context, deployment context, developer guidance) when assessing each finding. ' +
+        'Use Read/Grep and any available MCP tools to verify reachability before confirming. ' +
+        'Dismiss only when you can name the specific mitigation, the reachability gap, or the test-only nature of the code.';
+
+    if (srcDir) {
+      systemPrompt += `\n\nSource code is available at: ${srcDir}. Use Read and Grep to verify call paths and mitigations before issuing a verdict.`;
+    }
+
+    systemPrompt +=
+      '\n\nReturn one JSON object matching the `fp_adversary_report` schema. Each verdict must echo the input `fingerprint` so the parent app can route the verdict to the right finding. Missing verdicts are treated as `confirm` (no silent drops).';
+
+    if (mcpServerUrl) {
+      systemPrompt += buildPrReviewerMcpNudgeSystemPromptSuffix(mcpServerName);
+    }
+
+    const resolvedMaxTurns = maxTurns ?? roleConfig?.options?.max_turns ?? 15;
+
+    const options: Options = {
+      agents: {
+        'fp-adversary': {
+          description:
+            'Adversarial false-positive filter for full-repo scans: emits per-finding (verdict, confidence, rationale) verdicts',
+          prompt: systemPrompt,
+          tools: ['Read', 'Grep'],
+          model: this.model,
+          maxTurns: resolvedMaxTurns,
+        } as AgentDefinition,
+      },
+      permissionMode: 'bypassPermissions',
+      outputFormat: {
+        type: 'json_schema',
+        schema: FP_ADVERSARY_REPORT_SCHEMA,
+      },
+    };
+
+    attachMcpServerToOptions(
+      options,
+      mcpServerUrl,
+      'fp-adversary',
       mcpServerName,
       mcpServerBearer,
     );

@@ -55,6 +55,19 @@ default: &default
       output_format: "json"
       max_turns: 15
       verbose: True
+  fp_adversary:
+    options:
+      # v2.8.0 / sast-ai-app full-repo Phase 2.5: full-tree adversarial false-positive
+      # filter that emits per-finding (fingerprint, verdict, confidence, rationale)
+      # verdicts so the parent app can route low-confidence dismissals to a
+      # pre_dismissed UI state and auto-dismiss only above the operator-configured
+      # threshold. Structured posture inputs (project_summary, security_context,
+      # deployment_context, developer_context) come in via --adversarial-context
+      # and are weighted ahead of any extra integrator context.
+      system_prompt: "You are a senior application security engineer performing an adversarial false-positive review on a full-repository security scan. For each candidate finding, return a verdict (confirm or dismiss) with a numeric 0.0-1.0 confidence and a concrete rationale. Weight the supplied project posture (security context, deployment context, developer guidance) when assessing each finding. Use Read/Grep and any available MCP tools (queryImportGraph, queryCodebaseGraph, queryRuntimeEnrichment) to verify reachability before confirming. Dismiss only when you can name the specific mitigation, the reachability gap, or the test-only nature of the code."
+      output_format: "json"
+      max_turns: 15
+      verbose: True
   context_extractor:
     options:
       output_format: "json"

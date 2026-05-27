@@ -840,6 +840,60 @@ describe('AgentOptions', () => {
       expect(String((off.agents as any)['pr-adversary'].prompt)).not.toContain('Experiment (treatment)');
     });
   });
+
+  describe('getFpAdversaryOptions (v2.8.0 / sast-ai-app full-repo Phase 2.5)', () => {
+    it('should return Read/Grep and the dedicated fp_adversary_report JSON schema', () => {
+      const conf: ConfigDict = {
+        default: {
+          fp_adversary: {
+            options: {
+              system_prompt: 'Custom fp_adversary prompt',
+              max_turns: 12,
+            },
+          },
+        },
+      };
+      const agentOptions = new AgentOptions(conf, environment);
+      const options = agentOptions.getFpAdversaryOptions('fp_adversary', '/tmp/repo');
+
+      expect(options.agents?.['fp-adversary'].tools).toEqual(['Read', 'Grep']);
+      expect(options.agents?.['fp-adversary'].maxTurns).toBe(12);
+      expect((options.outputFormat as { type: string }).type).toBe('json_schema');
+      expect((options.outputFormat as any).schema.properties.fp_adversary_report).toBeDefined();
+      expect((options.outputFormat as any).schema.properties.security_review_report).toBeUndefined();
+      expect(String(options.agents?.['fp-adversary'].prompt)).toContain('Custom fp_adversary prompt');
+      expect(String(options.agents?.['fp-adversary'].prompt)).toContain('/tmp/repo');
+    });
+
+    it('should default maxTurns to 15 when role config is absent', () => {
+      const emptyConfDict: ConfigDict = { default: {} };
+      const agentOptions = new AgentOptions(emptyConfDict, environment);
+      const options = agentOptions.getFpAdversaryOptions('fp_adversary');
+      expect(options.agents?.['fp-adversary'].maxTurns).toBe(15);
+    });
+
+    it('should allow explicit maxTurns override', () => {
+      const emptyConfDict: ConfigDict = { default: {} };
+      const agentOptions = new AgentOptions(emptyConfDict, environment);
+      const options = agentOptions.getFpAdversaryOptions('fp_adversary', null, 5);
+      expect(options.agents?.['fp-adversary'].maxTurns).toBe(5);
+    });
+
+    it('should mention the round-trip fingerprint contract in the system prompt', () => {
+      const emptyConfDict: ConfigDict = { default: {} };
+      const agentOptions = new AgentOptions(emptyConfDict, environment);
+      const options = agentOptions.getFpAdversaryOptions('fp_adversary');
+      expect(String(options.agents?.['fp-adversary'].prompt)).toContain('fp_adversary_report');
+      expect(String(options.agents?.['fp-adversary'].prompt)).toContain('fingerprint');
+    });
+
+    it('NOT does add experiment line (Lane-2 deliberately omits A/B per plan M4)', () => {
+      const emptyConfDict: ConfigDict = { default: {} };
+      const agentOptions = new AgentOptions(emptyConfDict, environment);
+      const options = agentOptions.getFpAdversaryOptions('fp_adversary');
+      expect(String(options.agents?.['fp-adversary'].prompt)).not.toContain('Experiment (treatment)');
+    });
+  });
 });
 
 describe('SECURITY_REPORT_SCHEMA', () => {

@@ -58,6 +58,7 @@ describe('main', () => {
       qaVerifierWithOptions: jest.fn().mockResolvedValue(''),
       findingValidatorWithOptions: jest.fn().mockResolvedValue(''),
       prAdversaryWithOptions: jest.fn().mockResolvedValue(''),
+      fpAdversaryWithOptions: jest.fn().mockResolvedValue(''),
       contextExtractorWithOptions: jest.fn().mockResolvedValue(''),
       learnedGuidanceSynthesizerWithOptions: jest.fn().mockResolvedValue(''),
     } as any;
@@ -85,6 +86,8 @@ describe('main', () => {
       'retest_verdict.json',
       'pr_adversary_empty_test_out.json',
       'pr_adversary_run_test_out.json',
+      'fp_adversary_empty_test_out.json',
+      'fp_adversary_run_test_out.json',
       'learned_guidance_run_test_out.json',
       'learned_guidance_no_output_test.json',
     ]) {
@@ -878,6 +881,105 @@ describe('main', () => {
       expect(prompt).toContain('Adversarial failure-path');
       expect(prompt).toContain('SEC-001');
       expect(prompt).toContain('XSS');
+      expect(exitMock).toHaveBeenCalledWith(0);
+      if (fs.existsSync(outName)) {
+        fs.removeSync(outName);
+      }
+    });
+  });
+
+  describe('fp_adversary (v2.8.0 / sast-ai-app full-repo Phase 2.5)', () => {
+    let fpAdvPath: string;
+    const sample = {
+      findings: [
+        {
+          fingerprint: 'fp-XSS-1',
+          id: 'SEC-001',
+          title: 'XSS',
+          file: 'src/x.ts',
+          description: 'Unescaped user content',
+          recommendation: 'Escape output',
+          severity: 'high',
+          confidence: 'high',
+        },
+      ],
+      project_summary: 'A React SPA',
+      security_context: 'React auto-escapes JSX',
+      metadata: { project_name: 'fp-test' },
+    };
+
+    beforeEach(() => {
+      fpAdvPath = path.join(testDir, 'fp_adversarial_in.json');
+      fs.writeFileSync(fpAdvPath, JSON.stringify(sample), 'utf-8');
+    });
+
+    it('should exit when --adversarial-context is missing', async () => {
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      exitMock.mockImplementationOnce((code?: number) => {
+        throw new Error(`process.exit(${code})`);
+      });
+      await expect(
+        main(mockConfDict, { role: 'fp_adversary', environment: 'default' }),
+      ).rejects.toThrow('process.exit(1)');
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('--adversarial-context is required'),
+      );
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('should write empty fp_adversary report when findings array is empty', async () => {
+      const emptyPath = path.join(testDir, 'fp_adv_empty.json');
+      fs.writeFileSync(emptyPath, JSON.stringify({ findings: [] }), 'utf-8');
+      const outName = 'fp_adversary_empty_test_out.json';
+
+      await main(mockConfDict, {
+        role: 'fp_adversary',
+        environment: 'default',
+        adversarial_context: emptyPath,
+        output_file: outName,
+        output_format: 'json',
+      });
+
+      expect(mockAgentActions.fpAdversaryWithOptions).not.toHaveBeenCalled();
+      const written = JSON.parse(fs.readFileSync(outName, 'utf-8'));
+      expect(written.fp_adversary_report.verdicts).toEqual([]);
+      expect(exitMock).toHaveBeenCalledWith(0);
+      if (fs.existsSync(outName)) {
+        fs.removeSync(outName);
+      }
+    });
+
+    it('should run fpAdversaryWithOptions with prompt containing fingerprint and posture', async () => {
+      const outName = 'fp_adversary_run_test_out.json';
+      mockAgentActions.fpAdversaryWithOptions.mockResolvedValue(
+        JSON.stringify({
+          fp_adversary_report: {
+            verdicts: [
+              {
+                fingerprint: 'fp-XSS-1',
+                verdict: 'dismiss',
+                confidence: 0.9,
+                rationale: 'React auto-escapes',
+              },
+            ],
+          },
+        }),
+      );
+
+      await main(mockConfDict, {
+        role: 'fp_adversary',
+        environment: 'default',
+        adversarial_context: fpAdvPath,
+        output_file: outName,
+        output_format: 'json',
+      });
+
+      expect(mockAgentActions.fpAdversaryWithOptions).toHaveBeenCalled();
+      const prompt = mockAgentActions.fpAdversaryWithOptions.mock.calls[0][0];
+      expect(prompt).toContain('Adversarial false-positive review');
+      expect(prompt).toContain('fp-XSS-1');
+      expect(prompt).toContain('Project posture');
+      expect(prompt).toContain('React auto-escapes JSX');
       expect(exitMock).toHaveBeenCalledWith(0);
       if (fs.existsSync(outName)) {
         fs.removeSync(outName);

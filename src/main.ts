@@ -26,6 +26,12 @@ import {
   type AdversarialPassContext,
 } from './schemas/adversarial_pass';
 import {
+  parseFpAdversaryPassContext,
+  buildFpAdversaryUserPrompt,
+  emptyFpAdversaryReport,
+  type FpAdversaryPassContext,
+} from './schemas/fp_adversary_pass';
+import {
   parseImportGraphContext,
   formatImportGraphContextForPrompt,
   type ImportGraphContext,
@@ -316,6 +322,41 @@ function loadAdversarialContextFile(adversarialContextPath: string, cwd: string)
     return parseAdversarialPassContext(data);
   } catch (e: any) {
     console.error(`Error: Invalid adversarial context: ${e?.message || e}`);
+    process.exit(1);
+  }
+}
+
+/**
+ * Load fp_adversary input (v2.8.0): candidate findings with required
+ * fingerprints + four optional structured posture fields + optional
+ * similar_dismissed precedent array. Schema-aligned for the parent app's
+ * full-repo Phase 2.5 wire.
+ */
+function loadFpAdversaryContextFile(contextPath: string, cwd: string): FpAdversaryPassContext {
+  const resolvedPath = validateInputFilePath(contextPath, cwd);
+  if (!resolvedPath) {
+    const safePath = sanitizePathForError(contextPath);
+    console.error(`Error: Invalid fp_adversary context file path: ${safePath}`);
+    process.exit(1);
+  }
+  const safePath = sanitizePathForError(resolvedPath);
+  if (!fs.existsSync(resolvedPath)) {
+    console.error(`Error: fp_adversary context file not found: ${safePath}`);
+    process.exit(1);
+  }
+  let data: unknown;
+  try {
+    const content = fs.readFileSync(resolvedPath, 'utf-8');
+    data = JSON.parse(content);
+  } catch (error: any) {
+    const errorMessage = error?.message || 'Unknown error';
+    console.error(`Error: Failed to read fp_adversary context file ${safePath}: ${errorMessage}`);
+    process.exit(1);
+  }
+  try {
+    return parseFpAdversaryPassContext(data);
+  } catch (e: any) {
+    console.error(`Error: Invalid fp_adversary context: ${e?.message || e}`);
     process.exit(1);
   }
 }
@@ -1127,6 +1168,50 @@ Use sequential IDs: node-001/flow-001/tb-001 for DFD elements, THREAT-001 for th
       if (structuredResult) {
         fs.writeFileSync(outputFile, structuredResult, 'utf-8');
         console.log(`Adversarial report written to ${outputFile}`);
+      }
+      cleanupTmpDir(tmpSrcDir);
+    }
+
+  } else if (args.role === 'fp_adversary') {
+    // v2.8.0 / sast-ai-app full-repo Phase 2.5: false-positive filter pass.
+    // Same `--adversarial-context` CLI flag as pr_adversary but parses a
+    // distinct input schema (fingerprint-keyed, structured posture inputs,
+    // similar_dismissed precedent) and emits the dedicated
+    // `fp_adversary_report` shape (verdicts array; no `security_review_report`).
+    console.log('Running FP Adversary (full-repo false-positive filter)');
+
+    if (!args.adversarial_context) {
+      console.error('Error: --adversarial-context is required for the fp_adversary role.');
+      process.exit(1);
+    }
+
+    const fpCtx = loadFpAdversaryContextFile(args.adversarial_context, currentWorkingDir);
+    if (args.output_format && args.output_format.toLowerCase() !== 'json') {
+      console.warn('fp_adversary always emits JSON (structured); ignoring -f for file content.');
+    }
+    const outputFile = validateOutputFile(
+      args.output_file || 'fp_adversary_report.json',
+      currentWorkingDir
+    );
+
+    const userPrompt = buildFpAdversaryUserPrompt(fpCtx, {
+      additionalContext: args.context,
+    });
+
+    const tmpSrcDir = args.src_dir
+      ? validateAndCopySrcDir(args.src_dir, currentWorkingDir)
+      : null;
+
+    if (fpCtx.findings.length === 0) {
+      const empty = emptyFpAdversaryReport();
+      fs.writeFileSync(outputFile, JSON.stringify(empty, null, 2), 'utf-8');
+      console.log(`No candidate findings; wrote empty fp_adversary report to ${outputFile}`);
+      cleanupTmpDir(tmpSrcDir);
+    } else {
+      const structuredResult = await agentActions.fpAdversaryWithOptions(userPrompt, tmpSrcDir);
+      if (structuredResult) {
+        fs.writeFileSync(outputFile, structuredResult, 'utf-8');
+        console.log(`fp_adversary report written to ${outputFile}`);
       }
       cleanupTmpDir(tmpSrcDir);
     }

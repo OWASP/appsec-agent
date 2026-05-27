@@ -291,6 +291,63 @@ $ npx agent-run -r pr_adversary --adversarial-context candidates.json --diff-con
 
 - **`--experiment-enabled`:** adds stricter false-positive instructions for this pass; for `pr_reviewer`, also tightens the initial diff review when your integrator passes this flag.
 
+#### Full-repo adversarial false-positive filter (`fp_adversary`, v2.8.0)
+
+The Lane-2 counterpart to `pr_adversary`: where `pr_adversary` re-filters PR-scoped findings, `fp_adversary` operates over a whole repository's first-pass `code_reviewer` findings and emits a per-finding **verdict** (`confirm` or `dismiss`) with a numeric 0–1 confidence and a concrete rationale. The output shape is a dedicated `fp_adversary_report` (distinct from `security_review_report`) so the parent app can route low-confidence dismissals to a "pre-dismissed" UI state and auto-dismiss only above an operator-configured confidence threshold.
+
+```bash
+# Full-repo false-positive filter — same --adversarial-context flag, distinct input/output schema.
+$ npx agent-run -r fp_adversary --adversarial-context fp_in.json -s ./repo -f json \
+  -o fp_adversary_report.json
+```
+
+**Input shape** (`findings[].fingerprint` is the round-trip key; the four posture fields and `similar_dismissed` precedent array are all optional but recommended):
+
+```json
+{
+  "findings": [
+    {
+      "fingerprint": "fp-sha256-of-cwe-file-snippet-line",
+      "id": "SEC-001",
+      "title": "SQL injection",
+      "file": "src/db.ts",
+      "description": "…",
+      "severity": "HIGH",
+      "confidence": "MEDIUM",
+      "cwe_id": "CWE-89"
+    }
+  ],
+  "project_summary": "A Next.js SaaS app",
+  "security_context": "Prisma ORM with parameterized queries",
+  "deployment_context": "Vercel, multi-tenant",
+  "developer_context": "PHI handling rules apply to user_data",
+  "similar_dismissed": [
+    { "fingerprint": "fp-old", "file": "src/db.ts", "cwe": "CWE-89", "dismissal_reason": "Prisma parameterized query" }
+  ],
+  "metadata": { "project_name": "sast-ai-app" }
+}
+```
+
+**Output shape:**
+
+```json
+{
+  "fp_adversary_report": {
+    "verdicts": [
+      {
+        "fingerprint": "fp-sha256-of-cwe-file-snippet-line",
+        "verdict": "dismiss",
+        "confidence": 0.92,
+        "rationale": "Prisma parameterized query mitigates; no concrete bypass path observed.",
+        "cost_usd_estimate": 0.001
+      }
+    ]
+  }
+}
+```
+
+`fp_adversary` is MCP-aware: passing `--mcp-server-url` exposes `queryFindingsHistory`, `queryImportGraph`, `queryCodebaseGraph`, and `queryRuntimeEnrichment` at runtime so the agent can verify reachability before confirming.
+
 **Input file shape** (minimum per finding: `id`, `title`, `file`, `description`):
 
 ```json

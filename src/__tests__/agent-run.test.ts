@@ -413,6 +413,26 @@ describe('agent-run CLI', () => {
       expect(args.adversarial_context).toBe('/tmp/in.json');
       expect(args.experiment_enabled).toBe(true);
     });
+
+    it('should map --adversarial-context onto fp_adversary args (v2.8.0)', () => {
+      const { Command } = require('commander');
+      const mockCommand = Command();
+      mockCommand.opts.mockReturnValue({
+        role: 'fp_adversary',
+        environment: 'default',
+        adversarialContext: '/tmp/fp_in.json',
+        output_format: 'json',
+      });
+      const options = mockCommand.opts();
+      const args = {
+        role: options.role,
+        environment: options.environment,
+        adversarial_context: options.adversarialContext,
+        output_format: options.output_format,
+      };
+      expect(args.role).toBe('fp_adversary');
+      expect(args.adversarial_context).toBe('/tmp/fp_in.json');
+    });
   });
 
   describe('--mcp-server-url flag (v2.4.0)', () => {
@@ -424,6 +444,7 @@ describe('agent-run CLI', () => {
         'pr_reviewer',
         'code_reviewer',
         'pr_adversary',
+        'fp_adversary',
         'finding_validator',
         'code_fixer',
       ];

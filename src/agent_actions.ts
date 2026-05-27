@@ -244,11 +244,24 @@ export class AgentActions {
   }
 
   /**
-   * Secure code reviewer with options
+   * Secure code reviewer with options.
+   *
+   * v2.8.0 (B5a fix): MCP params are now threaded through to
+   * `getCodeReviewerOptions` so the SDK gets the per-scan MCP server config
+   * for full-repo `code_reviewer` runs. Previously the spawn accepted
+   * `--mcp-server-name` argv but the agent options never wired the URL,
+   * leaving the agent without `queryCodebaseGraph` / `queryImportGraph` /
+   * `queryRuntimeEnrichment` / `queryFindingsHistory` access.
    */
   async codeReviewerWithOptions(userPrompt: string): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
-    const options = agentOptions.getCodeReviewerOptions(this.args.role, this.args.output_format);
+    const options = agentOptions.getCodeReviewerOptions(
+      this.args.role,
+      this.args.output_format,
+      this.args.mcp_server_url,
+      this.args.mcp_server_name,
+      this.args.mcp_server_bearer,
+    );
 
     let cursor: BlinkingCursor | null = null;
     let structuredJson = '';
@@ -736,6 +749,107 @@ export class AgentActions {
       console.error('Error during learned-guidance synthesis:', error);
       throw error;
     }
+    console.log();
+    return structuredJson;
+  }
+
+  /**
+   * fp_adversary (v2.8.0 / sast-ai-app full-repo Phase 2.5): batch false-positive
+   * filter over first-pass code_reviewer findings. Emits structured JSON
+   * matching `FP_ADVERSARY_REPORT_SCHEMA` with per-finding
+   * `(fingerprint, verdict, confidence, rationale, cost_usd_estimate?)`.
+   *
+   * The Claude Agent SDK's `total_cost_usd` is threaded onto every emitted
+   * verdict as `cost_usd_estimate` so the parent app can run a
+   * deterministic cost-cap accumulator without re-counting tokens. When
+   * the SDK omits cost (e.g. error path), the field is absent and the
+   * parent app falls back to a conservative per-finding estimate.
+   */
+  async fpAdversaryWithOptions(userPrompt: string, srcDir?: string | null): Promise<string> {
+    const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
+    const options = agentOptions.getFpAdversaryOptions(
+      this.args.role,
+      srcDir,
+      this.args.max_turns,
+      this.args.mcp_server_url,
+      this.args.mcp_server_name,
+      this.args.mcp_server_bearer,
+    );
+
+    let cursor: BlinkingCursor | null = null;
+    let structuredJson = '';
+    let totalCostUsd = 0;
+
+    try {
+      cursor = new BlinkingCursor();
+      cursor.start();
+      try {
+        for await (const message of llmQuery({ prompt: userPrompt, options })) {
+          if (message.type === 'stream_event') {
+            if (cursor) cursor.stop();
+          } else if (message.type === 'assistant') {
+            if (cursor) cursor.stop();
+            const assistantMsg = message as SDKAssistantMessage;
+            if (this.args.verbose && assistantMsg.message.content) {
+              for (const block of assistantMsg.message.content) {
+                if (block.type === 'text') {
+                  console.log(`Claude: ${block.text}`);
+                }
+              }
+            }
+          } else if (message.type === 'result') {
+            if (cursor) cursor.stop();
+            const resultMsg = message as SDKResultMessage;
+            if ((resultMsg as any).structured_output) {
+              structuredJson = JSON.stringify((resultMsg as any).structured_output, null, 2);
+            }
+            if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
+              totalCostUsd = resultMsg.total_cost_usd;
+              console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);
+            }
+          }
+        }
+      } finally {
+        if (cursor) cursor.stop();
+      }
+    } catch (error) {
+      if (cursor) {
+        try {
+          cursor.stop();
+        } catch {
+          // ignore
+        }
+      }
+      console.error('Error during fp_adversary pass:', error);
+      throw error;
+    }
+
+    // Thread the SDK's total_cost_usd onto every emitted verdict so the
+    // parent app's cost-cap accumulator can read it directly. We split the
+    // total evenly across verdicts; the parent app sums these to recover
+    // the run's actual cost, but uses each verdict's value for per-finding
+    // budgeting decisions (cost cap stops the loop deterministically).
+    if (structuredJson && totalCostUsd > 0) {
+      try {
+        const parsed = JSON.parse(structuredJson) as {
+          fp_adversary_report?: { verdicts?: Array<Record<string, unknown>> };
+        };
+        const verdicts = parsed.fp_adversary_report?.verdicts;
+        if (Array.isArray(verdicts) && verdicts.length > 0) {
+          const perVerdictCost = totalCostUsd / verdicts.length;
+          for (const v of verdicts) {
+            if (typeof (v as { cost_usd_estimate?: number }).cost_usd_estimate !== 'number') {
+              (v as { cost_usd_estimate: number }).cost_usd_estimate = perVerdictCost;
+            }
+          }
+          structuredJson = JSON.stringify(parsed, null, 2);
+        }
+      } catch {
+        // Malformed JSON from the SDK — leave it for the parent app's
+        // `parse_error` fail-safe; do not synthesize a verdict shape here.
+      }
+    }
+
     console.log();
     return structuredJson;
   }

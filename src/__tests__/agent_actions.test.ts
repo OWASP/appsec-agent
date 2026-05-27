@@ -711,6 +711,152 @@ describe('AgentActions', () => {
     });
   });
 
+  describe('fpAdversaryWithOptions (v2.8.0 / sast-ai-app full-repo Phase 2.5)', () => {
+    const fpArgs: AgentArgs = {
+      role: 'fp_adversary',
+      environment: 'default',
+      output_format: 'json',
+      verbose: false,
+    };
+
+    it('should return structured verdict JSON when agent provides structured_output', async () => {
+      const verdictOutput = {
+        fp_adversary_report: {
+          verdicts: [
+            {
+              fingerprint: 'fp-1',
+              verdict: 'dismiss',
+              confidence: 0.92,
+              rationale: 'Prisma parameterized query mitigates.',
+            },
+          ],
+        },
+      };
+      mockQueryWith([
+        { type: 'result', structured_output: verdictOutput, total_cost_usd: 0.005 },
+      ]);
+
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      const agentActions = new AgentActions(mockConfDict, environment, fpArgs);
+
+      const result = await agentActions.fpAdversaryWithOptions('Verify', '/tmp/src');
+      const parsed = JSON.parse(result);
+      expect(parsed.fp_adversary_report.verdicts).toHaveLength(1);
+      expect(parsed.fp_adversary_report.verdicts[0].fingerprint).toBe('fp-1');
+      consoleSpy.mockRestore();
+    });
+
+    it('threads SDK total_cost_usd onto every verdict as cost_usd_estimate', async () => {
+      const verdictOutput = {
+        fp_adversary_report: {
+          verdicts: [
+            { fingerprint: 'fp-1', verdict: 'dismiss', confidence: 0.9, rationale: 'r1' },
+            { fingerprint: 'fp-2', verdict: 'confirm', confidence: 0.8, rationale: 'r2' },
+          ],
+        },
+      };
+      mockQueryWith([
+        { type: 'result', structured_output: verdictOutput, total_cost_usd: 0.02 },
+      ]);
+
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      const agentActions = new AgentActions(mockConfDict, environment, fpArgs);
+      const result = await agentActions.fpAdversaryWithOptions('Verify');
+      const parsed = JSON.parse(result);
+      // Each verdict gets total_cost_usd / N (0.02 / 2 = 0.01).
+      expect(parsed.fp_adversary_report.verdicts[0].cost_usd_estimate).toBeCloseTo(0.01, 6);
+      expect(parsed.fp_adversary_report.verdicts[1].cost_usd_estimate).toBeCloseTo(0.01, 6);
+      consoleSpy.mockRestore();
+    });
+
+    it('preserves existing per-verdict cost_usd_estimate when the SDK provided it', async () => {
+      const verdictOutput = {
+        fp_adversary_report: {
+          verdicts: [
+            {
+              fingerprint: 'fp-1',
+              verdict: 'dismiss',
+              confidence: 0.9,
+              rationale: 'r1',
+              cost_usd_estimate: 0.003,
+            },
+          ],
+        },
+      };
+      mockQueryWith([
+        { type: 'result', structured_output: verdictOutput, total_cost_usd: 0.02 },
+      ]);
+
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      const agentActions = new AgentActions(mockConfDict, environment, fpArgs);
+      const result = await agentActions.fpAdversaryWithOptions('Verify');
+      const parsed = JSON.parse(result);
+      expect(parsed.fp_adversary_report.verdicts[0].cost_usd_estimate).toBe(0.003);
+      consoleSpy.mockRestore();
+    });
+
+    it('returns the raw JSON when total_cost_usd is zero (cost-threading skipped)', async () => {
+      const verdictOutput = {
+        fp_adversary_report: {
+          verdicts: [
+            { fingerprint: 'fp-1', verdict: 'confirm', confidence: 0.7, rationale: 'r' },
+          ],
+        },
+      };
+      mockQueryWith([{ type: 'result', structured_output: verdictOutput }]);
+      const agentActions = new AgentActions(mockConfDict, environment, fpArgs);
+      const result = await agentActions.fpAdversaryWithOptions('Verify');
+      const parsed = JSON.parse(result);
+      expect(parsed.fp_adversary_report.verdicts[0].cost_usd_estimate).toBeUndefined();
+    });
+
+    it('returns empty string when no structured_output', async () => {
+      mockQueryWith([{ type: 'result' }]);
+      const agentActions = new AgentActions(mockConfDict, environment, fpArgs);
+      const result = await agentActions.fpAdversaryWithOptions('Verify');
+      expect(result).toBe('');
+    });
+
+    it('prints assistant text when verbose', async () => {
+      mockQueryWith([
+        { type: 'assistant', message: { content: [{ type: 'text', text: 'Analyzing fingerprint fp-1' }] } },
+        { type: 'result' },
+      ]);
+
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      const agentActions = new AgentActions(mockConfDict, environment, {
+        ...fpArgs,
+        verbose: true,
+      });
+      await agentActions.fpAdversaryWithOptions('Verify');
+      const verboseLog = consoleSpy.mock.calls.find(
+        (call) => typeof call[0] === 'string' && call[0].includes('fp-1'),
+      );
+      expect(verboseLog).toBeTruthy();
+      consoleSpy.mockRestore();
+    });
+
+    it('propagates errors and stops the cursor', async () => {
+      const error = new Error('fp_adversary failed');
+      (query as jest.Mock).mockReturnValue({
+        [Symbol.asyncIterator]: async function* () {
+          throw error;
+        },
+      });
+
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+      const agentActions = new AgentActions(mockConfDict, environment, fpArgs);
+      await expect(agentActions.fpAdversaryWithOptions('Verify')).rejects.toThrow(
+        'fp_adversary failed',
+      );
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'Error during fp_adversary pass:',
+        error,
+      );
+      consoleErrorSpy.mockRestore();
+    });
+  });
+
   describe('diffReviewerWithOptions', () => {
     const diffArgs: AgentArgs = {
       role: 'code_reviewer',

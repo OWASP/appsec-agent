@@ -5,6 +5,66 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.0] - 2026-05-27
+
+### Added — `fp_adversary` role (sast-ai-app full-repo Phase 2.5)
+
+Second adversarial pass, this time targeting **full-repository scheduled scans** (Lane 2) rather than PR diffs (Lane 1). Where `pr_adversary` re-runs `security_review_report` over the same PR-scoped findings to drop diff-only false positives, `fp_adversary` operates over a whole repository's first-pass `code_reviewer` findings and emits a per-finding `(fingerprint, verdict, confidence, rationale, cost_usd_estimate?)` decision shape so the parent app can route low-confidence dismissals to a "pre-dismissed" UI state and auto-dismiss only above an operator-configured threshold.
+
+Phase 2.5 also closes a latent bug in `getCodeReviewerOptions` (B5a fix): the SDK was never told the per-scan MCP server existed for full-repo `code_reviewer` runs even though the backend pushed `--mcp-server-name` to the spawn, leaving the agent without `queryFindingsHistory` / `queryImportGraph` / `queryCodebaseGraph` / `queryRuntimeEnrichment` access. The first-pass code reviewer now wires MCP through the same path as `pr_reviewer` / `pr_adversary` / `finding_validator` / `code_fixer`.
+
+#### New role: `fp_adversary`
+
+- **YAML role** ([`conf/appsec_agent.yaml`](conf/appsec_agent.yaml)) — new `fp_adversary` block with a full-repo-tuned system prompt that explicitly references the four structured posture fields (`project_summary`, `security_context`, `deployment_context`, `developer_context`) and the available MCP tools.
+- **Schema module [`src/schemas/fp_adversary_pass.ts`](src/schemas/fp_adversary_pass.ts)** —
+  - Input: `FpAdversaryPassContext` requires a per-finding `fingerprint` (round-trip key), accepts the four optional posture fields, an optional `similar_dismissed` precedent array (top-3 prior dismissals for the same CWE, pre-built by the parent app's `queryFindingsHistory` MCP tool), and optional metadata.
+  - Output: `FpAdversaryReport` shape (`{ fp_adversary_report: { verdicts: [{ fingerprint, verdict, confidence: 0-1 numeric, rationale (≤500 chars), cost_usd_estimate? }] } }`), enforced by the dedicated `FP_ADVERSARY_REPORT_SCHEMA` JSON schema (separate from `SECURITY_REPORT_SCHEMA` so the verdict contract stays model-independent across Claude upgrades).
+  - Helpers: `parseFpAdversaryPassContext`, `buildFpAdversaryUserPrompt`, `toFpAdversaryFindings`, `emptyFpAdversaryReport`.
+- **`getFpAdversaryOptions`** ([`src/agent_options.ts`](src/agent_options.ts)) — Read/Grep tools, `FP_ADVERSARY_REPORT_SCHEMA` for structured output, deliberately omits `experiment_enabled` plumbing (Lane-2 does not mirror Lane-1's A/B), and **is MCP-aware** — when `--mcp-server-url` is supplied, the SDK gets `queryFindingsHistory` / `queryImportGraph` / `queryCodebaseGraph` / `queryRuntimeEnrichment` and the system prompt is extended with the standard MCP nudge.
+- **`fpAdversaryWithOptions`** ([`src/agent_actions.ts`](src/agent_actions.ts)) — threads `total_cost_usd` from the Claude Agent SDK onto every emitted verdict as `cost_usd_estimate` so the parent app's cost-cap accumulator can stop the loop deterministically without re-counting tokens. Cost is split evenly across verdicts; the parent app sums these to recover the actual run cost.
+- **`main.ts` dispatch branch** ([`src/main.ts`](src/main.ts)) — new `loadFpAdversaryContextFile` + `fp_adversary` branch reusing the existing `--adversarial-context` CLI flag. Empty findings array short-circuits to an empty `fp_adversary_report` instead of spawning the LLM.
+- **`bin/agent-run.ts`** — `fp_adversary` added to the `mcpAwareRoles` set so `--mcp-server-url` / `--mcp-server-bearer` no longer trigger the friendly "ignored" warning on this role.
+- **Public exports** ([`src/index.ts`](src/index.ts)) — `FpAdversaryPassContext`, `FpAdversaryPassFinding`, `FpAdversaryVerdict`, `FpAdversaryReport`, `FP_ADVERSARY_REPORT_SCHEMA`, `parseFpAdversaryPassContext`, `buildFpAdversaryUserPrompt`, `toFpAdversaryFindings`, `emptyFpAdversaryReport`.
+
+#### Fix: `getCodeReviewerOptions` now wires MCP (B5a)
+
+`getCodeReviewerOptions` accepted no MCP parameters even though the sast-ai-app full-repo scan path was already passing `--mcp-server-name` argv. The agent was registering the role but never told the SDK about the parent-app per-scan MCP server, so `code_reviewer` runs on Lane 2 ran without MCP tool access. The fix mirrors `getDiffReviewerOptions`:
+
+- `getCodeReviewerOptions(role, outputFormat, mcpServerUrl?, mcpServerName?, mcpServerBearer?)` calls `attachMcpServerToOptions` and appends `buildPrReviewerMcpNudgeSystemPromptSuffix` to the system prompt when MCP is configured.
+- `codeReviewerWithOptions` threads `args.mcp_server_url` / `args.mcp_server_name` / `args.mcp_server_bearer` through to the role builder.
+- The diff-mode `code_reviewer` path is unchanged — `getDiffReviewerOptions` still gates the nudge on `role === 'pr_reviewer'` to avoid duplicate nudges on diff-mode `code_reviewer` runs.
+
+#### Tests
+
+- **New unit suite [`src/__tests__/schemas/fp_adversary_pass.test.ts`](src/__tests__/schemas/fp_adversary_pass.test.ts)** — 24 cases covering parse happy / reject paths (fingerprint required, batch cap at 500, posture-field normalization, `similar_dismissed` parsing), `toFpAdversaryFindings` severity / confidence normalization, `buildFpAdversaryUserPrompt` framing + posture block conditional rendering + precedent block + additional-context block, `emptyFpAdversaryReport` shell, and JSON-schema shape contract.
+- **`src/__tests__/agent_options.mcp.test.ts`** — six new cases for `getCodeReviewerOptions` MCP wiring (B5a inversion: previously asserted it did NOT attach; now asserts default-name attachment, name override, bearer header, system-prompt nudge, no-op when URL omitted) + six new cases for `getFpAdversaryOptions` MCP wiring (default name, override, four-tool exposure, system-prompt nudge, no-op when URL omitted, dedicated FP_ADVERSARY_REPORT_SCHEMA). Cross-role invariants extended to six MCP-aware roles.
+- **`src/__tests__/agent_options.test.ts`** — five new cases for `getFpAdversaryOptions` (tools / schema / system-prompt fingerprint contract / default maxTurns 15 / explicit override / no experiment line).
+- **`src/__tests__/agent_actions.test.ts`** — seven new cases for `fpAdversaryWithOptions` (structured verdict JSON, cost threading, preserve SDK-provided cost, no threading when cost is zero, empty string when no structured output, verbose text, error propagation).
+- **`src/__tests__/main.test.ts`** — three new dispatch-branch cases for `fp_adversary` (missing flag exits, empty-findings short-circuit, prompt contains fingerprint + posture).
+- **`src/__tests__/agent-run.test.ts`** — `mcpAwareRoles` set extended to include `fp_adversary`; new `--adversarial-context` mapping case for the new role.
+- **New e2e suite [`e2e/fp_adversary.e2e.test.ts`](e2e/fp_adversary.e2e.test.ts)** — three cases mirroring `pr_adversary.e2e.test.ts`: writes verdict report from full context (asserts posture + precedent surface in the prompt), writes empty report on zero candidate findings, exits 1 on missing `--adversarial-context`.
+
+### Cross-repo contract (parent app spawn shape)
+
+The parent app's `fullRepoAdversarialPassService` spawns `fp_adversary` like:
+
+```
+node <agent-run-path> -r fp_adversary \
+                     --adversarial-context <fpCtxFile> \
+                     -o fp_adversary_report.json \
+                     -f json \
+                     -m haiku \
+                     --mcp-server-url <SAST_INTERNAL_TOOLS_MCP_URL> \
+                     --mcp-server-name <appName> \
+                     --mcp-server-bearer <SAST_INTERNAL_TOOLS_MCP_BEARER>
+```
+
+from a per-scan working directory. The bearer is the same opaque per-scan secret pattern used by `pr_adversary` (v2.4.5+).
+
+### Bumped
+
+- `version` → `2.8.0`.
+
 ## [2.7.0] - 2026-05-13
 
 ### Added — live MCP `queryCodebaseGraph` (parent-app plan §8.18 Phase 3)

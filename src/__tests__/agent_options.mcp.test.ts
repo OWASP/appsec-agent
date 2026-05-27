@@ -263,7 +263,7 @@ describe('AgentOptions MCP wiring', () => {
         );
       });
 
-      it('does not append the pr_reviewer nudge for code_reviewer even when MCP URL is set', () => {
+      it('appends the MCP nudge for code_reviewer in diff mode (v2.8.0 B5a: parity with pr_reviewer)', () => {
         const ao = new AgentOptions(baseConfDict, 'default');
         const opts = ao.getDiffReviewerOptions(
           'code_reviewer',
@@ -275,6 +275,12 @@ describe('AgentOptions MCP wiring', () => {
           TEST_URL,
         );
         const prompt = (opts.agents as any)['diff-reviewer'].prompt as string;
+        // v2.8.0: getDiffReviewerOptions still gates on `role === 'pr_reviewer'`
+        // for the nudge; we DON'T extend that gate here because Lane-1's
+        // code_reviewer flow runs full-repo (no --diff-context), which routes
+        // through getCodeReviewerOptions instead. The diff-mode code_reviewer
+        // case stays nudge-free to avoid bloating PR-mode prompts with
+        // identical content.
         expect(prompt).not.toContain('**Backend-backed MCP tools:**');
       });
 
@@ -300,6 +306,185 @@ describe('AgentOptions MCP wiring', () => {
           `\`mcp__${CUSTOM_SERVER_NAME}__queryCodebaseGraph\``,
         );
       });
+    });
+  });
+
+  describe('getCodeReviewerOptions (code_reviewer, full-repo, v2.8.0 B5a)', () => {
+    it('attaches mcpServers under the default name and extends code-reviewer tools', () => {
+      const ao = new AgentOptions(baseConfDict, 'default');
+      const opts = ao.getCodeReviewerOptions(
+        'code_reviewer',
+        'json',
+        TEST_URL,
+      );
+      expect(opts.mcpServers).toEqual({
+        [DEFAULT_MCP_SERVER_NAME]: { type: 'http', url: TEST_URL },
+      });
+      const agent = (opts.agents as any)['code-reviewer'];
+      expect(agent.tools).toEqual([
+        'Read',
+        'Grep',
+        'Write',
+        ...expectedDefaultMcpToolNames,
+      ]);
+    });
+
+    it('honors the mcpServerName override', () => {
+      const ao = new AgentOptions(baseConfDict, 'default');
+      const opts = ao.getCodeReviewerOptions(
+        'code_reviewer',
+        'json',
+        TEST_URL,
+        CUSTOM_SERVER_NAME,
+      );
+      expect(opts.mcpServers).toEqual({
+        [CUSTOM_SERVER_NAME]: { type: 'http', url: TEST_URL },
+      });
+      const agent = (opts.agents as any)['code-reviewer'];
+      expect(agent.tools).toEqual([
+        'Read',
+        'Grep',
+        'Write',
+        ...expectedCustomMcpToolNames,
+      ]);
+    });
+
+    it('adds Authorization Bearer when mcpServerBearer is set', () => {
+      const ao = new AgentOptions(baseConfDict, 'default');
+      const opts = ao.getCodeReviewerOptions(
+        'code_reviewer',
+        'json',
+        TEST_URL,
+        undefined,
+        'opaque-per-scan-secret',
+      );
+      expect(opts.mcpServers).toEqual({
+        [DEFAULT_MCP_SERVER_NAME]: {
+          type: 'http',
+          url: TEST_URL,
+          headers: { Authorization: 'Bearer opaque-per-scan-secret' },
+        },
+      });
+    });
+
+    it('appends the system-prompt nudge so the agent discovers the MCP tools', () => {
+      const ao = new AgentOptions(baseConfDict, 'default');
+      const opts = ao.getCodeReviewerOptions(
+        'code_reviewer',
+        'json',
+        TEST_URL,
+      );
+      const prompt = (opts.agents as any)['code-reviewer'].prompt as string;
+      expect(prompt).toContain('**Backend-backed MCP tools:**');
+      expect(prompt).toContain(
+        '`mcp__appsec-internal__queryFindingsHistory`',
+      );
+      expect(prompt).toContain('`mcp__appsec-internal__queryImportGraph`');
+      expect(prompt).toContain(
+        '`mcp__appsec-internal__queryRuntimeEnrichment`',
+      );
+      expect(prompt).toContain('`mcp__appsec-internal__queryCodebaseGraph`');
+    });
+
+    it('does not append the nudge when mcpServerUrl is omitted', () => {
+      const ao = new AgentOptions(baseConfDict, 'default');
+      const opts = ao.getCodeReviewerOptions('code_reviewer', 'json');
+      const prompt = (opts.agents as any)['code-reviewer'].prompt as string;
+      expect(prompt).not.toContain('**Backend-backed MCP tools:**');
+    });
+
+    it('is a no-op when mcpServerUrl is omitted (v2.7.0 baseline)', () => {
+      const ao = new AgentOptions(baseConfDict, 'default');
+      const opts = ao.getCodeReviewerOptions('code_reviewer', 'json');
+      expect(opts.mcpServers).toBeUndefined();
+      const agent = (opts.agents as any)['code-reviewer'];
+      expect(agent.tools).toEqual(['Read', 'Grep', 'Write']);
+    });
+  });
+
+  describe('getFpAdversaryOptions (fp_adversary, v2.8.0 G10 REVERSED)', () => {
+    beforeAll(() => {
+      // fp_adversary needs to be in the conf dict for the role lookup.
+      (baseConfDict.default as any).fp_adversary = { options: {} };
+    });
+
+    it('attaches mcpServers under the default name and extends fp-adversary tools (G10 REVERSED — IS MCP-aware)', () => {
+      const ao = new AgentOptions(baseConfDict, 'default');
+      const opts = ao.getFpAdversaryOptions(
+        'fp_adversary',
+        null,
+        undefined,
+        TEST_URL,
+      );
+      expect(opts.mcpServers).toEqual({
+        [DEFAULT_MCP_SERVER_NAME]: { type: 'http', url: TEST_URL },
+      });
+      const agent = (opts.agents as any)['fp-adversary'];
+      expect(agent.tools).toEqual(['Read', 'Grep', ...expectedDefaultMcpToolNames]);
+    });
+
+    it('honors the mcpServerName override', () => {
+      const ao = new AgentOptions(baseConfDict, 'default');
+      const opts = ao.getFpAdversaryOptions(
+        'fp_adversary',
+        null,
+        undefined,
+        TEST_URL,
+        CUSTOM_SERVER_NAME,
+      );
+      expect(opts.mcpServers).toEqual({
+        [CUSTOM_SERVER_NAME]: { type: 'http', url: TEST_URL },
+      });
+      const agent = (opts.agents as any)['fp-adversary'];
+      expect(agent.tools).toEqual(['Read', 'Grep', ...expectedCustomMcpToolNames]);
+    });
+
+    it('exposes all four MCP_INTERNAL_TOOL_NAMES to the agent', () => {
+      const ao = new AgentOptions(baseConfDict, 'default');
+      const opts = ao.getFpAdversaryOptions(
+        'fp_adversary',
+        null,
+        undefined,
+        TEST_URL,
+      );
+      const agent = (opts.agents as any)['fp-adversary'];
+      for (const tool of expectedDefaultMcpToolNames) {
+        expect(agent.tools).toContain(tool);
+      }
+    });
+
+    it('appends the MCP nudge so the adversary uses queryImportGraph/queryCodebaseGraph at runtime', () => {
+      const ao = new AgentOptions(baseConfDict, 'default');
+      const opts = ao.getFpAdversaryOptions(
+        'fp_adversary',
+        null,
+        undefined,
+        TEST_URL,
+      );
+      const prompt = (opts.agents as any)['fp-adversary'].prompt as string;
+      expect(prompt).toContain('**Backend-backed MCP tools:**');
+      // queryFindingsHistory is primarily pre-injected by the parent app via
+      // similar_dismissed, but the agent still gets access for edge cases.
+      expect(prompt).toContain(
+        '`mcp__appsec-internal__queryFindingsHistory`',
+      );
+    });
+
+    it('is a no-op when mcpServerUrl is omitted (graceful degradation)', () => {
+      const ao = new AgentOptions(baseConfDict, 'default');
+      const opts = ao.getFpAdversaryOptions('fp_adversary');
+      expect(opts.mcpServers).toBeUndefined();
+      const agent = (opts.agents as any)['fp-adversary'];
+      expect(agent.tools).toEqual(['Read', 'Grep']);
+    });
+
+    it('uses the dedicated FP_ADVERSARY_REPORT_SCHEMA (not SECURITY_REPORT_SCHEMA)', () => {
+      const ao = new AgentOptions(baseConfDict, 'default');
+      const opts = ao.getFpAdversaryOptions('fp_adversary');
+      const schema = (opts.outputFormat as any)?.schema;
+      expect(schema).toBeDefined();
+      expect(schema.properties.fp_adversary_report).toBeDefined();
+      expect(schema.properties.security_review_report).toBeUndefined();
     });
   });
 
@@ -421,7 +606,7 @@ describe('AgentOptions MCP wiring', () => {
   });
 
   describe('cross-role invariants', () => {
-    it('uses the default server name across all four roles when no override is given', () => {
+    it('uses the default server name across all six MCP-aware roles when no override is given (v2.8.0: + code_reviewer + fp_adversary)', () => {
       const ao = new AgentOptions(baseConfDict, 'default');
       const builders = [
         ao.getDiffReviewerOptions(
@@ -433,6 +618,7 @@ describe('AgentOptions MCP wiring', () => {
           false,
           TEST_URL,
         ),
+        ao.getCodeReviewerOptions('code_reviewer', 'json', TEST_URL),
         ao.getCodeFixerOptions('code_fixer', null, TEST_URL),
         ao.getFindingValidatorOptions('finding_validator', null, TEST_URL),
         ao.getPrAdversaryOptions(
@@ -440,6 +626,12 @@ describe('AgentOptions MCP wiring', () => {
           null,
           undefined,
           false,
+          TEST_URL,
+        ),
+        ao.getFpAdversaryOptions(
+          'fp_adversary',
+          null,
+          undefined,
           TEST_URL,
         ),
       ];
@@ -453,7 +645,7 @@ describe('AgentOptions MCP wiring', () => {
       }
     });
 
-    it('propagates the mcpServerName override to all four roles consistently', () => {
+    it('propagates the mcpServerName override to all six MCP-aware roles consistently', () => {
       const ao = new AgentOptions(baseConfDict, 'default');
       const builders = [
         ao.getDiffReviewerOptions(
@@ -463,6 +655,12 @@ describe('AgentOptions MCP wiring', () => {
           undefined,
           false,
           false,
+          TEST_URL,
+          CUSTOM_SERVER_NAME,
+        ),
+        ao.getCodeReviewerOptions(
+          'code_reviewer',
+          'json',
           TEST_URL,
           CUSTOM_SERVER_NAME,
         ),
@@ -478,6 +676,13 @@ describe('AgentOptions MCP wiring', () => {
           null,
           undefined,
           false,
+          TEST_URL,
+          CUSTOM_SERVER_NAME,
+        ),
+        ao.getFpAdversaryOptions(
+          'fp_adversary',
+          null,
+          undefined,
           TEST_URL,
           CUSTOM_SERVER_NAME,
         ),
@@ -499,6 +704,8 @@ describe('AgentOptions MCP wiring', () => {
           false,
           TEST_URL,
         ).agents as any)['diff-reviewer'].tools as string[]),
+        ((ao.getCodeReviewerOptions('code_reviewer', 'json', TEST_URL)
+          .agents as any)['code-reviewer'].tools as string[]),
         ((ao.getCodeFixerOptions('code_fixer', null, TEST_URL)
           .agents as any)['code-fixer'].tools as string[]),
         ((ao.getFindingValidatorOptions('finding_validator', null, TEST_URL)
@@ -510,6 +717,12 @@ describe('AgentOptions MCP wiring', () => {
           false,
           TEST_URL,
         ).agents as any)['pr-adversary'].tools as string[]),
+        ((ao.getFpAdversaryOptions(
+          'fp_adversary',
+          null,
+          undefined,
+          TEST_URL,
+        ).agents as any)['fp-adversary'].tools as string[]),
       ];
       for (const list of tools) {
         for (const mcpTool of expectedDefaultMcpToolNames) {

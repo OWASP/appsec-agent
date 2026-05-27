@@ -259,11 +259,12 @@ if (args.mcp_server_url) {
     'pr_reviewer',
     'code_reviewer',
     'pr_adversary',
+    'fp_adversary',
     'finding_validator',
     'code_fixer',
   ]);
   if (!mcpAwareRoles.has(args.role)) {
-    console.warn('⚠️  Warning: --mcp-server-url is only consumed by pr_reviewer / code_reviewer / pr_adversary / finding_validator / code_fixer.');
+    console.warn('⚠️  Warning: --mcp-server-url is only consumed by pr_reviewer / code_reviewer / pr_adversary / fp_adversary / finding_validator / code_fixer.');
     console.warn(`   Current role: ${args.role}. The MCP server config will be ignored.\n`);
   }
 } else if (args.mcp_server_name) {

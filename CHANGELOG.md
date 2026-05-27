@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.8.0] - 2026-05-27
 
-### Added — `fp_adversary` role (sast-ai-app full-repo Phase 2.5)
+### Added — `fp_adversary` role (parent app full-repo Phase 2.5)
 
 Second adversarial pass, this time targeting **full-repository scheduled scans** (Lane 2) rather than PR diffs (Lane 1). Where `pr_adversary` re-runs `security_review_report` over the same PR-scoped findings to drop diff-only false positives, `fp_adversary` operates over a whole repository's first-pass `code_reviewer` findings and emits a per-finding `(fingerprint, verdict, confidence, rationale, cost_usd_estimate?)` decision shape so the parent app can route low-confidence dismissals to a "pre-dismissed" UI state and auto-dismiss only above an operator-configured threshold.
 
@@ -28,7 +28,7 @@ Phase 2.5 also closes a latent bug in `getCodeReviewerOptions` (B5a fix): the SD
 
 #### Fix: `getCodeReviewerOptions` now wires MCP (B5a)
 
-`getCodeReviewerOptions` accepted no MCP parameters even though the sast-ai-app full-repo scan path was already passing `--mcp-server-name` argv. The agent was registering the role but never told the SDK about the parent-app per-scan MCP server, so `code_reviewer` runs on Lane 2 ran without MCP tool access. The fix mirrors `getDiffReviewerOptions`:
+`getCodeReviewerOptions` accepted no MCP parameters even though the parent app full-repo scan path was already passing `--mcp-server-name` argv. The agent was registering the role but never told the SDK about the parent-app per-scan MCP server, so `code_reviewer` runs on Lane 2 ran without MCP tool access. The fix mirrors `getDiffReviewerOptions`:
 
 - `getCodeReviewerOptions(role, outputFormat, mcpServerUrl?, mcpServerName?, mcpServerBearer?)` calls `attachMcpServerToOptions` and appends `buildPrReviewerMcpNudgeSystemPromptSuffix` to the system prompt when MCP is configured.
 - `codeReviewerWithOptions` threads `args.mcp_server_url` / `args.mcp_server_name` / `args.mcp_server_bearer` through to the role builder.
@@ -75,7 +75,7 @@ from a per-scan working directory. The bearer is the same opaque per-scan secret
 
 ## [2.6.0] - 2026-05-12
 
-### Added — `--codebase-graph-context <file>` for `pr_reviewer` (sast-ai-app plan §8.18 Phase 2)
+### Added — `--codebase-graph-context <file>` for `pr_reviewer` (parent app plan §8.18 Phase 2)
 
 Third structural-context family for the `pr_reviewer` diff-mode prompt, alongside `--import-graph-context` (v2.2.0, file-level inbound import counts via SCIP) and `--runtime-enrichment-context` (v2.3.0, per-file production-incident counts). Distinct from those: this context is **symbol-level** (cbm tree-sitter graph; 155 languages) and surfaces **callers + callees + downstream blast-radius** per changed file, sourced from the parent app's [`codebase-memory-mcp`](https://github.com/DeusData/codebase-memory-mcp) (cbm) artifact via the `search_graph` + `trace_path(direction=both, mode=calls)` MCP tools.
 
@@ -114,7 +114,7 @@ from a per-PR working directory. **Input file** shape (parent writes it; matches
   "default_branch_sha": "cafebabedeadbeefcafebabedeadbeef00000003",
   "parsed_at": "2026-05-12T20:00:00Z",
   "coverage": "full",
-  "metadata": { "project_name": "sast-ai-app" },
+  "metadata": { "project_name": "parent-app" },
   "files": [
     {
       "file": "backend/src/services/payments.ts",
@@ -222,7 +222,7 @@ Pure addition: no existing code path changes behavior. All existing roles, tests
 
 ## [2.4.5] - 2026-04-29
 
-### Added — MCP HTTP Bearer (sast-ai-app v6.1.x)
+### Added — MCP HTTP Bearer (parent app v6.1.x)
 
 - **`attachMcpServerToOptions` / role builders** — Optional **`mcpServerBearer`** on `getDiffReviewerOptions`, `getCodeFixerOptions`, `getFindingValidatorOptions`, `getPrAdversaryOptions`. When set, the `http` MCP entry includes **`headers: { Authorization: 'Bearer …' }`** (Claude Agent SDK `McpHttpServerConfig`).
 - **`AgentArgs`** — **`mcp_server_bearer?: string`**, populated from env in **`bin/agent-run.ts`**.
@@ -247,8 +247,8 @@ Pure addition: no existing code path changes behavior. All existing roles, tests
 ## [2.4.2] - 2026-04-28
 
 ### Changed
-- **MCP server identifier is no longer hardcoded to a specific parent app.** The default value of the constant exported from `src/agent_options.ts` is now the generic `appsec-internal` (was `sast-ai-app-internal` in v2.4.0–v2.4.1). The matching `buildMcpInternalToolNames()` helper now produces `mcp__appsec-internal__queryFindingsHistory` etc. by default, so `appsec-agent` ships as a parent-app-agnostic package out of the box. Counterpart to the v2.4.1 documentation cleanup, which only touched comments / README and missed the runtime constant — closes the genericization properly.
-- **Genericized JSDoc on the runtime path.** Removed `sast-ai-app plan §8.17 / v6.0.0` references from `src/agent_options.ts`, `src/agent_actions.ts`, `bin/agent-run.ts`, the `pr_reviewer_mcp.e2e.test.ts` header, and the `agent-run.test.ts` describe block. Comments now consistently say "the parent app's per-scan MCP server" without naming a specific consumer.
+- **MCP server identifier is no longer hardcoded to a specific parent app.** The default value of the constant exported from `src/agent_options.ts` is now the generic `appsec-internal` (was `parent-app-internal` in v2.4.0–v2.4.1). The matching `buildMcpInternalToolNames()` helper now produces `mcp__appsec-internal__queryFindingsHistory` etc. by default, so `appsec-agent` ships as a parent-app-agnostic package out of the box. Counterpart to the v2.4.1 documentation cleanup, which only touched comments / README and missed the runtime constant — closes the genericization properly.
+- **Genericized JSDoc on the runtime path.** Removed `parent app plan §8.17 / v6.0.0` references from `src/agent_options.ts`, `src/agent_actions.ts`, `bin/agent-run.ts`, the `pr_reviewer_mcp.e2e.test.ts` header, and the `agent-run.test.ts` describe block. Comments now consistently say "the parent app's per-scan MCP server" without naming a specific consumer.
 
 ### Added
 - **`--mcp-server-name <name>` CLI flag (and `mcpServerName` parameter on the four role builders + `mcp_server_name?: string` on `AgentArgs`).** Override the MCP server identifier when registering `--mcp-server-url` with the SDK. Threads through to `Options.mcpServers[<name>]` and the SDK-namespaced tool names (`mcp__<name>__queryFindingsHistory` etc.) on each subagent's whitelist. Defaults to `DEFAULT_MCP_SERVER_NAME` (`appsec-internal`) when omitted; setting `--mcp-server-name` without `--mcp-server-url` warns and is otherwise a no-op.
@@ -256,12 +256,12 @@ Pure addition: no existing code path changes behavior. All existing roles, tests
 - **Tests.** Rewrote `src/__tests__/agent_options.mcp.test.ts` to assert (a) the new generic default flows through all four role builders; (b) the `mcpServerName` override propagates to both the `mcpServers` map key and the `mcp__<name>__*` tool prefix consistently; (c) the empty-URL fail-shape is preserved even when an override name is set. Added two new cases under `--mcp-server-name flag (v2.4.2)` in `src/__tests__/agent-run.test.ts` covering CLI plumbing into `args.mcp_server_name`.
 
 ### Migration (parent apps)
-- **If you depend on the `mcp__sast-ai-app-internal__*` tool-name prefix** (e.g. you have prompt nudges, a counter family, or a server-side `MCP_SERVER_NAME` constant pinned to that string), pass `--mcp-server-name sast-ai-app-internal` when invoking `agent-run`. The agent's tool surface, prompt-nudge target, and SDK registration key all stay byte-for-byte stable.
+- **If you depend on the `mcp__parent-app-internal__*` tool-name prefix** (e.g. you have prompt nudges, a counter family, or a server-side `MCP_SERVER_NAME` constant pinned to that string), pass `--mcp-server-name parent-app-internal` when invoking `agent-run`. The agent's tool surface, prompt-nudge target, and SDK registration key all stay byte-for-byte stable.
 - **If you don't care about the literal name** (the common case — the tool list is dynamic, you're only checking `result=ok|failed` on a counter that doesn't read the tool name as a label), no change is required. The flag's default identifier is generic and the rest of the wiring is unchanged.
 - **No breaking change to the CLI surface.** `--mcp-server-url` keeps the v2.4.0 semantics. `--mcp-server-name` is purely additive.
 
 ### Why a hotfix
-- v2.4.0 published with a parent-app-specific server name baked into the runtime path despite the package being intended as a shared agent. v2.4.1 cleaned up the docs but left the runtime constant in place — every consumer of `appsec-agent` was registering its MCP server under `sast-ai-app-internal` regardless of which parent app it was running under, polluting prompt nudges and any tool-name-keyed telemetry. v2.4.2 closes that gap without altering existing consumers (parent apps that *want* the old name pass it explicitly, parent apps that don't get a clean generic default).
+- v2.4.0 published with a parent-app-specific server name baked into the runtime path despite the package being intended as a shared agent. v2.4.1 cleaned up the docs but left the runtime constant in place — every consumer of `appsec-agent` was registering its MCP server under `parent-app-internal` regardless of which parent app it was running under, polluting prompt nudges and any tool-name-keyed telemetry. v2.4.2 closes that gap without altering existing consumers (parent apps that *want* the old name pass it explicitly, parent apps that don't get a clean generic default).
 
 ## [2.4.0] - Unreleased
 

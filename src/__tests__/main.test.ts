@@ -888,7 +888,7 @@ describe('main', () => {
     });
   });
 
-  describe('fp_adversary (v2.8.0 / sast-ai-app full-repo Phase 2.5)', () => {
+  describe('fp_adversary (v2.8.0 / parent app full-repo Phase 2.5)', () => {
     let fpAdvPath: string;
     const sample = {
       findings: [

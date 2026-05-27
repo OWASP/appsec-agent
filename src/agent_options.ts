@@ -769,7 +769,7 @@ You have access to Read, Grep, and Write tools:
   }
 
   /**
-   * fp_adversary (v2.8.0 / sast-ai-app full-repo Phase 2.5): second pass that
+   * fp_adversary (v2.8.0 / parent app full-repo Phase 2.5): second pass that
    * filters first-pass `code_reviewer` findings on full-repo scans by emitting
    * per-finding `(fingerprint, verdict, confidence, rationale)` verdicts. Output
    * is constrained to FP_ADVERSARY_REPORT_SCHEMA so the verdict contract stays

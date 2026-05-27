@@ -324,7 +324,7 @@ $ npx agent-run -r fp_adversary --adversarial-context fp_in.json -s ./repo -f js
   "similar_dismissed": [
     { "fingerprint": "fp-old", "file": "src/db.ts", "cwe": "CWE-89", "dismissal_reason": "Prisma parameterized query" }
   ],
-  "metadata": { "project_name": "sast-ai-app" }
+  "metadata": { "project_name": "parent-app" }
 }
 ```
 

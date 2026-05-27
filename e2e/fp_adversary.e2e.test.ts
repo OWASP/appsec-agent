@@ -1,8 +1,8 @@
 /**
  * E2E (integration): `fp_adversary` path through `main()` with temp
  * fp-adversary JSON, no live LLM — AgentActions is mocked. Validates
- * file → parse → prompt → output wiring for parent-app v2.8.0 / sast-ai-app
- * full-repo Phase 2.5.
+ * file → parse → prompt → output wiring for parent-app v2.8.0 full-repo
+ * Phase 2.5.
  *
  * Parity with `pr_adversary.e2e.test.ts` so the two adversary roles stay
  * symmetric (same dispatch, same empty-input fast-path, same output file

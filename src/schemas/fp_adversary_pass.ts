@@ -1,7 +1,7 @@
 /**
  * fp_adversary second-pass input/output (v2.8.0) — full-repo review false-positive filter.
  *
- * Used by sast-ai-app Lane-2 (full-repo scheduled scans) Phase 2.5. Parent app
+ * Used by the parent app Lane-2 (full-repo scheduled scans) Phase 2.5. Parent app
  * passes a JSON file containing candidate findings from the first-pass
  * `code_reviewer` plus structured project posture inputs sourced from the
  * `projects.*_context` columns and an optional `similar_dismissed` array
@@ -16,7 +16,7 @@
  * back to its `repo_finding_ledger` rows without depending on string IDs.
  *
  * Decision rationale: see [docs/FULL_REPO_REVIEW_QUALITY_PLAN.md] §6 and the
- * sibling sast-ai-app plan (Phase 2.5, G1 — Option (a) "separate schema").
+ * sibling parent app plan (Phase 2.5, G1 — Option (a) "separate schema").
  */
 
 export interface FpAdversaryPassFinding {

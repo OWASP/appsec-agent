@@ -711,7 +711,7 @@ describe('AgentActions', () => {
     });
   });
 
-  describe('fpAdversaryWithOptions (v2.8.0 / sast-ai-app full-repo Phase 2.5)', () => {
+  describe('fpAdversaryWithOptions (v2.8.0 / parent app full-repo Phase 2.5)', () => {
     const fpArgs: AgentArgs = {
       role: 'fp_adversary',
       environment: 'default',

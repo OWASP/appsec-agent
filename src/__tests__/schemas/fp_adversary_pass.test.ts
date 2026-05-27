@@ -247,10 +247,10 @@ describe('fp_adversary_pass schema (v2.8.0)', () => {
     it('includes project_name when metadata is set', () => {
       const ctx = parseFpAdversaryPassContext({
         findings: baseCtx.findings,
-        metadata: { project_name: 'sast-ai-app' },
+        metadata: { project_name: 'parent-app' },
       });
       const p = buildFpAdversaryUserPrompt(ctx);
-      expect(p).toContain('sast-ai-app');
+      expect(p).toContain('parent-app');
     });
 
     it('serializes findings as JSON inside a fenced code block', () => {

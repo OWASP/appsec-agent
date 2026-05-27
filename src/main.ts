@@ -1173,7 +1173,7 @@ Use sequential IDs: node-001/flow-001/tb-001 for DFD elements, THREAT-001 for th
     }
 
   } else if (args.role === 'fp_adversary') {
-    // v2.8.0 / sast-ai-app full-repo Phase 2.5: false-positive filter pass.
+    // v2.8.0 / parent app full-repo Phase 2.5: false-positive filter pass.
     // Same `--adversarial-context` CLI flag as pr_adversary but parses a
     // distinct input schema (fingerprint-keyed, structured posture inputs,
     // similar_dismissed precedent) and emits the dedicated

@@ -57,7 +57,7 @@ default: &default
       verbose: True
   fp_adversary:
     options:
-      # v2.8.0 / sast-ai-app full-repo Phase 2.5: full-tree adversarial false-positive
+      # v2.8.0 / parent app full-repo Phase 2.5: full-tree adversarial false-positive
       # filter that emits per-finding (fingerprint, verdict, confidence, rationale)
       # verdicts so the parent app can route low-confidence dismissals to a
       # pre_dismissed UI state and auto-dismiss only above the operator-configured

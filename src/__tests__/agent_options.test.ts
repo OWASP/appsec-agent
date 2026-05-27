@@ -841,7 +841,7 @@ describe('AgentOptions', () => {
     });
   });
 
-  describe('getFpAdversaryOptions (v2.8.0 / sast-ai-app full-repo Phase 2.5)', () => {
+  describe('getFpAdversaryOptions (v2.8.0 / parent app full-repo Phase 2.5)', () => {
     it('should return Read/Grep and the dedicated fp_adversary_report JSON schema', () => {
       const conf: ConfigDict = {
         default: {

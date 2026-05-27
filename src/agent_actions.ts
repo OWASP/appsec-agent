@@ -754,7 +754,7 @@ export class AgentActions {
   }
 
   /**
-   * fp_adversary (v2.8.0 / sast-ai-app full-repo Phase 2.5): batch false-positive
+   * fp_adversary (v2.8.0 / parent app full-repo Phase 2.5): batch false-positive
    * filter over first-pass code_reviewer findings. Emits structured JSON
    * matching `FP_ADVERSARY_REPORT_SCHEMA` with per-finding
    * `(fingerprint, verdict, confidence, rationale, cost_usd_estimate?)`.

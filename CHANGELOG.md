@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-06-01
+
+### Security
+
+- **Bump `@anthropic-ai/claude-agent-sdk` to `0.2.141`** (from `0.2.112`) to address [GHSA-p7fg-763f-g4gf](https://github.com/advisories/GHSA-p7fg-763f-g4gf) (insecure default file permissions in the Claude SDK local filesystem memory tool). Pin remains exact per project convention.
+
 ## [3.0.0] - 2026-06-01
 
 Major release: pluggable model providers (`claude` default, `codex` opt-in) and provider-neutral `RoleSpec` for all agent roles. See [`docs/model-provider-abstraction-plan.md`](docs/model-provider-abstraction-plan.md).

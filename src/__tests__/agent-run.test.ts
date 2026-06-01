@@ -49,8 +49,6 @@ describe('agent-run CLI', () => {
     // Clear environment variables
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.ANTHROPIC_BASE_URL;
-    delete process.env.FAILOVER_ENABLED;
-    delete process.env.OPENAI_API_KEY;
   });
 
   afterEach(() => {
@@ -207,86 +205,17 @@ describe('agent-run CLI', () => {
     });
   });
 
-  describe('Failover CLI options', () => {
-    it('should set FAILOVER_ENABLED when --failover is provided', () => {
-      const { Command } = require('commander');
-      const mockCommand = Command();
-
-      mockCommand.opts.mockReturnValue({
-        failover: true,
-        role: 'simple_query_agent',
-        environment: 'development'
-      });
-
-      const options = mockCommand.opts();
-      if (options.failover !== undefined) {
-        process.env.FAILOVER_ENABLED = options.failover ? 'true' : 'false';
-      }
-
-      expect(process.env.FAILOVER_ENABLED).toBe('true');
+  describe('Provider CLI option', () => {
+    it('should set AGENT_PROVIDER when --provider is provided', () => {
+      const providerId = 'codex';
+      process.env.AGENT_PROVIDER = providerId;
+      expect(process.env.AGENT_PROVIDER).toBe('codex');
     });
 
-    it('should set FAILOVER_ENABLED to false when failover is false', () => {
-      const { Command } = require('commander');
-      const mockCommand = Command();
-
-      mockCommand.opts.mockReturnValue({
-        failover: false,
-        role: 'simple_query_agent',
-        environment: 'development'
-      });
-
-      const options = mockCommand.opts();
-      if (options.failover !== undefined) {
-        process.env.FAILOVER_ENABLED = options.failover ? 'true' : 'false';
-      }
-
-      expect(process.env.FAILOVER_ENABLED).toBe('false');
-    });
-
-    it('should set OPENAI_API_KEY when --openai-api-key is provided', () => {
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
-      const { Command } = require('commander');
-      const mockCommand = Command();
-
-      mockCommand.opts.mockReturnValue({
-        openaiApiKey: 'sk-test-openai-key',
-        role: 'simple_query_agent',
-        environment: 'development'
-      });
-
-      const options = mockCommand.opts();
-      if (options.openaiApiKey !== undefined) {
-        process.env.OPENAI_API_KEY = options.openaiApiKey;
-      }
-
-      expect(process.env.OPENAI_API_KEY).toBe('sk-test-openai-key');
-      consoleSpy.mockRestore();
-    });
-
-    it('should set both FAILOVER_ENABLED and OPENAI_API_KEY when both options are provided', () => {
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
-      const { Command } = require('commander');
-      const mockCommand = Command();
-
-      mockCommand.opts.mockReturnValue({
-        failover: true,
-        openaiApiKey: 'sk-failover-key',
-        role: 'simple_query_agent',
-        environment: 'development'
-      });
-
-      const options = mockCommand.opts();
-      if (options.failover !== undefined) {
-        process.env.FAILOVER_ENABLED = options.failover ? 'true' : 'false';
-      }
-      if (options.openaiApiKey !== undefined) {
-        process.env.OPENAI_API_KEY = options.openaiApiKey;
-      }
-
-      expect(process.env.FAILOVER_ENABLED).toBe('true');
-      expect(process.env.OPENAI_API_KEY).toBe('sk-failover-key');
-      consoleSpy.mockRestore();
+    it('should reject invalid provider values', () => {
+      const providerId = 'invalid' as string;
+      const isValid = providerId === 'claude' || providerId === 'codex';
+      expect(isValid).toBe(false);
     });
   });
 

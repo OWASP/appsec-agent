@@ -7,7 +7,7 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import { AgentActions, AgentArgs } from './agent_actions';
-import { copyProjectSrcDir, validateOutputFilePath, validateDirectoryPath, validateInputFilePath, sanitizePathForError, getExtensionForFormat, sampleDirectoryForPrompt } from './utils';
+import { copyProjectSrcDir, validateOutputFilePath, validateDirectoryPath, validateInputFilePath, sanitizePathForError, getExtensionForFormat } from './utils';
 import { DiffContext, formatDiffContextForPrompt, validateDiffContext } from './diff_context';
 import { splitIntoBatches, ChunkingOptions } from './diff_chunking';
 import { mergeBatchReports } from './diff_report_merge';
@@ -968,12 +968,6 @@ Please consider this context when analyzing the code. Focus on:
       let userPrompt = `Review the code in the ${srcLocation}.${contextSection}
 
 Provide a comprehensive security review report identifying potential security issues found in the code. ${outputInstruction}`;
-      if (process.env.FAILOVER_ENABLED === 'true' && tmpSrcDir) {
-        const codeSample = sampleDirectoryForPrompt(tmpSrcDir);
-        if (codeSample) {
-          userPrompt += `\n\n## Code to review (included for fallback mode)\n\nThe following is a sampling of the source code. Analyze it for security issues and produce your report.\n\n${codeSample}`;
-        }
-      }
       const structuredResult = await agentActions.codeReviewerWithOptions(userPrompt);
       if (structuredResult) {
         fs.writeFileSync(outputFile, structuredResult, 'utf-8');
@@ -1023,7 +1017,7 @@ Use sequential IDs: node-001/flow-001/tb-001 for DFD elements, THREAT-001 for th
       userPrompt = `Review the code in ${srcLocation}.${contextSection} ${basePrompt}`;
     }
     
-    const structuredResult = await agentActions.threatModelerAgentWithOptions(userPrompt);
+    const structuredResult = await agentActions.threatModelerAgentWithOptions(userPrompt, tmpSrcDir);
     if (structuredResult) {
       fs.writeFileSync(outputFile, structuredResult, 'utf-8');
       console.log(`Report written to ${outputFile}`);

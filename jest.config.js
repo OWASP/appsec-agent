@@ -16,6 +16,9 @@ module.exports = {
   transformIgnorePatterns: [
     'node_modules/(?!@anthropic-ai)'
   ],
+  moduleNameMapper: {
+    '^@openai/codex-sdk$': '<rootDir>/src/__tests__/mocks/codex_sdk.ts',
+  },
   extensionsToTreatAsEsm: ['.ts'],
   transform: {
     '^.+\\.ts$': ['ts-jest', {

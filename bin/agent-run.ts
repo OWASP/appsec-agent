@@ -62,9 +62,11 @@ program
   .option('--diff-max-files <n>', 'Max files to include in PR review; rest skipped. Overrides config.')
   .option('--diff-exclude <pattern>', 'Exclude path pattern (repeatable). Overrides config.', (v: string, acc: string[]) => { acc.push(v); return acc; }, [])
   .option('-m, --model <model>', 'Claude model: family alias (sonnet, opus, haiku), SDK model ID (claude-sonnet-4-6), or version prefix (sonnet-4-6) - default to "opus"', 'opus')
-  .option('-F, --failover', 'Enable failover to OpenAI when Anthropic fails (optional feature, off by default). Overrides FAILOVER_ENABLED env.')
-  .option('-K, --openai-api-key <key>', 'OpenAI API key for failover (overrides OPENAI_API_KEY env). Only used when failover is enabled.')
-  .option('-U, --openai-base-url <url>', 'OpenAI API base URL for failover (overrides OPENAI_BASE_URL env). Only used when failover is enabled.')
+  .option(
+    '--provider <provider>',
+    'Model provider: claude (default) or codex (opt-in; all roles via RoleSpec)',
+    'claude',
+  )
   .option('--max-turns <n>', 'Max agent turns (tool-use iterations). Overrides per-role default.')
   .option('--no-tools', 'Disable Read/Grep tools for single-turn analysis (use with --diff-context for fastest mode)')
   .option(
@@ -122,27 +124,27 @@ if (options.anthropicBaseUrl) {
   process.env.ANTHROPIC_BASE_URL = options.anthropicBaseUrl;
 }
 
-// Failover: CLI overrides env. Set env so adapter reads them.
-if (options.failover !== undefined) {
-  process.env.FAILOVER_ENABLED = options.failover ? 'true' : 'false';
+const providerId = (options.provider ?? 'claude').toLowerCase().trim();
+if (providerId !== 'claude' && providerId !== 'codex') {
+  console.error(`Error: Invalid provider "${options.provider}". Valid values: claude, codex`);
+  process.exit(1);
 }
-if (options.openaiApiKey !== undefined) {
-  console.warn('⚠️  SECURITY WARNING: OpenAI API key provided via command line argument.');
-  console.warn('   For better security, use the OPENAI_API_KEY environment variable instead.\n');
-  process.env.OPENAI_API_KEY = options.openaiApiKey;
-}
-if (options.openaiBaseUrl !== undefined) {
-  process.env.OPENAI_BASE_URL = options.openaiBaseUrl;
-}
+process.env.AGENT_PROVIDER = providerId;
 
-// Validate model option: accept family aliases, SDK model IDs, or version prefixes
+// Validate model option: provider-aware (Claude aliases/IDs vs Codex/OpenAI ids)
 const FAMILY_ALIASES = ['sonnet', 'opus', 'haiku'];
 const model = options.model.toLowerCase().trim();
-const isValidModel = FAMILY_ALIASES.includes(model)
+const isClaudeModel =
+  FAMILY_ALIASES.includes(model)
   || model.startsWith('claude-')
   || FAMILY_ALIASES.some(f => model.startsWith(`${f}-`));
+const isCodexModel = model.startsWith('gpt-') || model.startsWith('o');
+const isValidModel = providerId === 'codex' ? (isCodexModel || isClaudeModel) : isClaudeModel;
 if (!isValidModel) {
-  console.error(`Error: Invalid model "${options.model}". Valid formats: family alias (sonnet, opus, haiku), SDK model ID (claude-sonnet-4-6), or version prefix (sonnet-4-6)`);
+  const hint = providerId === 'codex'
+    ? 'Codex/OpenAI id (gpt-*, o*) or Claude alias (sonnet, opus, haiku)'
+    : 'family alias (sonnet, opus, haiku), SDK model ID (claude-sonnet-4-6), or version prefix (sonnet-4-6)';
+  console.error(`Error: Invalid model "${options.model}". Valid formats for ${providerId}: ${hint}`);
   process.exit(1);
 }
 

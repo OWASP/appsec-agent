@@ -275,7 +275,7 @@ export function isFile(fileName: string): boolean {
   }
 }
 
-/** Dir names to skip when sampling for prompt (failover code review). */
+/** Dir names to skip when sampling source for prompt context. */
 const SAMPLE_SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'coverage', '__pycache__', '.venv', 'venv']);
 
 /** File extensions to include when sampling (others skipped to keep prompt small). */

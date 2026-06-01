@@ -6,7 +6,7 @@
 
 import { SDKAssistantMessage, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
 import { AgentOptions } from './agent_options';
-import { llmQuery } from './llm_query';
+import { resolveProvider } from './providers/resolve_provider';
 import { ConfigDict } from './utils';
 import { BlinkingCursor } from './blinking_cursor';
 
@@ -100,7 +100,7 @@ export class AgentActions {
    */
   async simpleQueryClaudeWithOptions(yourPrompt: string, srcDir?: string | null): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
-    const options = agentOptions.getSimpleQueryAgentOptions(this.args.role, srcDir);
+    const roleSpec = agentOptions.getSimpleQueryAgentRoleSpec(this.args.role, srcDir);
     
     // Build prompt with conversation history and source directory context
     const sourceDirContext = srcDir 
@@ -142,7 +142,7 @@ export class AgentActions {
     try {
       cursor.start();
 
-      for await (const msg of llmQuery({ prompt: fullPrompt, options })) {
+      for await (const msg of resolveProvider().run({ prompt: fullPrompt, roleSpec })) {
         if (this.args.verbose) {
           console.error(`[DEBUG] Message type: ${(msg as any).type}`);
         }
@@ -200,7 +200,7 @@ export class AgentActions {
               console.error(`Error subtype: ${finalResult.subtype}`);
             }
             if (finalResult.subtype === 'error_max_turns') {
-              console.error(`\nNote: The conversation stopped because max_turns (${options.maxTurns || 1}) was reached.`);
+              console.error(`\nNote: The conversation stopped because max_turns (${roleSpec.maxTurns || 1}) was reached.`);
               console.error(`To allow the agent to use tools and continue, increase max_turns in the configuration or use the code_reviewer role.`);
             }
           }
@@ -255,7 +255,7 @@ export class AgentActions {
    */
   async codeReviewerWithOptions(userPrompt: string): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
-    const options = agentOptions.getCodeReviewerOptions(
+    const roleSpec = agentOptions.getCodeReviewerRoleSpec(
       this.args.role,
       this.args.output_format,
       this.args.mcp_server_url,
@@ -274,7 +274,7 @@ export class AgentActions {
       cursor.start();
 
       try {
-        for await (const message of llmQuery({ prompt: userPrompt, options })) {
+        for await (const message of resolveProvider().run({ prompt: userPrompt, roleSpec })) {
           if (message.type === 'stream_event') {
             // Stop cursor when we receive stream events
             if (cursor) cursor.stop();
@@ -375,18 +375,24 @@ export class AgentActions {
   /**
    * Threat modeler agent with options
    */
-  async threatModelerAgentWithOptions(userPrompt: string): Promise<string> {
+  async threatModelerAgentWithOptions(userPrompt: string, srcDir?: string | null): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
-    const options = agentOptions.getThreatModelerOptions(this.args.role, this.args.output_format);
+    const roleSpec = agentOptions.getThreatModelerRoleSpec(
+      this.args.role,
+      this.args.output_format,
+      srcDir ?? process.cwd(),
+    );
 
     let cursor: BlinkingCursor | null = null;
     let structuredJson = '';
+    let tokensIn = 0;
+    let tokensOut = 0;
 
     try {
       cursor = new BlinkingCursor();
       cursor.start();
       try {
-        for await (const message of llmQuery({ prompt: userPrompt, options })) {
+        for await (const message of resolveProvider().run({ prompt: userPrompt, roleSpec })) {
           if (message.type === 'stream_event') {
             if (cursor) cursor.stop();
             const streamMsg = message as any;
@@ -409,12 +415,22 @@ export class AgentActions {
           } else if (message.type === 'result') {
             if (cursor) cursor.stop();
             const resultMsg = message as SDKResultMessage;
-            if ((resultMsg as any).structured_output) {
-              structuredJson = JSON.stringify((resultMsg as any).structured_output, null, 2);
+            const resultAny = resultMsg as any;
+            if (resultAny.structured_output) {
+              structuredJson = JSON.stringify(resultAny.structured_output, null, 2);
+            }
+            const usage = (resultAny.usage ?? resultAny.message?.usage) as
+              | { input_tokens?: number; output_tokens?: number }
+              | undefined;
+            if (usage) {
+              if (typeof usage.input_tokens === 'number') tokensIn += usage.input_tokens;
+              if (typeof usage.output_tokens === 'number') tokensOut += usage.output_tokens;
             }
             if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
               console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);
             }
+            if (tokensIn > 0) console.log(`Tokens input: ${tokensIn}`);
+            if (tokensOut > 0) console.log(`Tokens output: ${tokensOut}`);
           }
         }
       } finally {
@@ -441,7 +457,7 @@ export class AgentActions {
    */
   async codeFixerWithOptions(userPrompt: string, srcDir?: string | null): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
-    const options = agentOptions.getCodeFixerOptions(
+    const roleSpec = agentOptions.getCodeFixerRoleSpec(
       this.args.role,
       srcDir,
       this.args.mcp_server_url,
@@ -456,7 +472,7 @@ export class AgentActions {
       cursor = new BlinkingCursor();
       cursor.start();
       try {
-        for await (const message of llmQuery({ prompt: userPrompt, options })) {
+        for await (const message of resolveProvider().run({ prompt: userPrompt, roleSpec })) {
           if (message.type === 'stream_event') {
             if (cursor) cursor.stop();
           } else if (message.type === 'assistant') {
@@ -504,7 +520,7 @@ export class AgentActions {
    */
   async qaVerifierWithOptions(userPrompt: string, srcDir?: string | null): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
-    const options = agentOptions.getQaVerifierOptions(this.args.role, srcDir);
+    const roleSpec = agentOptions.getQaVerifierRoleSpec(this.args.role, srcDir);
 
     let cursor: BlinkingCursor | null = null;
     let structuredJson = '';
@@ -513,7 +529,7 @@ export class AgentActions {
       cursor = new BlinkingCursor();
       cursor.start();
       try {
-        for await (const message of llmQuery({ prompt: userPrompt, options })) {
+        for await (const message of resolveProvider().run({ prompt: userPrompt, roleSpec })) {
           if (message.type === 'stream_event') {
             if (cursor) cursor.stop();
           } else if (message.type === 'assistant') {
@@ -561,7 +577,7 @@ export class AgentActions {
    */
   async contextExtractorWithOptions(userPrompt: string): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
-    const options = agentOptions.getContextExtractorOptions(this.args.role);
+    const roleSpec = agentOptions.getContextExtractorRoleSpec(this.args.role);
 
     let cursor: BlinkingCursor | null = null;
     let structuredJson = '';
@@ -570,7 +586,7 @@ export class AgentActions {
       cursor = new BlinkingCursor();
       cursor.start();
       try {
-        for await (const message of llmQuery({ prompt: userPrompt, options })) {
+        for await (const message of resolveProvider().run({ prompt: userPrompt, roleSpec })) {
           if (message.type === 'stream_event') {
             if (cursor) cursor.stop();
           } else if (message.type === 'assistant') {
@@ -618,7 +634,7 @@ export class AgentActions {
    */
   async findingValidatorWithOptions(userPrompt: string, srcDir?: string | null): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
-    const options = agentOptions.getFindingValidatorOptions(
+    const roleSpec = agentOptions.getFindingValidatorRoleSpec(
       this.args.role,
       srcDir,
       this.args.mcp_server_url,
@@ -633,7 +649,7 @@ export class AgentActions {
       cursor = new BlinkingCursor();
       cursor.start();
       try {
-        for await (const message of llmQuery({ prompt: userPrompt, options })) {
+        for await (const message of resolveProvider().run({ prompt: userPrompt, roleSpec })) {
           if (message.type === 'stream_event') {
             if (cursor) cursor.stop();
           } else if (message.type === 'assistant') {
@@ -685,7 +701,7 @@ export class AgentActions {
    */
   async learnedGuidanceSynthesizerWithOptions(userPrompt: string): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
-    const options = agentOptions.getLearnedGuidanceSynthesizerOptions(this.args.role);
+    const roleSpec = agentOptions.getLearnedGuidanceSynthesizerRoleSpec(this.args.role);
 
     let cursor: BlinkingCursor | null = null;
     let structuredJson = '';
@@ -696,7 +712,7 @@ export class AgentActions {
       cursor = new BlinkingCursor();
       cursor.start();
       try {
-        for await (const message of llmQuery({ prompt: userPrompt, options })) {
+        for await (const message of resolveProvider().run({ prompt: userPrompt, roleSpec })) {
           if (message.type === 'stream_event') {
             if (cursor) cursor.stop();
           } else if (message.type === 'assistant') {
@@ -767,7 +783,7 @@ export class AgentActions {
    */
   async fpAdversaryWithOptions(userPrompt: string, srcDir?: string | null): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
-    const options = agentOptions.getFpAdversaryOptions(
+    const roleSpec = agentOptions.getFpAdversaryRoleSpec(
       this.args.role,
       srcDir,
       this.args.max_turns,
@@ -784,7 +800,7 @@ export class AgentActions {
       cursor = new BlinkingCursor();
       cursor.start();
       try {
-        for await (const message of llmQuery({ prompt: userPrompt, options })) {
+        for await (const message of resolveProvider().run({ prompt: userPrompt, roleSpec })) {
           if (message.type === 'stream_event') {
             if (cursor) cursor.stop();
           } else if (message.type === 'assistant') {
@@ -859,7 +875,7 @@ export class AgentActions {
    */
   async prAdversaryWithOptions(userPrompt: string, srcDir?: string | null): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
-    const options = agentOptions.getPrAdversaryOptions(
+    const roleSpec = agentOptions.getPrAdversaryRoleSpec(
       this.args.role,
       srcDir,
       this.args.max_turns,
@@ -876,7 +892,7 @@ export class AgentActions {
       cursor = new BlinkingCursor();
       cursor.start();
       try {
-        for await (const message of llmQuery({ prompt: userPrompt, options })) {
+        for await (const message of resolveProvider().run({ prompt: userPrompt, roleSpec })) {
           if (message.type === 'stream_event') {
             if (cursor) cursor.stop();
           } else if (message.type === 'assistant') {
@@ -930,7 +946,7 @@ export class AgentActions {
     noTools?: boolean,
   ): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
-    const options = agentOptions.getDiffReviewerOptions(
+    const roleSpec = agentOptions.getDiffReviewerRoleSpec(
       this.args.role,
       srcDir,
       this.args.output_format,
@@ -954,7 +970,7 @@ export class AgentActions {
       try {
         let turnCount = 0;
 
-        for await (const message of llmQuery({ prompt: userPrompt, options })) {
+        for await (const message of resolveProvider().run({ prompt: userPrompt, roleSpec })) {
           if (message.type === 'stream_event') {
             if (cursor) cursor.stop();
             const streamMsg = message as any;

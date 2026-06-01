@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [3.0.0] - 2026-06-01
+
+Major release: pluggable model providers (`claude` default, `codex` opt-in) and provider-neutral `RoleSpec` for all agent roles. See [`docs/model-provider-abstraction-plan.md`](docs/model-provider-abstraction-plan.md).
+
+### Added
+
+- **Model provider abstraction**: `ModelProvider` base class, `ClaudeProvider`, `CodexProvider`, `resolveProvider()`, and `--provider` / `AGENT_PROVIDER` selection (`claude` default, `codex` opt-in).
+- **Provider-neutral `RoleSpec`**: all 11 roles expose `get*RoleSpec()`; `get*Options()` delegates to `roleSpecToClaudeOptions()` for golden parity with prior Claude SDK shapes.
+- **Shared structured-output validation** (`src/providers/structured_output.ts`) for Codex post-run JSON parsing against existing schemas.
+- **Codex provider**: `runStreamed()` adapter to normalized `QueryMessage` (`structured_output`, `usage`, estimated `total_cost_usd`); per-run isolated `CODEX_HOME`; `skipGitRepoCheck` for temp scan directories.
+- **MCP on Codex**: `attachMcpToRoleSpec` + `roleSpecToCodexClientOptions` wire parent-app HTTP MCP through Codex CLI config (validated on `pr_reviewer` / `code_reviewer`).
+- **`src/mcp_internal.ts`**: shared MCP constants and `attachMcpToRoleSpec()`.
+- **Dependency**: `@openai/codex-sdk` (^0.135.0).
+- **Tests**: provider unit tests, golden-parity harness (`threat_modeler`, `pr_reviewer` MCP), e2e `threat_modeler_codex`, `pr_reviewer_codex_mcp`.
+
+### Changed
+
+- **`agent_actions`**: all roles call `resolveProvider().run({ prompt, roleSpec })` instead of passing Claude `Options` directly.
+- **`threat_modeler`**: passes copied `src_dir` as Codex/RoleSpec `workingDirectory`; emits token usage lines for parent `parseAgentMetrics`.
+- **CLI**: `-m/--model` validation is provider-aware (Codex accepts `gpt-*` / `o*` ids and Claude aliases).
+
+### Removed
+
+- **Anthropic → OpenAI failover (never deployed)**: `FAILOVER_ENABLED` / `OPENAI_*` env, `-F` / `-K` / `-U` CLI flags, `src/openai_tools.ts`, `openai` npm dependency, and failover prompt sampling in `main.ts`.
+- **`ModelProvider` Claude `Options` shim**: providers accept `RoleSpec` only; use `get*RoleSpec()` or `get*Options()` (wrapper) from `AgentOptions`.
+
 ## [2.8.0] - 2026-05-27
 
 ### Added — `fp_adversary` role (parent app full-repo Phase 2.5)

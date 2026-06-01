@@ -14,6 +14,22 @@ import { RETEST_VERDICT_SCHEMA } from './schemas/finding_validator';
 import { CONTEXT_EXTRACTION_SCHEMA } from './schemas/context_extraction';
 import { LEARNED_GUIDANCE_OUTPUT_SCHEMA } from './schemas/learned_guidance';
 import { FP_ADVERSARY_REPORT_SCHEMA } from './schemas/fp_adversary_pass';
+import type { RoleSpec } from './providers/role_spec';
+import { roleSpecToClaudeOptions } from './providers/claude_role_spec';
+import {
+  DEFAULT_MCP_SERVER_NAME,
+  MCP_INTERNAL_SERVER_NAME,
+  MCP_INTERNAL_TOOL_NAMES,
+  buildMcpInternalToolNames,
+  attachMcpToRoleSpec,
+} from './mcp_internal';
+
+export {
+  DEFAULT_MCP_SERVER_NAME,
+  MCP_INTERNAL_SERVER_NAME,
+  MCP_INTERNAL_TOOL_NAMES,
+  buildMcpInternalToolNames,
+};
 
 const FIX_CODE_VS_OPTIONS_GUIDANCE = `
 
@@ -28,62 +44,6 @@ export interface ToolUsageLog {
   tool: string;
   input: any;
   suggestions: string;
-}
-
-/**
- * Default identifier the agent uses to register a parent-app-managed MCP
- * server with the Claude Agent SDK. The resulting tool names exposed to
- * the LLM follow the SDK convention `mcp__<server>__<tool>`, so this
- * value becomes the literal prefix the model sees on its tool list.
- *
- * The default is intentionally generic (`appsec-internal`) so the
- * `appsec-agent` package is reusable across parent apps. Callers that
- * need a different identifier — e.g. to keep an existing prompt-nudge or
- * counter contract stable — pass `--mcp-server-name <name>` on the CLI
- * (or `mcpServerName` to the role builders directly), and the override
- * threads through to both `Options.mcpServers[<name>]` and the namespaced
- * tool names in the subagent whitelist.
- */
-export const DEFAULT_MCP_SERVER_NAME = 'appsec-internal';
-
-/**
- * @deprecated since v2.4.2 — historical alias for the default server name.
- * Kept exported so existing imports keep type-checking; new code should
- * read `DEFAULT_MCP_SERVER_NAME` (and pass an override via
- * `mcpServerName` when a specific identifier is required).
- */
-export const MCP_INTERNAL_SERVER_NAME = DEFAULT_MCP_SERVER_NAME;
-
-/**
- * Tools exposed by the per-scan in-process MCP server the parent app
- * stands up. Pinned at this set (`queryFindingsHistory`,
- * `queryImportGraph`, `queryRuntimeEnrichment`, `queryCodebaseGraph`) so
- * the agent's tool whitelist is deterministic at the current version;
- * parent apps that expose a different surface should fork or extend this
- * list rather than rely on dynamic discovery (the SDK would otherwise have
- * to round-trip the server before constructing the whitelist).
- */
-export const MCP_INTERNAL_TOOL_NAMES = [
-  'queryFindingsHistory',
-  'queryImportGraph',
-  'queryRuntimeEnrichment',
-  'queryCodebaseGraph',
-] as const;
-
-/**
- * SDK-namespaced tool names the LLM sees on its tool list when the server
- * is wired up. Exposed as a helper rather than a constant so callers in
- * `agent_options.ts` and the test suite share one source of truth.
- *
- * @param serverName - Override for the MCP server identifier. Defaults
- *   to `DEFAULT_MCP_SERVER_NAME` (`appsec-internal`).
- */
-export function buildMcpInternalToolNames(
-  serverName: string = DEFAULT_MCP_SERVER_NAME,
-): string[] {
-  return MCP_INTERNAL_TOOL_NAMES.map(
-    (tool) => `mcp__${serverName}__${tool}`
-  );
 }
 
 /**
@@ -118,18 +78,7 @@ export function buildPrReviewerMcpNudgeSystemPromptSuffix(
 
 /**
  * Mutate an already-built `Options` object to attach the MCP server config
- * (top-level `mcpServers`) and extend the named subagent's `tools`
- * whitelist with the backend-backed tool surface. No-op when
- * `mcpServerUrl` is falsy — preserves the pre-v2.4.0 behaviour for
- * callers that don't pass the new parameter.
- *
- * Mutating in place (rather than returning a fresh object) keeps the
- * existing role builders' return statements untouched and avoids a deep
- * clone of the (large) `Options` shape.
- *
- * @param mcpServerName - Override for the server identifier. Defaults
- *   to `DEFAULT_MCP_SERVER_NAME` (`appsec-internal`); pass the parent
- *   app's chosen name to keep tool-name contracts stable.
+ * @deprecated Use attachMcpToRoleSpec + roleSpecToClaudeOptions instead.
  */
 function attachMcpServerToOptions(
   options: Options,
@@ -216,20 +165,29 @@ export class AgentOptions {
   /**
    * Get options for simple query agent
    */
-  getSimpleQueryAgentOptions(role: string = 'simple_query_agent', srcDir?: string | null): Options {
+  getSimpleQueryAgentRoleSpec(role: string = 'simple_query_agent', srcDir?: string | null): RoleSpec {
     const roleConfig = this.confDict[this.environment]?.[role];
-    let systemPrompt = roleConfig?.options?.system_prompt || 
+    let systemPrompt =
+      roleConfig?.options?.system_prompt ||
       'You are an Application Security (AppSec) expert assistant. You are responsible for providing security advice and guidance to the user.';
-    
-    // Add source directory context to system prompt if provided
+
     if (srcDir) {
       systemPrompt += ` You have access to a source code directory at ${srcDir} that you can search and read files from to answer questions.`;
     }
-    
+
     return {
-      systemPrompt: systemPrompt,
-      maxTurns: roleConfig?.options?.max_turns || 1
+      roleId: 'simple_query_agent',
+      systemPrompt,
+      maxTurns: roleConfig?.options?.max_turns || 1,
+      capabilities: {},
+      noTools: true,
+      model: this.model,
+      workingDirectory: srcDir ?? undefined,
     };
+  }
+
+  getSimpleQueryAgentOptions(role: string = 'simple_query_agent', srcDir?: string | null): Options {
+    return roleSpecToClaudeOptions(this.getSimpleQueryAgentRoleSpec(role, srcDir));
   }
 
   /**
@@ -251,6 +209,46 @@ export class AgentOptions {
    * @param mcpServerName - Override for the MCP server identifier
    * @param mcpServerBearer - Bearer token for MCP HTTP requests
    */
+  getCodeReviewerRoleSpec(
+    role: string = 'code_reviewer',
+    outputFormat?: string,
+    mcpServerUrl?: string,
+    mcpServerName?: string,
+    mcpServerBearer?: string,
+    workingDirectory?: string,
+  ): RoleSpec {
+    const roleConfig = this.confDict[this.environment]?.[role];
+    let systemPrompt =
+      roleConfig?.options?.system_prompt ||
+      'You are an Application Security (AppSec) expert assistant. You are responsible for performing a thorough code review. List out all the potential security and privacy issues found in the code.';
+
+    if (outputFormat?.toLowerCase() === 'json') {
+      systemPrompt += FIX_CODE_VS_OPTIONS_GUIDANCE;
+    }
+    if (mcpServerUrl) {
+      systemPrompt += buildPrReviewerMcpNudgeSystemPromptSuffix(mcpServerName);
+    }
+
+    const spec: RoleSpec = {
+      roleId: 'code_reviewer',
+      systemPrompt,
+      maxTurns: roleConfig?.options?.max_turns ?? 30,
+      agentName: 'code-reviewer',
+      agentDescription: 'Reviews code for best practices and potential security issues only',
+      capabilities: { read: true, grep: true, write: true },
+      permissionMode: 'bypassPermissions',
+      model: this.model,
+      workingDirectory,
+    };
+
+    if (outputFormat?.toLowerCase() === 'json') {
+      spec.outputSchema = SECURITY_REPORT_SCHEMA;
+    }
+
+    attachMcpToRoleSpec(spec, mcpServerUrl, mcpServerName, mcpServerBearer);
+    return spec;
+  }
+
   getCodeReviewerOptions(
     role: string = 'code_reviewer',
     outputFormat?: string,
@@ -258,50 +256,50 @@ export class AgentOptions {
     mcpServerName?: string,
     mcpServerBearer?: string,
   ): Options {
-    const roleConfig = this.confDict[this.environment]?.[role];
-    let systemPrompt = roleConfig?.options?.system_prompt || 
-      'You are an Application Security (AppSec) expert assistant. You are responsible for performing a thorough code review. List out all the potential security and privacy issues found in the code.';
-
-    if (outputFormat?.toLowerCase() === 'json') {
-      systemPrompt += FIX_CODE_VS_OPTIONS_GUIDANCE;
-    }
-
-    if (mcpServerUrl) {
-      systemPrompt += buildPrReviewerMcpNudgeSystemPromptSuffix(mcpServerName);
-    }
-
-    const resolvedMaxTurns = roleConfig?.options?.max_turns ?? 30;
-
-    const options: Options = {
-      agents: {
-        'code-reviewer': {
-          description: 'Reviews code for best practices and potential security issues only',
-          prompt: systemPrompt,
-          tools: ['Read', 'Grep', 'Write'],
-          model: this.model,
-          maxTurns: resolvedMaxTurns
-        } as AgentDefinition
-      },
-      permissionMode: 'bypassPermissions'
-    };
-
-    // Add JSON schema enforcement when output format is JSON
-    if (outputFormat?.toLowerCase() === 'json') {
-      options.outputFormat = {
-        type: 'json_schema',
-        schema: SECURITY_REPORT_SCHEMA
-      };
-    }
-
-    attachMcpServerToOptions(
-      options,
+    return roleSpecToClaudeOptions(this.getCodeReviewerRoleSpec(
+      role,
+      outputFormat,
       mcpServerUrl,
-      'code-reviewer',
       mcpServerName,
       mcpServerBearer,
-    );
+    ));
+  }
 
-    return options;
+  /**
+   * Provider-neutral spec for threat modeler (Phase 3 RoleSpec spike).
+   */
+  getThreatModelerRoleSpec(
+    role: string = 'threat_modeler',
+    outputFormat?: string,
+    workingDirectory?: string,
+  ): RoleSpec {
+    const roleConfig = this.confDict[this.environment]?.[role];
+    const systemPrompt =
+      roleConfig?.options?.system_prompt ||
+      'You are an Application Security (AppSec) expert assistant. You are responsible for performing risk assessment on the source code repository for SOC2 type 2 compliance audit using the STRIDE methodology.';
+
+    const isJson = outputFormat?.toLowerCase() === 'json';
+    const resolvedMaxTurns = roleConfig?.options?.max_turns ?? 20;
+
+    const spec: RoleSpec = {
+      roleId: 'threat_modeler',
+      systemPrompt,
+      maxTurns: resolvedMaxTurns,
+      agentName: 'threat-modeler',
+      agentDescription: 'Performs threat modeling and risk assessment using STRIDE methodology',
+      capabilities: isJson
+        ? { read: true, grep: true }
+        : { read: true, grep: true, write: true, graphviz: true },
+      permissionMode: 'bypassPermissions',
+      model: this.model,
+      workingDirectory,
+    };
+
+    if (isJson) {
+      spec.outputSchema = THREAT_MODEL_REPORT_SCHEMA;
+    }
+
+    return spec;
   }
 
   /**
@@ -310,35 +308,7 @@ export class AgentOptions {
    * @param outputFormat - Output format (json, markdown, etc.)
    */
   getThreatModelerOptions(role: string = 'threat_modeler', outputFormat?: string): Options {
-    const roleConfig = this.confDict[this.environment]?.[role];
-    const systemPrompt = roleConfig?.options?.system_prompt || 
-      'You are an Application Security (AppSec) expert assistant. You are responsible for performing risk assessment on the source code repository for SOC2 type 2 compliance audit using the STRIDE methodology.';
-
-    const isJson = outputFormat?.toLowerCase() === 'json';
-
-    const resolvedMaxTurns = roleConfig?.options?.max_turns ?? 20;
-
-    const options: Options = {
-      agents: {
-        'threat-modeler': {
-          description: 'Performs threat modeling and risk assessment using STRIDE methodology',
-          prompt: systemPrompt,
-          tools: isJson ? ['Read', 'Grep'] : ['Read', 'Grep', 'Write', 'Graphviz'],
-          model: this.model,
-          maxTurns: resolvedMaxTurns
-        } as AgentDefinition
-      },
-      permissionMode: 'bypassPermissions'
-    };
-
-    if (isJson) {
-      options.outputFormat = {
-        type: 'json_schema',
-        schema: THREAT_MODEL_REPORT_SCHEMA
-      };
-    }
-
-    return options;
+    return roleSpecToClaudeOptions(this.getThreatModelerRoleSpec(role, outputFormat));
   }
 
   /**
@@ -349,7 +319,7 @@ export class AgentOptions {
    * @param srcDir - Optional source directory path
    * @param outputFormat - Output format (json, markdown, etc.)
    */
-  getDiffReviewerOptions(
+  getDiffReviewerRoleSpec(
     role: string = 'code_reviewer',
     srcDir?: string | null,
     outputFormat?: string,
@@ -359,9 +329,9 @@ export class AgentOptions {
     mcpServerUrl?: string,
     mcpServerName?: string,
     mcpServerBearer?: string,
-  ): Options {
+  ): RoleSpec {
     const roleConfig = this.confDict[this.environment]?.[role];
-    
+
     let systemPrompt: string;
 
     if (noTools) {
@@ -418,7 +388,6 @@ You have access to Read, Grep, and Write tools:
       systemPrompt += `\n\nSource directory available at: ${srcDir}`;
     }
 
-    // Allow role config to override the system prompt
     if (roleConfig?.options?.diff_reviewer_system_prompt) {
       systemPrompt = roleConfig.options.diff_reviewer_system_prompt;
     }
@@ -437,49 +406,87 @@ You have access to Read, Grep, and Write tools:
       systemPrompt += buildPrReviewerMcpNudgeSystemPromptSuffix(mcpServerName);
     }
 
-    const resolvedMaxTurns = maxTurns
-      ?? roleConfig?.options?.max_turns
-      ?? 10;
-
-    const options: Options = {
-      agents: {
-        'diff-reviewer': {
-          description: 'Reviews PR diff changes for security vulnerabilities',
-          prompt: systemPrompt,
-          tools: noTools ? ['Write'] : ['Read', 'Grep', 'Write'],
-          model: this.model,
-          maxTurns: resolvedMaxTurns
-        } as AgentDefinition
-      },
-      permissionMode: 'bypassPermissions'
+    const spec: RoleSpec = {
+      roleId: role === 'pr_reviewer' ? 'pr_reviewer' : 'code_reviewer',
+      systemPrompt,
+      maxTurns: maxTurns ?? roleConfig?.options?.max_turns ?? 10,
+      agentName: 'diff-reviewer',
+      agentDescription: 'Reviews PR diff changes for security vulnerabilities',
+      capabilities: noTools ? {} : { read: true, grep: true, write: true },
+      allowedTools: noTools ? ['Write'] : undefined,
+      permissionMode: 'bypassPermissions',
+      model: this.model,
+      workingDirectory: srcDir ?? undefined,
     };
 
-    // Add JSON schema enforcement when output format is JSON
     if (outputFormat?.toLowerCase() === 'json') {
-      options.outputFormat = {
-        type: 'json_schema',
-        schema: SECURITY_REPORT_SCHEMA
-      };
+      spec.outputSchema = SECURITY_REPORT_SCHEMA;
     }
 
-    attachMcpServerToOptions(
-      options,
-      mcpServerUrl,
-      'diff-reviewer',
-      mcpServerName,
-      mcpServerBearer,
-    );
-
-    return options;
+    attachMcpToRoleSpec(spec, mcpServerUrl, mcpServerName, mcpServerBearer);
+    return spec;
   }
 
-  /**
-   * Get options for code fixer agent
-   * Uses structured JSON output to guarantee a well-formed fix response.
-   * Has Read and Grep tools to explore the source directory for additional context.
-   * @param role - The role configuration key
-   * @param srcDir - Optional source directory path for additional context
-   */
+  getDiffReviewerOptions(
+    role: string = 'code_reviewer',
+    srcDir?: string | null,
+    outputFormat?: string,
+    maxTurns?: number,
+    noTools?: boolean,
+    experimentEnabled?: boolean,
+    mcpServerUrl?: string,
+    mcpServerName?: string,
+    mcpServerBearer?: string,
+  ): Options {
+    return roleSpecToClaudeOptions(this.getDiffReviewerRoleSpec(
+      role,
+      srcDir,
+      outputFormat,
+      maxTurns,
+      noTools,
+      experimentEnabled,
+      mcpServerUrl,
+      mcpServerName,
+      mcpServerBearer,
+    ));
+  }
+
+  getCodeFixerRoleSpec(
+    role: string = 'code_fixer',
+    srcDir?: string | null,
+    mcpServerUrl?: string,
+    mcpServerName?: string,
+    mcpServerBearer?: string,
+  ): RoleSpec {
+    const roleConfig = this.confDict[this.environment]?.[role];
+    let systemPrompt =
+      roleConfig?.options?.system_prompt ||
+      'You are an expert security engineer specializing in fixing vulnerabilities in code. ' +
+        'You receive a finding with code context and must produce a precise, minimal fix that resolves ' +
+        "the security issue while preserving the original code's functionality and indentation. " +
+        'Only modify the affected lines. Always use the recommended secure alternatives when applicable.';
+
+    if (srcDir) {
+      systemPrompt += `\n\nSource directory available at: ${srcDir}. You may read files for additional context if needed.`;
+    }
+
+    const spec: RoleSpec = {
+      roleId: 'code_fixer',
+      systemPrompt,
+      maxTurns: roleConfig?.options?.max_turns ?? 10,
+      agentName: 'code-fixer',
+      agentDescription: 'Generates precise security fixes for code vulnerabilities',
+      capabilities: { read: true, grep: true },
+      permissionMode: 'bypassPermissions',
+      model: this.model,
+      outputSchema: FIX_OUTPUT_SCHEMA,
+      workingDirectory: srcDir ?? undefined,
+    };
+
+    attachMcpToRoleSpec(spec, mcpServerUrl, mcpServerName, mcpServerBearer);
+    return spec;
+  }
+
   getCodeFixerOptions(
     role: string = 'code_fixer',
     srcDir?: string | null,
@@ -487,123 +494,116 @@ You have access to Read, Grep, and Write tools:
     mcpServerName?: string,
     mcpServerBearer?: string,
   ): Options {
-    const roleConfig = this.confDict[this.environment]?.[role];
-    let systemPrompt = roleConfig?.options?.system_prompt ||
-      'You are an expert security engineer specializing in fixing vulnerabilities in code. ' +
-      'You receive a finding with code context and must produce a precise, minimal fix that resolves ' +
-      'the security issue while preserving the original code\'s functionality and indentation. ' +
-      'Only modify the affected lines. Always use the recommended secure alternatives when applicable.';
-
-    if (srcDir) {
-      systemPrompt += `\n\nSource directory available at: ${srcDir}. You may read files for additional context if needed.`;
-    }
-
-    const resolvedMaxTurns = roleConfig?.options?.max_turns ?? 10;
-
-    const options: Options = {
-      agents: {
-        'code-fixer': {
-          description: 'Generates precise security fixes for code vulnerabilities',
-          prompt: systemPrompt,
-          tools: ['Read', 'Grep'],
-          model: this.model,
-          maxTurns: resolvedMaxTurns
-        } as AgentDefinition
-      },
-      permissionMode: 'bypassPermissions',
-      outputFormat: {
-        type: 'json_schema',
-        schema: FIX_OUTPUT_SCHEMA
-      }
-    };
-
-    attachMcpServerToOptions(
-      options,
+    return roleSpecToClaudeOptions(this.getCodeFixerRoleSpec(
+      role,
+      srcDir,
       mcpServerUrl,
-      'code-fixer',
       mcpServerName,
       mcpServerBearer,
-    );
-
-    return options;
+    ));
   }
 
-  /**
-   * Get options for the QA verifier agent
-   * Uses Read, Grep, and Bash tools for test execution and analysis
-   */
-  getQaVerifierOptions(role: string = 'qa_verifier', srcDir?: string | null): Options {
+  getQaVerifierRoleSpec(role: string = 'qa_verifier', srcDir?: string | null): RoleSpec {
     const roleConfig = this.confDict[this.environment]?.[role];
-    let systemPrompt = roleConfig?.options?.system_prompt ||
-      'You are a QA verification engineer. Your task is to verify security fixes by running the project\'s test suite ' +
-      'and analyzing the results. You have access to the project source code and can execute shell commands to run tests. ' +
-      'First, set up the environment (install dependencies if needed), then run the test suite. ' +
-      'If tests fail, analyze the failures to determine if they are caused by the security fix or are pre-existing issues. ' +
-      'Provide a structured verdict with pass/fail status, failure details, and actionable suggestions.';
+    let systemPrompt =
+      roleConfig?.options?.system_prompt ||
+      "You are a QA verification engineer. Your task is to verify security fixes by running the project's test suite " +
+        'and analyzing the results. You have access to the project source code and can execute shell commands to run tests. ' +
+        'First, set up the environment (install dependencies if needed), then run the test suite. ' +
+        'If tests fail, analyze the failures to determine if they are caused by the security fix or are pre-existing issues. ' +
+        'Provide a structured verdict with pass/fail status, failure details, and actionable suggestions.';
 
     if (srcDir) {
       systemPrompt += `\n\nProject source code is available at: ${srcDir}. Use Read and Grep to inspect files, and Bash to execute commands.`;
     }
 
-    const resolvedMaxTurns = roleConfig?.options?.max_turns ?? 15;
-
-    const options: Options = {
-      agents: {
-        'qa-verifier': {
-          description: 'Verifies security fixes by running project tests and analyzing results',
-          prompt: systemPrompt,
-          tools: ['Read', 'Grep', 'Bash'],
-          model: this.model,
-          maxTurns: resolvedMaxTurns
-        } as AgentDefinition
-      },
+    return {
+      roleId: 'qa_verifier',
+      systemPrompt,
+      maxTurns: roleConfig?.options?.max_turns ?? 15,
+      agentName: 'qa-verifier',
+      agentDescription: 'Verifies security fixes by running project tests and analyzing results',
+      capabilities: { read: true, grep: true, shell: true },
       permissionMode: 'bypassPermissions',
-      outputFormat: {
-        type: 'json_schema',
-        schema: QA_VERDICT_SCHEMA
-      }
+      model: this.model,
+      outputSchema: QA_VERDICT_SCHEMA,
+      workingDirectory: srcDir ?? undefined,
     };
-
-    return options;
   }
 
-  /**
-   * Get options for the finding validator agent
-   * Uses Read and Grep tools (read-only) to analyze code for vulnerability presence.
-   */
-  getContextExtractorOptions(role: string = 'context_extractor'): Options {
-    const roleConfig = this.confDict[this.environment]?.[role];
-    const systemPrompt = roleConfig?.options?.system_prompt ||
-      'You are a security-aware software analyst. Your task is to analyze repository files and metadata ' +
-      'to extract structured intelligence about a project. Focus on accuracy and specificity. ' +
-      'For security_context, list concrete library names and mechanisms (e.g., "bcrypt for password hashing", ' +
-      '"Django ORM with parameterized queries"). For developer_context, include ONLY security-relevant guidance ' +
-      '(PHI handling, SQL injection rules, auth patterns, compliance requirements) — exclude generic coding style, ' +
-      'formatting, naming conventions, and UI/component patterns. For suggested_exclusions, carefully study the ' +
-      'repository tree structure at ALL nesting depths to identify directories containing non-production code: ' +
-      'generated/compiled output, vendored copies, migrations, seed data, visual assets, log/temp/runtime dirs ' +
-      '(logs, uploads, work-dir, data), IDE config (.cursor, .vscode), utility scripts, and documentation. Use ' +
-      'specific paths from the tree (e.g., "backend/scripts/**" not just "scripts/**"). Only suggest patterns NOT ' +
-      'already in the standard preset. If a field has no relevant information, return an empty string.';
+  getQaVerifierOptions(role: string = 'qa_verifier', srcDir?: string | null): Options {
+    return roleSpecToClaudeOptions(this.getQaVerifierRoleSpec(role, srcDir));
+  }
 
-    const options: Options = {
-      agents: {
-        'context-extractor': {
-          description: 'Extracts structured project intelligence from repository files',
-          prompt: systemPrompt,
-          tools: [],
-          model: this.model,
-          maxTurns: 1,
-        } as AgentDefinition,
-      },
+  getContextExtractorRoleSpec(role: string = 'context_extractor'): RoleSpec {
+    const roleConfig = this.confDict[this.environment]?.[role];
+    const systemPrompt =
+      roleConfig?.options?.system_prompt ||
+      'You are a security-aware software analyst. Your task is to analyze repository files and metadata ' +
+        'to extract structured intelligence about a project. Focus on accuracy and specificity. ' +
+        'For security_context, list concrete library names and mechanisms (e.g., "bcrypt for password hashing", ' +
+        '"Django ORM with parameterized queries"). For developer_context, include ONLY security-relevant guidance ' +
+        '(PHI handling, SQL injection rules, auth patterns, compliance requirements) — exclude generic coding style, ' +
+        'formatting, naming conventions, and UI/component patterns. For suggested_exclusions, carefully study the ' +
+        'repository tree structure at ALL nesting depths to identify directories containing non-production code: ' +
+        'generated/compiled output, vendored copies, migrations, seed data, visual assets, log/temp/runtime dirs ' +
+        '(logs, uploads, work-dir, data), IDE config (.cursor, .vscode), utility scripts, and documentation. Use ' +
+        'specific paths from the tree (e.g., "backend/scripts/**" not just "scripts/**"). Only suggest patterns NOT ' +
+        'already in the standard preset. If a field has no relevant information, return an empty string.';
+
+    return {
+      roleId: 'context_extractor',
+      systemPrompt,
+      maxTurns: 1,
+      agentName: 'context-extractor',
+      agentDescription: 'Extracts structured project intelligence from repository files',
+      capabilities: {},
+      allowedTools: [],
       permissionMode: 'bypassPermissions',
-      outputFormat: {
-        type: 'json_schema',
-        schema: CONTEXT_EXTRACTION_SCHEMA,
-      },
+      model: this.model,
+      outputSchema: CONTEXT_EXTRACTION_SCHEMA,
+    };
+  }
+
+  getContextExtractorOptions(role: string = 'context_extractor'): Options {
+    return roleSpecToClaudeOptions(this.getContextExtractorRoleSpec(role));
+  }
+
+  getFindingValidatorRoleSpec(
+    role: string = 'finding_validator',
+    srcDir?: string | null,
+    mcpServerUrl?: string,
+    mcpServerName?: string,
+    mcpServerBearer?: string,
+  ): RoleSpec {
+    const roleConfig = this.confDict[this.environment]?.[role];
+    let systemPrompt =
+      roleConfig?.options?.system_prompt ||
+      'You are a security expert specializing in vulnerability validation. ' +
+        'Your task is to analyze code and determine whether a previously detected security vulnerability ' +
+        'is still present. Examine the provided code carefully, considering the original finding details, ' +
+        'and return a structured verdict with your assessment.';
+
+    if (srcDir) {
+      systemPrompt += `\n\nSource code is available at: ${srcDir}. Use Read and Grep to inspect files for additional context if needed.`;
+    }
+
+    const spec: RoleSpec = {
+      roleId: 'finding_validator',
+      systemPrompt,
+      maxTurns: roleConfig?.options?.max_turns ?? 5,
+      agentName: 'finding-validator',
+      agentDescription:
+        'Validates whether a previously detected security vulnerability is still present in code',
+      capabilities: { read: true, grep: true },
+      permissionMode: 'bypassPermissions',
+      model: this.model,
+      outputSchema: RETEST_VERDICT_SCHEMA,
+      workingDirectory: srcDir ?? undefined,
     };
 
-    return options;
+    attachMcpToRoleSpec(spec, mcpServerUrl, mcpServerName, mcpServerBearer);
+    return spec;
   }
 
   getFindingValidatorOptions(
@@ -613,66 +613,16 @@ You have access to Read, Grep, and Write tools:
     mcpServerName?: string,
     mcpServerBearer?: string,
   ): Options {
-    const roleConfig = this.confDict[this.environment]?.[role];
-    let systemPrompt = roleConfig?.options?.system_prompt ||
-      'You are a security expert specializing in vulnerability validation. ' +
-      'Your task is to analyze code and determine whether a previously detected security vulnerability ' +
-      'is still present. Examine the provided code carefully, considering the original finding details, ' +
-      'and return a structured verdict with your assessment.';
-
-    if (srcDir) {
-      systemPrompt += `\n\nSource code is available at: ${srcDir}. Use Read and Grep to inspect files for additional context if needed.`;
-    }
-
-    const resolvedMaxTurns = roleConfig?.options?.max_turns ?? 5;
-
-    const options: Options = {
-      agents: {
-        'finding-validator': {
-          description: 'Validates whether a previously detected security vulnerability is still present in code',
-          prompt: systemPrompt,
-          tools: ['Read', 'Grep'],
-          model: this.model,
-          maxTurns: resolvedMaxTurns
-        } as AgentDefinition
-      },
-      permissionMode: 'bypassPermissions',
-      outputFormat: {
-        type: 'json_schema',
-        schema: RETEST_VERDICT_SCHEMA
-      }
-    };
-
-    attachMcpServerToOptions(
-      options,
+    return roleSpecToClaudeOptions(this.getFindingValidatorRoleSpec(
+      role,
+      srcDir,
       mcpServerUrl,
-      'finding-validator',
       mcpServerName,
       mcpServerBearer,
-    );
-
-    return options;
+    ));
   }
 
-  /**
-   * learned_guidance_synthesizer (v2.5.0 / parent-app plan §3.8): pure-transform
-   * role that condenses bucketed dismissal/outcome/feedback signals into a short
-   * list of class-level policy bullets the pr_reviewer reads next scan.
-   *
-   * Tools: NONE — the agent must work from the provided buckets only. No
-   * source-tree access, no MCP server. The parent app's `runSynthesizerAgent`
-   * spawns this from a temp working directory anyway, so even if a tool were
-   * attached it would have nothing to read.
-   *
-   * Output schema (LEARNED_GUIDANCE_OUTPUT_SCHEMA):
-   *   { bullets: [{ cwe, bullet (≤300 chars), confidence (0..1) }] }
-   *
-   * Confidence floor and active-bullet cap are enforced by the parent app
-   * (`MIN_CONFIDENCE = 0.6`, `MAX_ACTIVE_BULLETS_PER_PROJECT = 12`); this
-   * role is allowed to return up to 50 bullets and the parent ranks +
-   * truncates.
-   */
-  getLearnedGuidanceSynthesizerOptions(role: string = 'learned_guidance_synthesizer'): Options {
+  getLearnedGuidanceSynthesizerRoleSpec(role: string = 'learned_guidance_synthesizer'): RoleSpec {
     const roleConfig = this.confDict[this.environment]?.[role];
     const systemPrompt =
       roleConfig?.options?.system_prompt ||
@@ -686,34 +636,26 @@ You have access to Read, Grep, and Write tools:
         'bullets than a bullet the reviewer cannot act on. Output is constrained to the required ' +
         'JSON schema; emit nothing else.';
 
-    const resolvedMaxTurns = roleConfig?.options?.max_turns ?? 1;
-
-    const options: Options = {
-      agents: {
-        'learned-guidance-synthesizer': {
-          description:
-            'Synthesizes class-level learned-guidance bullets from per-CWE dismissal-signal buckets',
-          prompt: systemPrompt,
-          tools: [],
-          model: this.model,
-          maxTurns: resolvedMaxTurns,
-        } as AgentDefinition,
-      },
+    return {
+      roleId: 'learned_guidance_synthesizer',
+      systemPrompt,
+      maxTurns: roleConfig?.options?.max_turns ?? 1,
+      agentName: 'learned-guidance-synthesizer',
+      agentDescription:
+        'Synthesizes class-level learned-guidance bullets from per-CWE dismissal-signal buckets',
+      capabilities: {},
+      allowedTools: [],
       permissionMode: 'bypassPermissions',
-      outputFormat: {
-        type: 'json_schema',
-        schema: LEARNED_GUIDANCE_OUTPUT_SCHEMA,
-      },
+      model: this.model,
+      outputSchema: LEARNED_GUIDANCE_OUTPUT_SCHEMA,
     };
-
-    return options;
   }
 
-  /**
-   * pr_adversary: second pass that filters pr_reviewer findings using failure-path skepticism.
-   * Output: same SECURITY_REPORT_SCHEMA with only surviving findings.
-   */
-  getPrAdversaryOptions(
+  getLearnedGuidanceSynthesizerOptions(role: string = 'learned_guidance_synthesizer'): Options {
+    return roleSpecToClaudeOptions(this.getLearnedGuidanceSynthesizerRoleSpec(role));
+  }
+
+  getPrAdversaryRoleSpec(
     role: string = 'pr_adversary',
     srcDir?: string | null,
     maxTurns?: number,
@@ -721,7 +663,7 @@ You have access to Read, Grep, and Write tools:
     mcpServerUrl?: string,
     mcpServerName?: string,
     mcpServerBearer?: string,
-  ): Options {
+  ): RoleSpec {
     const roleConfig = this.confDict[this.environment]?.[role];
     let systemPrompt =
       roleConfig?.options?.system_prompt ||
@@ -738,59 +680,51 @@ You have access to Read, Grep, and Write tools:
         '\n\n**Experiment (treatment):** Bias toward dropping borderline issues unless the diff plus quick repo checks show a real attack surface.';
     }
 
-    const resolvedMaxTurns = maxTurns ?? roleConfig?.options?.max_turns ?? 15;
-
-    const options: Options = {
-      agents: {
-        'pr-adversary': {
-          description: 'Adversarial second pass: filters PR scan findings by concrete failure paths',
-          prompt: systemPrompt,
-          tools: ['Read', 'Grep'],
-          model: this.model,
-          maxTurns: resolvedMaxTurns,
-        } as AgentDefinition,
-      },
+    const spec: RoleSpec = {
+      roleId: 'pr_adversary',
+      systemPrompt,
+      maxTurns: maxTurns ?? roleConfig?.options?.max_turns ?? 15,
+      agentName: 'pr-adversary',
+      agentDescription: 'Adversarial second pass: filters PR scan findings by concrete failure paths',
+      capabilities: { read: true, grep: true },
       permissionMode: 'bypassPermissions',
-      outputFormat: {
-        type: 'json_schema',
-        schema: SECURITY_REPORT_SCHEMA,
-      },
+      model: this.model,
+      outputSchema: SECURITY_REPORT_SCHEMA,
+      workingDirectory: srcDir ?? undefined,
     };
 
-    attachMcpServerToOptions(
-      options,
-      mcpServerUrl,
-      'pr-adversary',
-      mcpServerName,
-      mcpServerBearer,
-    );
-
-    return options;
+    attachMcpToRoleSpec(spec, mcpServerUrl, mcpServerName, mcpServerBearer);
+    return spec;
   }
 
-  /**
-   * fp_adversary (v2.8.0 / parent app full-repo Phase 2.5): second pass that
-   * filters first-pass `code_reviewer` findings on full-repo scans by emitting
-   * per-finding `(fingerprint, verdict, confidence, rationale)` verdicts. Output
-   * is constrained to FP_ADVERSARY_REPORT_SCHEMA so the verdict contract stays
-   * model-independent across Claude upgrades.
-   *
-   * Differences from `getPrAdversaryOptions`:
-   * - Output schema is the dedicated `fp_adversary_report` (not
-   *   SECURITY_REPORT_SCHEMA) — verdicts round-trip on `fingerprint`, not `id`.
-   * - No `experiment_enabled` plumbing (Lane-2 deliberately omits A/B per M4).
-   * - System prompt references the four structured posture fields and
-   *   `similar_dismissed` precedent that the parent app threads in via
-   *   `--adversarial-context`.
-   */
-  getFpAdversaryOptions(
+  getPrAdversaryOptions(
+    role: string = 'pr_adversary',
+    srcDir?: string | null,
+    maxTurns?: number,
+    experimentEnabled?: boolean,
+    mcpServerUrl?: string,
+    mcpServerName?: string,
+    mcpServerBearer?: string,
+  ): Options {
+    return roleSpecToClaudeOptions(this.getPrAdversaryRoleSpec(
+      role,
+      srcDir,
+      maxTurns,
+      experimentEnabled,
+      mcpServerUrl,
+      mcpServerName,
+      mcpServerBearer,
+    ));
+  }
+
+  getFpAdversaryRoleSpec(
     role: string = 'fp_adversary',
     srcDir?: string | null,
     maxTurns?: number,
     mcpServerUrl?: string,
     mcpServerName?: string,
     mcpServerBearer?: string,
-  ): Options {
+  ): RoleSpec {
     const roleConfig = this.confDict[this.environment]?.[role];
     let systemPrompt =
       roleConfig?.options?.system_prompt ||
@@ -811,35 +745,40 @@ You have access to Read, Grep, and Write tools:
       systemPrompt += buildPrReviewerMcpNudgeSystemPromptSuffix(mcpServerName);
     }
 
-    const resolvedMaxTurns = maxTurns ?? roleConfig?.options?.max_turns ?? 15;
-
-    const options: Options = {
-      agents: {
-        'fp-adversary': {
-          description:
-            'Adversarial false-positive filter for full-repo scans: emits per-finding (verdict, confidence, rationale) verdicts',
-          prompt: systemPrompt,
-          tools: ['Read', 'Grep'],
-          model: this.model,
-          maxTurns: resolvedMaxTurns,
-        } as AgentDefinition,
-      },
+    const spec: RoleSpec = {
+      roleId: 'fp_adversary',
+      systemPrompt,
+      maxTurns: maxTurns ?? roleConfig?.options?.max_turns ?? 15,
+      agentName: 'fp-adversary',
+      agentDescription:
+        'Adversarial false-positive filter for full-repo scans: emits per-finding (verdict, confidence, rationale) verdicts',
+      capabilities: { read: true, grep: true },
       permissionMode: 'bypassPermissions',
-      outputFormat: {
-        type: 'json_schema',
-        schema: FP_ADVERSARY_REPORT_SCHEMA,
-      },
+      model: this.model,
+      outputSchema: FP_ADVERSARY_REPORT_SCHEMA,
+      workingDirectory: srcDir ?? undefined,
     };
 
-    attachMcpServerToOptions(
-      options,
+    attachMcpToRoleSpec(spec, mcpServerUrl, mcpServerName, mcpServerBearer);
+    return spec;
+  }
+
+  getFpAdversaryOptions(
+    role: string = 'fp_adversary',
+    srcDir?: string | null,
+    maxTurns?: number,
+    mcpServerUrl?: string,
+    mcpServerName?: string,
+    mcpServerBearer?: string,
+  ): Options {
+    return roleSpecToClaudeOptions(this.getFpAdversaryRoleSpec(
+      role,
+      srcDir,
+      maxTurns,
       mcpServerUrl,
-      'fp-adversary',
       mcpServerName,
       mcpServerBearer,
-    );
-
-    return options;
+    ));
   }
 }
 

@@ -7,7 +7,7 @@ import { AgentOptions } from '../agent_options';
 import { ConfigDict } from '../utils';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 
-// Mock the Claude SDK (used by llmQuery adapter)
+// Mock the Claude SDK (used by ClaudeProvider)
 jest.mock('@anthropic-ai/claude-agent-sdk', () => ({
   query: jest.fn()
 }));
@@ -18,7 +18,6 @@ describe('AgentActions', () => {
   const environment = 'default';
 
   beforeEach(() => {
-    process.env.FAILOVER_ENABLED = 'false';
     mockConfDict = {
       default: {
         simple_query_agent: {
@@ -505,7 +504,7 @@ describe('AgentActions', () => {
       expect(result).toBe('');
     });
 
-    it('should propagate errors from llmQuery', async () => {
+    it('should propagate errors from ClaudeProvider', async () => {
       const error = new Error('Fix failed');
       (query as jest.Mock).mockReturnValue({
         [Symbol.asyncIterator]: async function* () {
@@ -1016,9 +1015,9 @@ describe('AgentActions', () => {
       consoleSpy.mockRestore();
     });
 
-    it('should pass noTools flag through to options', async () => {
+    it('should pass noTools flag through to RoleSpec', async () => {
       mockQueryWith([{ type: 'result' }]);
-      const spy = jest.spyOn(AgentOptions.prototype, 'getDiffReviewerOptions');
+      const spy = jest.spyOn(AgentOptions.prototype, 'getDiffReviewerRoleSpec');
 
       const agentActions = new AgentActions(mockConfDict, environment, diffArgs);
       await agentActions.diffReviewerWithOptions('Diff review', '/tmp/src', undefined, true);

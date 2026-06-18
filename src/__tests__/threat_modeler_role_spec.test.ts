@@ -56,5 +56,18 @@ describe('threat_modeler RoleSpec golden parity', () => {
     expect(spec.capabilities).toEqual({ read: true, grep: true });
     expect(spec.outputSchema).toBe(THREAT_MODEL_REPORT_SCHEMA);
     expect(spec.workingDirectory).toBe('/tmp/scan');
+    expect(spec.maxTurns).toBe(20);
+  });
+
+  it('honors maxTurns override over config default', () => {
+    const agentOptions = new AgentOptions(mockConfDict, environment);
+    const spec = agentOptions.getThreatModelerRoleSpec('threat_modeler', 'json', undefined, 42);
+    expect(spec.maxTurns).toBe(42);
+  });
+
+  it('defaults maxTurns to 100 when config omits max_turns', () => {
+    const agentOptions = new AgentOptions({ default: { threat_modeler: { options: {} } } }, 'default');
+    const spec = agentOptions.getThreatModelerRoleSpec('threat_modeler', 'json');
+    expect(spec.maxTurns).toBe(100);
   });
 });

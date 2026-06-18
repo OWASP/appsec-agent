@@ -272,6 +272,7 @@ export class AgentOptions {
     role: string = 'threat_modeler',
     outputFormat?: string,
     workingDirectory?: string,
+    maxTurnsOverride?: number,
   ): RoleSpec {
     const roleConfig = this.confDict[this.environment]?.[role];
     const systemPrompt =
@@ -279,7 +280,7 @@ export class AgentOptions {
       'You are an Application Security (AppSec) expert assistant. You are responsible for performing risk assessment on the source code repository for SOC2 type 2 compliance audit using the STRIDE methodology.';
 
     const isJson = outputFormat?.toLowerCase() === 'json';
-    const resolvedMaxTurns = roleConfig?.options?.max_turns ?? 20;
+    const resolvedMaxTurns = maxTurnsOverride ?? roleConfig?.options?.max_turns ?? 100;
 
     const spec: RoleSpec = {
       roleId: 'threat_modeler',
@@ -307,8 +308,55 @@ export class AgentOptions {
    * @param role - The role configuration key
    * @param outputFormat - Output format (json, markdown, etc.)
    */
-  getThreatModelerOptions(role: string = 'threat_modeler', outputFormat?: string): Options {
-    return roleSpecToClaudeOptions(this.getThreatModelerRoleSpec(role, outputFormat));
+  getThreatModelerOptions(
+    role: string = 'threat_modeler',
+    outputFormat?: string,
+    maxTurnsOverride?: number,
+  ): Options {
+    return roleSpecToClaudeOptions(
+      this.getThreatModelerRoleSpec(role, outputFormat, undefined, maxTurnsOverride),
+    );
+  }
+
+  getThreatAdversaryRoleSpec(
+    role: string = 'threat_adversary',
+    srcDir?: string | null,
+    maxTurns?: number,
+  ): RoleSpec {
+    const roleConfig = this.confDict[this.environment]?.[role];
+    let systemPrompt =
+      roleConfig?.options?.system_prompt ||
+      'You are a senior application security engineer performing an adversarial second pass on a STRIDE threat model. ' +
+        'Skeptically verify each threat against the real codebase using Read and Grep. ' +
+        'Keep only threats with a concrete, demonstrable attack path and confirmed source_locations. ' +
+        'Drop generic, mitigated, or ungrounded threats. Reconcile risks and metadata counts.';
+
+    if (srcDir) {
+      systemPrompt += `\n\nSource code is available at: ${srcDir}. Use Read and Grep to verify code paths before keeping a threat.`;
+    }
+
+    const spec: RoleSpec = {
+      roleId: 'threat_adversary',
+      systemPrompt,
+      maxTurns: maxTurns ?? roleConfig?.options?.max_turns ?? 100,
+      agentName: 'threat-adversary',
+      agentDescription: 'Adversarial second pass: filters STRIDE threats by concrete code-grounded attack paths',
+      capabilities: { read: true, grep: true },
+      permissionMode: 'bypassPermissions',
+      model: this.model,
+      outputSchema: THREAT_MODEL_REPORT_SCHEMA,
+      workingDirectory: srcDir ?? undefined,
+    };
+
+    return spec;
+  }
+
+  getThreatAdversaryOptions(
+    role: string = 'threat_adversary',
+    srcDir?: string | null,
+    maxTurns?: number,
+  ): Options {
+    return roleSpecToClaudeOptions(this.getThreatAdversaryRoleSpec(role, srcDir, maxTurns));
   }
 
   /**

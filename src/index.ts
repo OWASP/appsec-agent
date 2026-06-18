@@ -16,11 +16,19 @@ export {
   DFDNode,
   DFDDataFlow,
   DFDTrustBoundary,
+  SourceLocation,
   Threat,
   Risk,
   ThreatModelReport,
   THREAT_MODEL_REPORT_SCHEMA,
+  SOURCE_LOCATION_SCHEMA,
+  SOURCE_LOCATIONS_ARRAY_SCHEMA,
 } from './schemas/threat_model_report';
+export {
+  type ThreatAdversaryPassContext,
+  parseThreatAdversaryPassContext,
+  buildThreatAdversaryUserPrompt,
+} from './schemas/threat_adversary_pass';
 export {
   FixContext,
   FixContextFinding,

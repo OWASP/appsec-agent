@@ -9,7 +9,7 @@ A TypeScript package that provides AI-powered agents for Application Security (A
 ## 🚀 Features
 
 - **AI-Powered AppSec Automation**: Leverage Claude's capabilities for application security
-- **Multiple Agent Types**: Simple query agent, code review agent, and threat modeler for different use cases
+- **Multiple Agent Types**: Simple query, code review, PR review, threat modeling (with adversarial second pass), code fixing, QA verification, and more
 - **Tool Permission Management**: Advanced tool permission callbacks with bypass mode for trusted operations
 - **Code Review Capabilities**: Automated security and privacy issue detection in code
 - **Modular Agent Architecture**: Easy to extend and customize agents for specific use cases
@@ -92,11 +92,26 @@ $ npx agent-run -r simple_query_agent
 
 The agents can be configured through environment variables and configuration files. Key configuration options include:
 
-- `ANTHROPIC_API_KEY`: Your Anthropic API key (required)
+- `ANTHROPIC_API_KEY`: Your Anthropic API key (required for the Claude provider)
 - `ANTHROPIC_BASE_URL`: API endpoint URL (default: https://api.anthropic.com)
-- `MAX_TURNS`: Maximum conversation turns (default: 1)
+- `AGENT_PROVIDER`: Model provider — `claude` (default) or `codex` (opt-in). Override with `--provider`.
+- Per-role `max_turns` in `conf/appsec_agent.yaml` (e.g. **100** for `threat_modeler`). Override any role with `--max-turns <n>`.
 
 Configuration file: `conf/appsec_agent.yaml`
+
+### Model providers (v3.0.0+)
+
+All roles run through a provider-neutral `RoleSpec`. Choose the backend at runtime:
+
+```bash
+# Claude (default) — uses Anthropic API / Claude Agent SDK
+$ npx agent-run -r code_reviewer -s ./src -m sonnet
+
+# Codex (opt-in) — uses @openai/codex-sdk; accepts gpt-* / o* model ids
+$ npx agent-run -r threat_modeler -s ./src -f json --provider codex -m gpt-4.1
+```
+
+Set `AGENT_PROVIDER=codex` or pass `--provider codex`. MCP server wiring (`--mcp-server-url`) works on both providers for supported roles.
 
 ## 🤖 Available Agents
 
@@ -137,13 +152,28 @@ A specialized agent for verifying security fixes that can:
 - Support custom test commands, setup commands, and environment variables
 - Accept deployment context for environment-aware verification
 
+### PR Reviewer (`pr_reviewer`)
+A PR-focused variant of the code reviewer optimized for diff context:
+- Same security analysis capabilities as `code_reviewer`, tuned for Pull Request diffs
+- **PR diff chunking enabled by default** when using `-d/--diff-context` (see [PR chunking](#pr-chunking-large-prs))
+- MCP-aware when `--mcp-server-url` is provided (`queryFindingsHistory`, `queryImportGraph`, `queryCodebaseGraph`, `queryRuntimeEnrichment`)
+
 ### Threat Modeler (`threat_modeler`)
 A specialized agent for comprehensive threat modeling that can:
-- Generate ASCII text-based Data Flow Diagrams (DFD)
+- Produce a structured **`threat_model_report` JSON** (DFD + STRIDE threats + risk registry) or legacy multi-file ASCII deliverables
 - Perform STRIDE methodology threat modeling on DFDs
 - Create detailed risk registry reports with remediation plans
+- Anchor DFD nodes, threats, and risks to source code via optional **`source_locations`** (`file`, `line_numbers`, `symbol`, `snippet`) when evidence is confirmed (v3.1.0)
 - Analyze codebases for security threats and vulnerabilities
-- Generate multiple deliverable reports
+- Run up to **100 tool-use turns by default** (configurable in yaml or via `--max-turns`)
+
+### Threat Adversary (`threat_adversary`, v3.1.0)
+Adversarial second pass for threat modeling — filters ungrounded threats from a first-pass report:
+- Input: first-pass `threat_model_report` JSON via `--adversarial-context`
+- Output: filtered `threat_model_report` JSON (same schema) to an explicit `-o` path
+- Keeps only threats with a concrete attack path and confirmed `source_locations`; drops generic, mitigated, or ungrounded items
+- Reconciles the risk registry and `metadata` counts after filtering
+- Uses the same model provider and `max_turns` defaults as `threat_modeler`
 
 ## 📖 Usage Examples
 
@@ -451,12 +481,73 @@ The agent returns a structured `QaVerdict`:
 
 ### Threat Modeler Example
 ```bash
-# Run threat modeler on current directory
-$ npx agent-run -r threat_modeler
+# Structured JSON report (recommended for integrations)
+$ npx agent-run -r threat_modeler -s /path/to/source -f json -o threat_model_report.json
 
-# Run threat modeler on specific source directory
+# Legacy multi-file ASCII deliverables (markdown default)
 $ npx agent-run -r threat_modeler -s /path/to/source
+
+# With deployment context for environment-specific threats
+$ npx agent-run -r threat_modeler -s ./api -f json \
+  -c "AWS Lambda in VPC, handles PII, SOC2 Type II scope"
+
+# Override max tool-use turns (default 100 for threat_modeler)
+$ npx agent-run -r threat_modeler -s ./src -f json --max-turns 50
 ```
+
+JSON reports may include optional `source_locations` on DFD nodes, threats, and risks when the agent can ground them in Read/Grep evidence:
+
+```json
+{
+  "threat_model_report": {
+    "threat_model": {
+      "threats": [
+        {
+          "id": "THREAT-001",
+          "title": "SQL injection in user lookup",
+          "source_locations": [
+            {
+              "file": "src/db/users.ts",
+              "line_numbers": "42-44",
+              "symbol": "findUserById",
+              "snippet": "const q = `SELECT * FROM users WHERE id = ${id}`;"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+```
+
+#### Threat adversarial second pass (`threat_adversary`, v3.1.0)
+
+After a `threat_modeler` run, invoke a **second pass** that drops threats without a concrete, code-grounded attack path. Input is the first-pass report; output is a filtered `threat_model_report` (same schema).
+
+```bash
+# Filter candidate threats (JSON in → JSON out)
+$ npx agent-run -r threat_adversary --adversarial-context threat_model_report.json \
+  -s ./repo -f json -o threat_model_adversary_report.json
+
+# Optional: same deployment context as the first pass
+$ npx agent-run -r threat_adversary --adversarial-context threat_model_report.json \
+  -s ./repo -f json -c "AWS Lambda, handles PII"
+```
+
+**Input shape** (minimum: wrap the first-pass report):
+
+```json
+{
+  "threat_model_report": {
+    "data_flow_diagram": { "nodes": [], "flows": [], "trust_boundaries": [] },
+    "threat_model": { "executive_summary": "…", "threats": [] },
+    "risk_registry": { "summary": "…", "risks": [] },
+    "metadata": { "total_threats_identified": 0, "total_risks_identified": 0 }
+  }
+}
+```
+
+Empty `threats` arrays short-circuit without calling the model; the input is written unchanged to `-o`.
 
 ### List Available Roles
 ```bash
@@ -552,10 +643,12 @@ appsec-agent/
 │   ├── main.ts               # Main application logic
 │   ├── utils.ts              # Utility functions
 │   ├── schemas/
-│   │   ├── security_report.ts # JSON schema for code review reports
-│   │   ├── threat_model_report.ts # JSON schema for threat model reports
-│   │   └── security_fix.ts    # JSON schema for code fixer output
-│   │   └── qa_context.ts      # JSON schema for QA verifier verdict
+│   │   ├── security_report.ts       # JSON schema for code review reports
+│   │   ├── threat_model_report.ts   # JSON schema for threat model reports (incl. source_locations)
+│   │   ├── threat_adversary_pass.ts # Input/prompt helpers for threat_adversary second pass
+│   │   ├── fp_adversary_pass.ts     # Input/output schema for fp_adversary role
+│   │   ├── security_fix.ts          # JSON schema for code fixer output
+│   │   └── qa_context.ts            # JSON schema for QA verifier verdict
 │   ├── tools/
 │   │   └── bash_tool.ts       # Restricted Bash tool for QA verifier
 │   └── __tests__/
@@ -584,6 +677,7 @@ appsec-agent/
 - `getSimpleQueryAgentOptions()`: Gets options for simple query agent
 - `getCodeReviewerOptions()`: Gets options for code reviewer
 - `getThreatModelerOptions()`: Gets options for threat modeler
+- `getThreatAdversaryOptions()`: Gets options for threat adversary second pass
 - `getDiffReviewerOptions()`: Gets options for PR diff-focused code reviewer
 - `getCodeFixerOptions()`: Gets options for code fixer agent (always uses JSON schema output)
 - `getQaVerifierOptions()`: Gets options for QA verifier agent (Read, Grep, Bash tools + JSON schema output)
@@ -680,11 +774,9 @@ $ npm test -- concurrency.test.ts
 ### Test Results
 
 All tests pass including:
-- ✅ 235 total tests across 11 suites
-- ✅ 11 concurrency tests
-- ✅ 51 diff context validation tests
-- ✅ 9 code fixer tests (main + agent options)
-- ✅ 5 QA verifier tests
+- ✅ 644 total tests across 40 suites
+- ✅ Concurrency and thread-safety coverage for web application usage
+- ✅ Diff context validation, threat model / threat adversary schema, and provider parity tests
 - ✅ Full coverage of core functionality
 
 ## 🔗 Related Projects
@@ -697,7 +789,7 @@ Highlights:
 
 - 🐳 **One-command setup** with `docker-compose up -d --build`
 - 🖥️ **Next.js web dashboard** with authentication (JWT, bcrypt, role-based access) and admin-managed Anthropic API credentials
-- 🧵 **Threat Modeling workflow** — upload a repository ZIP and get a structured JSON threat model (powered by `appsec-agent` v1.6+) with:
+- 🧵 **Threat Modeling workflow** — upload a repository ZIP and get a structured JSON threat model (powered by `appsec-agent` v1.6+) with code-grounded `source_locations` and optional adversarial filtering (`threat_adversary`, v3.1.0+):
   - Interactive threat-aware **Data Flow Diagrams** (React Flow canvas with pan/zoom, search, filters, trust boundaries)
   - Sortable threat tables with STRIDE category and severity badges
   - Risk Registry with cross-referenced threat IDs

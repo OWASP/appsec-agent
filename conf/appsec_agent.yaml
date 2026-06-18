@@ -21,8 +21,15 @@ default: &default
   threat_modeler:
     options:
       system_prompt: "You are an Application Security (AppSec) expert assistant. You are responsible for performing risk assessment on the source code repository for SOC2 type 2 compliance audit: 1. Start with drawing the ASCII text based Data Flow Diagrm (DFD), with output format as <codebase_data_flow_diagram_text_timestamp>; 2. then proceeding to use STRIDE methodology to perform threat modeling on the DFD, without output report in the format <codebase_threat_model_timestamp>; 3. finally, provide a seperate risk registry report including proposed remediation plan in the format <codebase_risk_registry_text_timestamp>. We're looking for 3 reports in the current working directory as the deliverable."
+      max_turns: 100
     output_format: "markdown"
     verbose: True
+  threat_adversary:
+    options:
+      system_prompt: "You are a senior application security engineer performing an adversarial second pass on a STRIDE threat model. Skeptically verify each threat against the real codebase using Read and Grep. Keep only threats with a concrete, demonstrable attack path and confirmed source_locations. Drop generic, mitigated, or ungrounded threats. Reconcile risks and metadata counts. Output the full filtered threat_model_report JSON."
+      output_format: "json"
+      max_turns: 100
+      verbose: True
   pr_reviewer:
     options:
       diff_reviewer_system_prompt: null  # Use enhanced hardcoded prompt; set here to override

@@ -11,11 +11,35 @@
  * Author: Sam Li
  */
 
+export interface SourceLocation {
+  file: string;
+  line_numbers?: string;
+  symbol?: string;
+  snippet?: string;
+}
+
+export const SOURCE_LOCATION_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  required: ['file'],
+  properties: {
+    file: { type: 'string', description: 'Repository-relative file path' },
+    line_numbers: { type: 'string', description: 'Line number(s), e.g. "42" or "38-45"' },
+    symbol: { type: 'string', description: 'Function, class, or symbol name' },
+    snippet: { type: 'string', description: 'Short verbatim code excerpt (max ~15 lines)' },
+  },
+};
+
+export const SOURCE_LOCATIONS_ARRAY_SCHEMA: Record<string, unknown> = {
+  type: 'array',
+  items: SOURCE_LOCATION_SCHEMA,
+};
+
 export interface DFDNode {
   id: string;
   name: string;
   type: 'external_entity' | 'process' | 'data_store';
   description?: string;
+  source_locations?: SourceLocation[];
 }
 
 export interface DFDDataFlow {
@@ -45,6 +69,7 @@ export interface Threat {
   likelihood: 'HIGH' | 'MEDIUM' | 'LOW';
   mitigation: string;
   references?: string[];
+  source_locations?: SourceLocation[];
 }
 
 export interface Risk {
@@ -63,6 +88,7 @@ export interface Risk {
   cost_estimate?: string;
   timeline?: string;
   related_threats?: string[];
+  source_locations?: SourceLocation[];
 }
 
 export interface ThreatModelReport {
@@ -141,7 +167,8 @@ export const THREAT_MODEL_REPORT_SCHEMA: Record<string, unknown> = {
                     enum: ['external_entity', 'process', 'data_store'],
                     description: 'DFD element type'
                   },
-                  description: { type: 'string' }
+                  description: { type: 'string' },
+                  source_locations: SOURCE_LOCATIONS_ARRAY_SCHEMA,
                 }
               }
             },
@@ -220,7 +247,8 @@ export const THREAT_MODEL_REPORT_SCHEMA: Record<string, unknown> = {
                     type: 'array',
                     items: { type: 'string' },
                     description: 'CWE, OWASP, or other references'
-                  }
+                  },
+                  source_locations: SOURCE_LOCATIONS_ARRAY_SCHEMA,
                 }
               }
             }
@@ -261,7 +289,8 @@ export const THREAT_MODEL_REPORT_SCHEMA: Record<string, unknown> = {
                     type: 'array',
                     items: { type: 'string' },
                     description: 'Threat ids from the threat model'
-                  }
+                  },
+                  source_locations: SOURCE_LOCATIONS_ARRAY_SCHEMA,
                 }
               }
             }

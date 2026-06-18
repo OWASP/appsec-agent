@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [3.0.1] - 2026-06-01
+## [3.1.0] - 2026-06-17
+
+### Added
+
+- **`SourceLocation` on threat model reports** — optional `source_locations` on DFD nodes, threats, and risks (`file`, `line_numbers`, `symbol`, `snippet`); JSON schema and threat_modeler prompt updated to request grounded evidence.
+- **`threat_adversary` role** — adversarial second pass that filters ungrounded threats; input via `--adversarial-context`, output to explicit `-o` path; uses the same model as the main threat_modeler pass.
+- **Configurable `max_turns` for threat_modeler** — default raised to **100** in `appsec_agent.yaml`; overridable via `--max-turns` CLI flag.
+
+### Changed
+
+- **`getThreatModelerRoleSpec`** accepts optional `maxTurnsOverride`; defaults to 100 when config omits `max_turns`.
+
 
 ### Security
 

@@ -18,7 +18,15 @@ import {
   RetestContext,
   RetestContextValidationError,
 } from './schemas/finding_validator';
-import { loadExtractionContext, ExtractionContext } from './schemas/context_extraction';
+import {
+  loadExtractionContext,
+  type ExtractionContext,
+} from './schemas/context_extraction';
+import {
+  parseThreatAdversaryPassContext,
+  buildThreatAdversaryUserPrompt,
+  type ThreatAdversaryPassContext,
+} from './schemas/threat_adversary_pass';
 import {
   parseAdversarialPassContext,
   buildAdversarialUserPrompt,
@@ -327,6 +335,38 @@ function loadAdversarialContextFile(adversarialContextPath: string, cwd: string)
 }
 
 /**
+ * Load threat adversary pass input (first-pass threat model report JSON).
+ */
+function loadThreatAdversaryContextFile(contextPath: string, cwd: string): ThreatAdversaryPassContext {
+  const resolvedPath = validateInputFilePath(contextPath, cwd);
+  if (!resolvedPath) {
+    const safePath = sanitizePathForError(contextPath);
+    console.error(`Error: Invalid threat adversary context file path: ${safePath}`);
+    process.exit(1);
+  }
+  const safePath = sanitizePathForError(resolvedPath);
+  if (!fs.existsSync(resolvedPath)) {
+    console.error(`Error: Threat adversary context file not found: ${safePath}`);
+    process.exit(1);
+  }
+  let data: unknown;
+  try {
+    const content = fs.readFileSync(resolvedPath, 'utf-8');
+    data = JSON.parse(content);
+  } catch (error: any) {
+    const errorMessage = error?.message || 'Unknown error';
+    console.error(`Error: Failed to read threat adversary context file ${safePath}: ${errorMessage}`);
+    process.exit(1);
+  }
+  try {
+    return parseThreatAdversaryPassContext(data);
+  } catch (e: any) {
+    console.error(`Error: Invalid threat adversary context: ${e?.message || e}`);
+    process.exit(1);
+  }
+}
+
+/**
  * Load fp_adversary input (v2.8.0): candidate findings with required
  * fingerprints + four optional structured posture fields + optional
  * similar_dismissed precedent array. Schema-aligned for the parent app's
@@ -620,8 +660,8 @@ function buildContextExtractorPrompt(ctx: ExtractionContext): string {
   }
   if (ctx.languages && Object.keys(ctx.languages).length > 0) {
     const sorted = Object.entries(ctx.languages)
-      .sort(([, a], [, b]) => b - a)
-      .map(([lang, bytes]) => `${lang} (${Math.round(bytes / 1024)}KB)`)
+      .sort(([, a], [, b]) => (b as number) - (a as number))
+      .map(([lang, bytes]) => `${lang} (${Math.round((bytes as number) / 1024)}KB)`)
       .join(', ');
     parts.push(`- **Languages:** ${sorted}`);
   }
@@ -1008,10 +1048,10 @@ Please consider this context when performing threat modeling. Focus on:
 ${contextSection}
 Your analysis must include:
 1. A Data Flow Diagram (DFD) — identify all system components as nodes (external entities, processes, data stores), map all data flows between them with protocols and data classifications, and define trust boundaries.
-2. A STRIDE threat analysis — provide an executive summary, then enumerate each threat with its STRIDE category, severity, likelihood, affected DFD components (by node/flow ID), impact assessment, and mitigation strategy. Include CWE/OWASP references where applicable.
-3. A risk registry — summarize the overall risk posture, then enumerate each risk with severity, category, affected components, business impact, remediation plan, effort/cost estimates, and timeline. Cross-reference related threat IDs.
+2. A STRIDE threat analysis — provide an executive summary, then enumerate each threat with its STRIDE category, severity, likelihood, affected DFD components (by node/flow ID), impact assessment, and mitigation strategy. Include CWE/OWASP references where applicable. For each threat you can anchor in source code, add \`source_locations\` with real \`file\`, \`line_numbers\`, optional \`symbol\`, and a short verbatim \`snippet\` (max ~15 lines) from Read/Grep evidence. Omit \`source_locations\` rather than fabricating when you cannot confirm a location.
+3. A risk registry — summarize the overall risk posture, then enumerate each risk with severity, category, affected components, business impact, remediation plan, effort/cost estimates, and timeline. Cross-reference related threat IDs. Add \`source_locations\` on risks when you can anchor them directly; otherwise rely on \`related_threats\` linkage.
 
-Use sequential IDs: node-001/flow-001/tb-001 for DFD elements, THREAT-001 for threats, RISK-001 for risks.`;
+Use sequential IDs: node-001/flow-001/tb-001 for DFD elements, THREAT-001 for threats, RISK-001 for risks. You may add \`source_locations\` on DFD nodes when they map to specific source files.`;
     } else {
       const basePrompt = `Draw the ASCII text based Data Flow Diagram (DFD), with output format as <codebase_data_flow_diagram_text_timestamp>. Then proceeding to use STRIDE methodology to perform threat modeling on the DFD, without output report in the format <codebase_threat_model_timestamp>. Finally, provide a separate risk registry report including proposed remediation plan in the format <codebase_risk_registry_text_timestamp>. We're looking for 3 reports in the current working directory as the deliverable. Please write the threat modeler report under the current working directory in ${args.output_format} format.`;
       userPrompt = `Review the code in ${srcLocation}.${contextSection} ${basePrompt}`;
@@ -1023,6 +1063,45 @@ Use sequential IDs: node-001/flow-001/tb-001 for DFD elements, THREAT-001 for th
       console.log(`Report written to ${outputFile}`);
     }
     cleanupTmpDir(tmpSrcDir);
+
+  } else if (args.role === 'threat_adversary') {
+    console.log('Running Threat Adversary (adversarial second pass)');
+
+    if (!args.adversarial_context) {
+      console.error('Error: --adversarial-context is required for the threat_adversary role.');
+      process.exit(1);
+    }
+
+    const advCtx = loadThreatAdversaryContextFile(args.adversarial_context, currentWorkingDir);
+    if (args.output_format && args.output_format.toLowerCase() !== 'json') {
+      console.warn('threat_adversary always emits JSON (structured); ignoring -f for file content.');
+    }
+    const outputFile = validateOutputFile(
+      args.output_file || 'threat_model_adversary_report.json',
+      currentWorkingDir,
+    );
+
+    const userPrompt = buildThreatAdversaryUserPrompt(advCtx, {
+      additionalContext: args.context,
+    });
+
+    const tmpSrcDir = args.src_dir
+      ? validateAndCopySrcDir(args.src_dir, currentWorkingDir)
+      : null;
+
+    const threatCount = advCtx.threat_model_report.threat_model?.threats?.length ?? 0;
+    if (threatCount === 0) {
+      fs.writeFileSync(outputFile, JSON.stringify(advCtx, null, 2), 'utf-8');
+      console.log(`No candidate threats; wrote unchanged report to ${outputFile}`);
+      cleanupTmpDir(tmpSrcDir);
+    } else {
+      const structuredResult = await agentActions.threatAdversaryWithOptions(userPrompt, tmpSrcDir);
+      if (structuredResult) {
+        fs.writeFileSync(outputFile, structuredResult, 'utf-8');
+        console.log(`Threat adversarial report written to ${outputFile}`);
+      }
+      cleanupTmpDir(tmpSrcDir);
+    }
 
   } else if (args.role === 'code_fixer') {
     console.log('Running Code Fixer Agent');

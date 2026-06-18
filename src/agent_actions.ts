@@ -381,6 +381,7 @@ export class AgentActions {
       this.args.role,
       this.args.output_format,
       srcDir ?? process.cwd(),
+      this.args.max_turns,
     );
 
     let cursor: BlinkingCursor | null = null;
@@ -928,6 +929,66 @@ export class AgentActions {
         }
       }
       console.error('Error during adversarial pass:', error);
+      throw error;
+    }
+    console.log();
+    return structuredJson;
+  }
+
+  /**
+   * threat_adversary: adversarial second pass over first-pass threat model (filtered report out).
+   */
+  async threatAdversaryWithOptions(userPrompt: string, srcDir?: string | null): Promise<string> {
+    const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
+    const roleSpec = agentOptions.getThreatAdversaryRoleSpec(
+      this.args.role,
+      srcDir,
+      this.args.max_turns,
+    );
+
+    let cursor: BlinkingCursor | null = null;
+    let structuredJson = '';
+
+    try {
+      cursor = new BlinkingCursor();
+      cursor.start();
+      try {
+        for await (const message of resolveProvider().run({ prompt: userPrompt, roleSpec })) {
+          if (message.type === 'stream_event') {
+            if (cursor) cursor.stop();
+          } else if (message.type === 'assistant') {
+            if (cursor) cursor.stop();
+            const assistantMsg = message as SDKAssistantMessage;
+            if (this.args.verbose && assistantMsg.message.content) {
+              for (const block of assistantMsg.message.content) {
+                if (block.type === 'text') {
+                  console.log(`Claude: ${block.text}`);
+                }
+              }
+            }
+          } else if (message.type === 'result') {
+            if (cursor) cursor.stop();
+            const resultMsg = message as SDKResultMessage;
+            if ((resultMsg as any).structured_output) {
+              structuredJson = JSON.stringify((resultMsg as any).structured_output, null, 2);
+            }
+            if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
+              console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);
+            }
+          }
+        }
+      } finally {
+        if (cursor) cursor.stop();
+      }
+    } catch (error) {
+      if (cursor) {
+        try {
+          cursor.stop();
+        } catch {
+          // ignore
+        }
+      }
+      console.error('Error during threat adversarial pass:', error);
       throw error;
     }
     console.log();

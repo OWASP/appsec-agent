@@ -7,12 +7,9 @@
 
 import * as path from 'path';
 import { Command } from 'commander';
-
-// Use require for CommonJS compatibility
-// Both compiled (dist/bin/ → dist/src/) and source (bin/ → src/) use ../src relative path
-const { loadYaml, listRoles, printVersionInfo, getProjectRoot } = require(path.join(__dirname, '../src/utils'));
-const { main } = require(path.join(__dirname, '../src/main'));
-const { resolveAgentRunMcpFields } = require(path.join(__dirname, '../src/resolveAgentRunMcpEnv'));
+import { loadYaml, listRoles, printVersionInfo, getProjectRoot } from '../src/utils';
+import { main } from '../src/main';
+import { resolveAgentRunMcpFields } from '../src/resolveAgentRunMcpEnv';
 
 const program = new Command();
 

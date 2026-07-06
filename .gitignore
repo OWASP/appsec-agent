@@ -27,8 +27,12 @@ yarn-error.log*
 # no publishing.md
 PUBLISHING.md
 
-# Documentation (internal only)
-/docs/
+# Internal planning docs (user guides in docs/ are published)
+/docs/*_PLAN.md
+/docs/*_IMPLEMENTATION.md
+/docs/*_ANALYSIS.md
+/docs/AGENT_CONTEXT_ENHANCEMENT.md
+/docs/SUPPLY_CHAIN_ANALYST_PLAN.md
 
 # no cursor files  
 .cursor/

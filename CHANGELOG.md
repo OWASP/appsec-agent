@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-07-06
+
+### Added
+
+- **`e2e/pr_adversary_codex.e2e.test.ts`** — Codex provider wiring for `pr_adversary` (MCP RoleSpec → client config + structured JSON output via mocked SDK).
+- **`docs/`** — Beginner-friendly guides split from README: getting started, agents, examples, configuration, web integration, development.
+
+### Changed
+
+- **Bump `@openai/codex-sdk` to `0.141.0`** (one minor stable release behind current `0.142.x`; pinned exact per project convention).
+- **`README.md`** — Shortened landing page with quick start, agent table, and links to `docs/`.
+
+### Fixed
+
+- **`bin/agent-run.ts`** — Replace dynamic `require()` with static imports so the compiled CLI and `ts-node` entrypoint work under Node ESM rules.
+
 ## [3.1.0] - 2026-06-17
 
 ### Added

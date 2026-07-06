@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.2] - 2026-07-06
+
+### Fixed
+
+- **`CodexProvider`** — Load `@openai/codex-sdk` via native dynamic `import()` instead of CommonJS `require()`, fixing `ERR_PACKAGE_PATH_NOT_EXPORTED` when `--provider codex` is used from the compiled CLI.
+
 ## [3.2.1] - 2026-07-06
 
 Patch release; no functional changes from 3.2.0.

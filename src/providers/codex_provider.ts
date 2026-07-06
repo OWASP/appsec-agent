@@ -7,8 +7,8 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { pathToFileURL } from 'url';
 import type { Input, ThreadEvent, TurnOptions } from '@openai/codex-sdk';
-import { Codex } from '@openai/codex-sdk';
 import { ModelProvider } from './types';
 import type { QueryMessage, ResultMessage } from './query_message';
 import type { RoleSpec } from './role_spec';
@@ -33,7 +33,7 @@ export interface CodexStreamClient {
 export type CodexClientFactory = (
   spec: RoleSpec,
   codexHome: string,
-) => CodexStreamClient;
+) => CodexStreamClient | Promise<CodexStreamClient>;
 
 function createIsolatedCodexHome(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'codex-home-'));
@@ -50,8 +50,60 @@ function buildCodexEnv(codexHome: string): Record<string, string> {
   return env;
 }
 
-function defaultCodexClientFactory(spec: RoleSpec, codexHome: string): CodexStreamClient {
-  const { threadOptions, clientOptions } = buildCodexRunOptions(spec);
+/**
+ * `@openai/codex-sdk` ships as ESM-only (its package.json `exports` map defines
+ * only an `import` condition), so a CommonJS `require()` throws
+ * `ERR_PACKAGE_PATH_NOT_EXPORTED`. Load it via a native dynamic `import()` that
+ * tsc will not down-level to `require()`, resolving the package to an absolute
+ * file URL so it works no matter what cwd the CLI was spawned in.
+ */
+const nativeImport = new Function('url', 'return import(url)') as (
+  url: string,
+) => Promise<typeof import('@openai/codex-sdk')>;
+
+function resolveCodexSdkEntry(): string {
+  let dir = __dirname;
+  for (;;) {
+    const pkgJsonPath = path.join(dir, 'node_modules', '@openai', 'codex-sdk', 'package.json');
+    if (fs.existsSync(pkgJsonPath)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf-8')) as {
+        module?: string;
+        exports?: { '.'?: { import?: string } };
+      };
+      const entryRel = pkg.exports?.['.']?.import ?? pkg.module ?? 'dist/index.js';
+      return path.join(path.dirname(pkgJsonPath), entryRel);
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  throw new Error('Could not locate @openai/codex-sdk on disk (is it installed?)');
+}
+
+let codexSdkPromise: Promise<typeof import('@openai/codex-sdk')> | null = null;
+function loadCodexSdk(): Promise<typeof import('@openai/codex-sdk')> {
+  if (!codexSdkPromise) {
+    codexSdkPromise = (async () => {
+      try {
+        // Works under Jest (moduleNameMapper -> CJS mock) and any future CJS
+        // build of the SDK. The ESM-only published package throws here.
+        return require('@openai/codex-sdk') as typeof import('@openai/codex-sdk');
+      } catch {
+        // Production: the SDK is ESM-only, so fall back to a native dynamic
+        // import of its resolved on-disk entry.
+        return nativeImport(pathToFileURL(resolveCodexSdkEntry()).href);
+      }
+    })();
+  }
+  return codexSdkPromise;
+}
+
+async function defaultCodexClientFactory(
+  spec: RoleSpec,
+  codexHome: string,
+): Promise<CodexStreamClient> {
+  const { clientOptions } = buildCodexRunOptions(spec);
+  const { Codex } = await loadCodexSdk();
   return new Codex({
     ...clientOptions,
     env: buildCodexEnv(codexHome),
@@ -76,7 +128,7 @@ export class CodexProvider extends ModelProvider {
 
     try {
       const { threadOptions } = buildCodexRunOptions(roleSpec);
-      const client = this.clientFactory(roleSpec, codexHome);
+      const client = await this.clientFactory(roleSpec, codexHome);
       const thread = client.startThread(threadOptions);
       const turnOptions: TurnOptions | undefined = roleSpec.outputSchema
         ? { outputSchema: roleSpec.outputSchema }

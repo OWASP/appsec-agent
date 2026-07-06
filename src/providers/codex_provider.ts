@@ -110,6 +110,72 @@ async function defaultCodexClientFactory(
   }) as CodexStreamClient;
 }
 
+// Validation keywords that OpenAI's strict Structured Outputs mode rejects.
+const STRICT_UNSUPPORTED_SCHEMA_KEYWORDS = new Set([
+  'minimum',
+  'maximum',
+  'exclusiveMinimum',
+  'exclusiveMaximum',
+  'multipleOf',
+  'minLength',
+  'maxLength',
+  'pattern',
+  'format',
+  'minItems',
+  'maxItems',
+  'uniqueItems',
+  'default',
+]);
+
+function makeSchemaNullable(prop: Record<string, unknown>): void {
+  const type = prop.type;
+  if (typeof type === 'string') {
+    if (type !== 'null') prop.type = [type, 'null'];
+  } else if (Array.isArray(type) && !type.includes('null')) {
+    prop.type = [...type, 'null'];
+  }
+}
+
+/**
+ * Convert a JSON schema into OpenAI Structured Outputs "strict" form: every
+ * object declares `additionalProperties: false` and lists all of its
+ * properties in `required`, with previously-optional properties made nullable.
+ * Keywords unsupported by strict mode are stripped.
+ *
+ * Claude accepts the original (lenient) schema, so this normalization is applied
+ * only on the codex path; otherwise OpenAI rejects the request with
+ * `invalid_json_schema` (HTTP 400) and the CLI exits non-zero.
+ */
+export function toStrictJsonSchema(schema: unknown): unknown {
+  if (Array.isArray(schema)) {
+    return schema.map((item) => toStrictJsonSchema(item));
+  }
+  if (!schema || typeof schema !== 'object') {
+    return schema;
+  }
+  const input = schema as Record<string, unknown>;
+  const output: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (STRICT_UNSUPPORTED_SCHEMA_KEYWORDS.has(key)) continue;
+    output[key] = toStrictJsonSchema(value);
+  }
+  if (output.type === 'object' && output.properties && typeof output.properties === 'object') {
+    const properties = output.properties as Record<string, Record<string, unknown>>;
+    const allKeys = Object.keys(properties);
+    const alreadyRequired = new Set(
+      Array.isArray(output.required) ? (output.required as string[]) : [],
+    );
+    for (const key of allKeys) {
+      if (!alreadyRequired.has(key)) {
+        makeSchemaNullable(properties[key]);
+      }
+    }
+    output.required = allKeys;
+    output.additionalProperties = false;
+  }
+  return output;
+}
+
 export class CodexProvider extends ModelProvider {
   readonly provider = 'codex' as const;
 
@@ -131,7 +197,7 @@ export class CodexProvider extends ModelProvider {
       const client = await this.clientFactory(roleSpec, codexHome);
       const thread = client.startThread(threadOptions);
       const turnOptions: TurnOptions | undefined = roleSpec.outputSchema
-        ? { outputSchema: roleSpec.outputSchema }
+        ? { outputSchema: toStrictJsonSchema(roleSpec.outputSchema) as Record<string, unknown> }
         : undefined;
 
       const { events } = await thread.runStreamed(buildCodexInput(roleSpec, prompt), turnOptions);

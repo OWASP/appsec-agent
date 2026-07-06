@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.3] - 2026-07-06
+
+### Fixed
+
+- **`CodexProvider`** — Normalize role `outputSchema` with `toStrictJsonSchema()` before passing to Codex structured outputs (closes every object, makes optional fields nullable, strips unsupported keywords), fixing OpenAI `invalid_json_schema` HTTP 400 on roles like `threat_modeler` and `pr_adversary`.
+
 ## [3.2.2] - 2026-07-06
 
 ### Fixed

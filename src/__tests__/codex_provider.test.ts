@@ -2,7 +2,7 @@
  * Tests for CodexProvider stream adapter and structured output validation.
  */
 
-import { CodexProvider, roleSpecToCodexThreadOptions } from '../providers/codex_provider';
+import { CodexProvider, roleSpecToCodexThreadOptions, toStrictJsonSchema } from '../providers/codex_provider';
 import type { RoleSpec } from '../providers/role_spec';
 import { THREAT_MODEL_REPORT_SCHEMA } from '../schemas/threat_model_report';
 import { DEFAULT_MCP_SERVER_NAME } from '../mcp_internal';
@@ -57,6 +57,80 @@ describe('CodexProvider', () => {
 
   it('has provider id codex', () => {
     expect(new CodexProvider().provider).toBe('codex');
+  });
+
+  describe('toStrictJsonSchema', () => {
+    interface StrictObjectSchema {
+      type: string | string[];
+      properties: Record<string, { type?: unknown }>;
+      required: string[];
+      additionalProperties: boolean;
+    }
+
+    it('adds additionalProperties:false and requires all keys on every object', () => {
+      const strict = toStrictJsonSchema({
+        type: 'object',
+        required: ['a'],
+        properties: {
+          a: { type: 'string' },
+          b: { type: 'string' },
+          nested: {
+            type: 'object',
+            required: [],
+            properties: { c: { type: 'integer' } },
+          },
+        },
+      }) as StrictObjectSchema;
+
+      expect(strict.additionalProperties).toBe(false);
+      expect(strict.required.sort()).toEqual(['a', 'b', 'nested']);
+      // Optional 'b' becomes nullable; required 'a' does not.
+      expect(strict.properties.b.type).toEqual(['string', 'null']);
+      expect(strict.properties.a.type).toBe('string');
+      const nested = strict.properties.nested as unknown as StrictObjectSchema;
+      expect(nested.additionalProperties).toBe(false);
+      expect(nested.required).toEqual(['c']);
+      expect(nested.properties.c.type).toEqual(['integer', 'null']);
+    });
+
+    it('strips strict-unsupported keywords and recurses into array items', () => {
+      const strict = toStrictJsonSchema({
+        type: 'object',
+        required: ['nums'],
+        properties: {
+          nums: {
+            type: 'array',
+            items: { type: 'integer', minimum: 0, maximum: 10 },
+          },
+        },
+      }) as StrictObjectSchema & { properties: { nums: { items: Record<string, unknown> } } };
+
+      expect(strict.properties.nums.items).not.toHaveProperty('minimum');
+      expect(strict.properties.nums.items).not.toHaveProperty('maximum');
+      expect(strict.properties.nums.items.type).toBe('integer');
+    });
+
+    it('produces a fully strict THREAT_MODEL_REPORT_SCHEMA (every object closed + all-required)', () => {
+      const strict = toStrictJsonSchema(THREAT_MODEL_REPORT_SCHEMA);
+      const problems: string[] = [];
+      const walk = (node: unknown, path: string): void => {
+        if (Array.isArray(node)) {
+          node.forEach((n, i) => walk(n, `${path}[${i}]`));
+          return;
+        }
+        if (!node || typeof node !== 'object') return;
+        const obj = node as Record<string, unknown>;
+        if (obj.type === 'object' && obj.properties) {
+          if (obj.additionalProperties !== false) problems.push(`${path}: additionalProperties`);
+          const keys = Object.keys(obj.properties as Record<string, unknown>);
+          const req = (obj.required as string[]) ?? [];
+          if (keys.length !== req.length) problems.push(`${path}: required mismatch`);
+        }
+        for (const [k, v] of Object.entries(obj)) walk(v, `${path}.${k}`);
+      };
+      walk(strict, '$');
+      expect(problems).toEqual([]);
+    });
   });
 
   it('roleSpecToCodexThreadOptions sets skipGitRepoCheck and read-only sandbox for json threat modeler', () => {

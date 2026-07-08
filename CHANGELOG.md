@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-07-08
+
+### Changed — `queryCodebaseGraph` advanced kinds enum (v0.9.0 parent contract)
+
+Adds `data_flow`, `cross_service`, and `code_snippet` to the shared `CODEBASE_GRAPH_QUERY_KINDS` enum plus optional `include_neighbors` for `code_snippet`. Parent app gates live registration behind `quality_tier_codebase_graph_advanced_kinds` until dogfood enables it. Raises `target` max length from 256 to 512.
+
 ## [3.2.3] - 2026-07-06
 
 ### Fixed

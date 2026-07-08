@@ -51,6 +51,10 @@ import {
   buildMcpInternalToolNames,
 } from '../src/agent_options';
 import { resolveAgentRunMcpFields } from '../src/resolveAgentRunMcpEnv';
+import {
+  parseQueryCodebaseGraphToolArgs,
+  CODEBASE_GRAPH_ADVANCED_QUERY_KINDS,
+} from '../src/schemas/mcp_query_codebase_graph';
 
 jest.mock('../src/agent_actions', () => ({
   AgentActions: jest.fn(),
@@ -456,6 +460,30 @@ describe('e2e pr_reviewer + --mcp-server-url (mocked LLM, v2.4.0)', () => {
       } finally {
         process.chdir(prevCwd);
       }
+    });
+  });
+
+  describe('queryCodebaseGraph advanced kinds (v3.3.0 schema)', () => {
+    it.each(CODEBASE_GRAPH_ADVANCED_QUERY_KINDS)(
+      'parseQueryCodebaseGraphToolArgs accepts advanced kind %s for the live MCP tool surface',
+      (kind) => {
+        const parsed = parseQueryCodebaseGraphToolArgs({
+          kind,
+          target: 'proj.src.example.Foo.bar',
+          ...(kind === 'code_snippet' ? { include_neighbors: true } : {}),
+        });
+        expect(parsed.kind).toBe(kind);
+        expect(parsed.target).toBe('proj.src.example.Foo.bar');
+        if (kind === 'code_snippet') {
+          expect(parsed.include_neighbors).toBe(true);
+        }
+      },
+    );
+
+    it('rejects advanced kinds with empty target (fail-open contract at parse boundary)', () => {
+      expect(() =>
+        parseQueryCodebaseGraphToolArgs({ kind: 'data_flow', target: '' }),
+      ).toThrow();
     });
   });
 });

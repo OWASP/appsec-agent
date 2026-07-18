@@ -31,6 +31,8 @@ export interface AgentArgs {
   runtime_enrichment_context?: string;
   /** v2.6.0 / parent-app plan §8.18 Phase 2: per-changed-file structural-graph summary (callers/callees/blast-radius) JSON (pr_reviewer only). */
   codebase_graph_context?: string;
+  /** Lane 3 Phase 2 / parent-app plan docs/LANE3_CROSS_REPO_TOPOLOGY_PLAN.md: cross-repo service-topology peers (typed relationship + enforcement note) JSON (pr_reviewer only). */
+  cross_repo_context?: string;
   /** v2.5.0 / parent-app plan §3.8: bucketed dismissal-signal JSON for the learned_guidance_synthesizer role. */
   inputs?: string;
   /** A/B: treatment arm for pr_reviewer (stricter false-positive instructions). */

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.4.0] - 2026-07-18
+
+### Added — `--cross-repo-context` front-load (Lane 3 Phase 2/A, parent-app `docs/LANE3_CROSS_REPO_TOPOLOGY_PLAN.md`)
+
+New `src/schemas/cross_repo.ts` (`CrossRepoContext`/`CrossRepoPeerEntry`, `parseCrossRepoContext`, `formatCrossRepoContextForPrompt`) plus a fifth structural front-load slot alongside `--import-graph-context` / `--runtime-enrichment-context` / `--codebase-graph-context`: `--cross-repo-context <file>`, consumed only by `pr_reviewer` diff-context mode (same role-gate + fail-open pattern as the other three). Distinct from `--codebase-graph-context`: this is a **typed cross-repo service-boundary edge** (e.g. "this repo is a client of that BFF, and the BFF's fail-open flag governs whether callers get a truthful answer") sourced from the parent app's `project_relationships` graph, not a symbol-level structural query — no live cross-repo symbol correlation yet (parent app's cbm `CROSS_*` edges are not populated in prod). Formatter teaches the model to treat `enforcement_note` as advisory, as-of evidence — downrank a client finding when the peer enforces, corroborate a peer/BFF finding when it hinges on a spoofable client value. The parent-app flag defaults off; this release must ship before the parent app pins an agent version and flips it.
+
 ## [3.3.0] - 2026-07-08
 
 ### Changed — `queryCodebaseGraph` advanced kinds enum (v0.9.0 parent contract)

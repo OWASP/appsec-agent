@@ -55,6 +55,11 @@ import {
   type CodebaseGraphContext,
 } from './schemas/codebase_graph';
 import {
+  parseCrossRepoContext,
+  formatCrossRepoContextForPrompt,
+  type CrossRepoContext,
+} from './schemas/cross_repo';
+import {
   buildLearnedGuidanceUserPrompt,
   parseLearnedGuidanceInputs,
   type LearnedGuidanceInputs,
@@ -259,6 +264,46 @@ function loadCodebaseGraphContextFile(
     return parseCodebaseGraphContext(data);
   } catch (e: any) {
     console.warn(`⚠️  Invalid codebase-graph context ${safePath} (ignored): ${e?.message || e}`);
+    return null;
+  }
+}
+
+/**
+ * Load and validate a cross-repo context JSON file (Lane 3 Phase 2 /
+ * parent-app plan docs/LANE3_CROSS_REPO_TOPOLOGY_PLAN.md). On any
+ * parse/IO error we log and return `null` (fail-open): the downstream
+ * scan should not be blocked by a bad cross-repo payload; the parent
+ * app's `composeCrossRepoContextPayload` is the authoritative producer
+ * and this context is purely advisory.
+ */
+function loadCrossRepoContextFile(
+  crossRepoContextPath: string,
+  cwd: string,
+): CrossRepoContext | null {
+  const resolvedPath = validateInputFilePath(crossRepoContextPath, cwd);
+  if (!resolvedPath) {
+    const safePath = sanitizePathForError(crossRepoContextPath);
+    console.warn(`⚠️  Invalid cross-repo context path (ignored): ${safePath}`);
+    return null;
+  }
+  const safePath = sanitizePathForError(resolvedPath);
+  if (!fs.existsSync(resolvedPath)) {
+    console.warn(`⚠️  Cross-repo context file not found (ignored): ${safePath}`);
+    return null;
+  }
+  let data: unknown;
+  try {
+    const content = fs.readFileSync(resolvedPath, 'utf-8');
+    data = JSON.parse(content);
+  } catch (error: any) {
+    const errorMessage = error?.message || 'Unknown error';
+    console.warn(`⚠️  Failed to read cross-repo context ${safePath} (ignored): ${errorMessage}`);
+    return null;
+  }
+  try {
+    return parseCrossRepoContext(data);
+  } catch (e: any) {
+    console.warn(`⚠️  Invalid cross-repo context ${safePath} (ignored): ${e?.message || e}`);
     return null;
   }
 }
@@ -729,6 +774,7 @@ function buildDiffReviewPrompt(
   importGraphSummary?: string,
   runtimeEnrichmentSummary?: string,
   codebaseGraphSummary?: string,
+  crossRepoSummary?: string,
 ): string {
   const formattedDiff = formatDiffContextForPrompt(diffContext);
   
@@ -776,6 +822,11 @@ Developer context reflects the team's stated practices. If you find evidence in 
 
   if (codebaseGraphSummary && codebaseGraphSummary.trim()) {
     prompt += `${codebaseGraphSummary}
+`;
+  }
+
+  if (crossRepoSummary && crossRepoSummary.trim()) {
+    prompt += `${crossRepoSummary}
 `;
   }
 
@@ -889,6 +940,22 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
         );
       }
 
+      // Lane 3 Phase 2 / parent-app plan docs/LANE3_CROSS_REPO_TOPOLOGY_PLAN.md:
+      // optional cross-repo service-topology peers (typed relationship +
+      // enforcement note) from the parent app's composeCrossRepoContextPayload.
+      // Fail-open on any parse/IO error — this context is purely advisory;
+      // the parent app's flag defaults off and no live agent behavior depends
+      // on it existing.
+      const crossRepoCtx = args.cross_repo_context
+        ? loadCrossRepoContextFile(args.cross_repo_context, currentWorkingDir)
+        : null;
+      const crossRepoSummary = crossRepoCtx ? formatCrossRepoContextForPrompt(crossRepoCtx) : '';
+      if (crossRepoCtx) {
+        console.log(
+          `Using cross-repo context: ${crossRepoCtx.peers.length} peer(s), coverage=${crossRepoCtx.coverage ?? 'n/a'}`,
+        );
+      }
+
       const tmpSrcDir = args.src_dir ? validateAndCopySrcDir(args.src_dir, currentWorkingDir) : null;
       const chunkingOpts = getChunkingOptions(confDict, args.environment, args);
       const { batches, skippedFiles, skippedDueToBatches } = splitIntoBatches(diffContext, chunkingOpts);
@@ -904,6 +971,7 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
           importGraphSummary,
           runtimeEnrichmentSummary,
           codebaseGraphSummary,
+          crossRepoSummary,
         );
         const structuredResult = await agentActions.diffReviewerWithOptions(userPrompt, tmpSrcDir, undefined, args.no_tools);
         if (structuredResult) {
@@ -929,6 +997,7 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
               importGraphSummary,
               runtimeEnrichmentSummary,
               codebaseGraphSummary,
+              crossRepoSummary,
             );
             const batchResult = await agentActions.diffReviewerWithOptions(userPrompt, tmpSrcDir, (result) => {
               if (result.total_cost_usd !== undefined && result.total_cost_usd > 0) {

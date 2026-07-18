@@ -128,6 +128,7 @@ Merged JSON reports may include a **Skipped** section and `meta.total_cost_usd`.
 | `--import-graph-context` | Per-file import reachability (`pr_reviewer` + diff only) |
 | `--runtime-enrichment-context` | Production incident / hot-file hints |
 | `--codebase-graph-context` | Callers/callees / blast radius from codebase graph |
+| `--cross-repo-context` | Cross-repo service-topology peers (typed relationship + enforcement note) |
 | `--mcp-server-url` | Live MCP queries instead of pre-loaded JSON |
 
 ---

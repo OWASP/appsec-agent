@@ -87,6 +87,13 @@ export {
 } from './schemas/codebase_graph';
 
 export {
+  type CrossRepoContext,
+  type CrossRepoPeerEntry,
+  parseCrossRepoContext,
+  formatCrossRepoContextForPrompt,
+} from './schemas/cross_repo';
+
+export {
   CODEBASE_GRAPH_QUERY_KINDS,
   type CodebaseGraphQueryKind,
   queryCodebaseGraphToolArgsSchema,

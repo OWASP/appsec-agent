@@ -46,6 +46,10 @@ program
     'JSON file with per-changed-file structural-graph summary (callers/callees/blast-radius) sourced from codebase-memory-mcp (v2.6.0 / parent-app plan §8.18 Phase 2; use with -r pr_reviewer)',
   )
   .option(
+    '--cross-repo-context <file>',
+    'JSON file with cross-repo service-topology peers (typed relationship + enforcement note) sourced from the parent app\'s project_relationships graph (Lane 3 Phase 2; use with -r pr_reviewer)',
+  )
+  .option(
     '--inputs <file>',
     'JSON file with bucketed dismissal-signal inputs for learned_guidance_synthesizer (v2.5.0 / parent-app plan §3.8; use with -r learned_guidance_synthesizer)',
   )
@@ -168,6 +172,7 @@ const args = {
   import_graph_context: options.importGraphContext,
   runtime_enrichment_context: options.runtimeEnrichmentContext,
   codebase_graph_context: options.codebaseGraphContext,
+  cross_repo_context: options.crossRepoContext,
   inputs: options.inputs,
   experiment_enabled: options.experimentEnabled === true,
   model: model,
@@ -228,6 +233,19 @@ if (args.codebase_graph_context) {
     console.warn('⚠️  Warning: --codebase-graph-context is only consumed by pr_reviewer in diff-context mode.');
     console.warn(`   Current role: ${args.role}${args.diff_context ? '' : ' (no --diff-context supplied)'}. The codebase-graph context will be ignored.`);
     console.warn('   Use -r pr_reviewer --diff-context <file> to enable §8.18 Phase 2 structural-graph hints.\n');
+  }
+}
+
+// Lane 3 Phase 2 / parent-app plan docs/LANE3_CROSS_REPO_TOPOLOGY_PLAN.md:
+// cross-repo context is only consumed by the pr_reviewer diff-mode prompt.
+// Same role-gate as --import-graph-context / --runtime-enrichment-context /
+// --codebase-graph-context — other roles simply ignore it (fail-open).
+if (args.cross_repo_context) {
+  console.log('Using cross-repo context file:', args.cross_repo_context);
+  if (!(args.role === 'pr_reviewer' && args.diff_context)) {
+    console.warn('⚠️  Warning: --cross-repo-context is only consumed by pr_reviewer in diff-context mode.');
+    console.warn(`   Current role: ${args.role}${args.diff_context ? '' : ' (no --diff-context supplied)'}. The cross-repo context will be ignored.`);
+    console.warn('   Use -r pr_reviewer --diff-context <file> to enable Lane 3 cross-repo hints.\n');
   }
 }
 

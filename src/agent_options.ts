@@ -50,14 +50,20 @@ export interface ToolUsageLog {
  * System-prompt suffix for `pr_reviewer` / `code_reviewer` when
  * `--mcp-server-url` is set. Steers the model toward all live parent-app
  * MCP tools by exact SDK tool id — `queryFindingsHistory`,
- * `queryImportGraph`, `queryRuntimeEnrichment`, and `queryCodebaseGraph`
- * (parent-app plan §8.18 Phase 3: bounded structural graph queries; no raw
- * Cypher).
+ * `queryImportGraph`, `queryRuntimeEnrichment`, `queryCodebaseGraph`, and
+ * `queryCrossRepoGraph` (parent-app plan §8.18 Phase 3: bounded structural
+ * graph queries; no raw Cypher).
  *
  * v2.8.0: extended to `code_reviewer` (full-repo, Lane 2). Previously only
  * `pr_reviewer` received the nudge; `code_reviewer` had MCP attached only
  * through `getDiffReviewerOptions` when called with `--diff-context`, never
  * through `getCodeReviewerOptions`. Closing that gap is the B5a deliverable.
+ *
+ * v2.9.0 (Lane 3 Phase 3): added `queryCrossRepoGraph` — the live
+ * counterpart to the front-loaded `--cross-repo-context` JSON, so the
+ * reviewer can pull peer-project topology (BFF callers, service callees,
+ * shared libraries, deployment siblings) and their enforcement notes on
+ * demand instead of relying only on the payload captured at scan-start.
  *
  * @param mcpServerName - Same override as `attachMcpServerToOptions`
  *   (`DEFAULT_MCP_SERVER_NAME` when omitted).
@@ -70,9 +76,10 @@ export function buildPrReviewerMcpNudgeSystemPromptSuffix(
   const importGraphTool = `mcp__${name}__queryImportGraph`;
   const runtimeTool = `mcp__${name}__queryRuntimeEnrichment`;
   const codebaseGraphTool = `mcp__${name}__queryCodebaseGraph`;
+  const crossRepoGraphTool = `mcp__${name}__queryCrossRepoGraph`;
   return `
 
-**Backend-backed MCP tools:** Call \`${findingsTool}\` when prior findings, dismissals, or fingerprint history for the changed files or CWE would affect severity or confidence. Call \`${importGraphTool}\` with the PR file paths when you need authoritative import-graph reachability (callers, entry points) instead of inferring from the diff alone. Call \`${runtimeTool}\` with the changed file paths when you need runtime-incident or hot-files signal for operational risk instead of guessing from the diff alone. Call \`${codebaseGraphTool}\` with \`kind\` + \`target\` when you need symbol-level call-graph signal (callers, callees, reachability, or structural symbol search) from the parent-indexed default-branch graph instead of guessing from the diff alone. Prefer these tools over guessing.
+**Backend-backed MCP tools:** Call \`${findingsTool}\` when prior findings, dismissals, or fingerprint history for the changed files or CWE would affect severity or confidence. Call \`${importGraphTool}\` with the PR file paths when you need authoritative import-graph reachability (callers, entry points) instead of inferring from the diff alone. Call \`${runtimeTool}\` with the changed file paths when you need runtime-incident or hot-files signal for operational risk instead of guessing from the diff alone. Call \`${codebaseGraphTool}\` with \`kind\` + \`target\` when you need symbol-level call-graph signal (callers, callees, reachability, or structural symbol search) from the parent-indexed default-branch graph instead of guessing from the diff alone. Call \`${crossRepoGraphTool}\` (optionally with \`peer_name_filter\`) when a finding's true impact depends on a peer repo you can't see in this diff — e.g. a BFF's fail-open middleware, a shared library's default, or which services call this endpoint — instead of assuming this repo is the whole picture. Prefer these tools over guessing.
 `;
 }
 

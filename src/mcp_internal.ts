@@ -14,6 +14,8 @@ export const MCP_INTERNAL_TOOL_NAMES = [
   'queryImportGraph',
   'queryRuntimeEnrichment',
   'queryCodebaseGraph',
+  /** Lane 3 Phase 3 — live counterpart to the front-loaded `--cross-repo-context` JSON. */
+  'queryCrossRepoGraph',
 ] as const;
 
 export function buildMcpInternalToolNames(

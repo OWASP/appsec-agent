@@ -235,7 +235,7 @@ describe('e2e pr_reviewer + --mcp-server-url (mocked LLM, v2.4.0)', () => {
         [MCP_INTERNAL_SERVER_NAME]: { type: 'http', url: TEST_MCP_URL },
       });
       // The diff-reviewer subagent's tools whitelist is the v2.3.0 list
-      // PLUS the four backend-backed tools (in that order).
+      // PLUS the five backend-backed tools (in that order).
       const agent = (opts.agents as any)['diff-reviewer'];
       expect(agent.tools).toEqual([
         'Read',
@@ -243,7 +243,7 @@ describe('e2e pr_reviewer + --mcp-server-url (mocked LLM, v2.4.0)', () => {
         'Write',
         ...expectedMcpToolNames,
       ]);
-      // §8.17 phase 3 + §8.18 Phase 3: system prompt nudge names all four MCP tools.
+      // §8.17 phase 3 + §8.18 Phase 3 + Lane 3 Phase 3: system prompt nudge names all five MCP tools.
       expect(agent.prompt).toContain('**Backend-backed MCP tools:**');
       expect(agent.prompt).toContain('`mcp__appsec-internal__queryImportGraph`');
       expect(agent.prompt).toContain('`mcp__appsec-internal__queryFindingsHistory`');
@@ -252,6 +252,9 @@ describe('e2e pr_reviewer + --mcp-server-url (mocked LLM, v2.4.0)', () => {
       );
       expect(agent.prompt).toContain(
         '`mcp__appsec-internal__queryCodebaseGraph`',
+      );
+      expect(agent.prompt).toContain(
+        '`mcp__appsec-internal__queryCrossRepoGraph`',
       );
     } finally {
       process.chdir(prevCwd);

@@ -129,7 +129,7 @@ Merged JSON reports may include a **Skipped** section and `meta.total_cost_usd`.
 | `--runtime-enrichment-context` | Production incident / hot-file hints |
 | `--codebase-graph-context` | Callers/callees / blast radius from codebase graph |
 | `--cross-repo-context` | Cross-repo service-topology peers (typed relationship + enforcement note) |
-| `--mcp-server-url` | Live MCP queries instead of pre-loaded JSON |
+| `--mcp-server-url` | Live MCP queries instead of pre-loaded JSON — now also exposes `queryCrossRepoGraph` (live counterpart to `--cross-repo-context`, optional `peer_name_filter`) alongside `queryFindingsHistory`/`queryImportGraph`/`queryRuntimeEnrichment`/`queryCodebaseGraph` |
 
 ---
 

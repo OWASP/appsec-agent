@@ -1,5 +1,5 @@
 /**
- * Tests for the MCP-server wiring on the four reasoning role builders:
+ * Tests for the MCP-server wiring on the reasoning role builders:
  * - getDiffReviewerOptions     (pr_reviewer / code_reviewer)
  * - getCodeFixerOptions        (code_fixer)
  * - getFindingValidatorOptions (finding_validator)
@@ -56,6 +56,7 @@ const expectedDefaultMcpToolNames = [
   'mcp__appsec-internal__queryImportGraph',
   'mcp__appsec-internal__queryRuntimeEnrichment',
   'mcp__appsec-internal__queryCodebaseGraph',
+  'mcp__appsec-internal__queryCrossRepoGraph',
 ];
 
 const expectedCustomMcpToolNames = [
@@ -63,6 +64,7 @@ const expectedCustomMcpToolNames = [
   `mcp__${CUSTOM_SERVER_NAME}__queryImportGraph`,
   `mcp__${CUSTOM_SERVER_NAME}__queryRuntimeEnrichment`,
   `mcp__${CUSTOM_SERVER_NAME}__queryCodebaseGraph`,
+  `mcp__${CUSTOM_SERVER_NAME}__queryCrossRepoGraph`,
 ];
 
 describe('AgentOptions MCP wiring', () => {
@@ -75,12 +77,13 @@ describe('AgentOptions MCP wiring', () => {
       expect(MCP_INTERNAL_SERVER_NAME).toBe(DEFAULT_MCP_SERVER_NAME);
     });
 
-    it('lists exactly the four backend-backed tools', () => {
+    it('lists exactly the five backend-backed tools', () => {
       expect(MCP_INTERNAL_TOOL_NAMES).toEqual([
         'queryFindingsHistory',
         'queryImportGraph',
         'queryRuntimeEnrichment',
         'queryCodebaseGraph',
+        'queryCrossRepoGraph',
       ]);
     });
 
@@ -213,7 +216,7 @@ describe('AgentOptions MCP wiring', () => {
     });
 
     describe('pr_reviewer MCP system-prompt nudge (§8.17 + §8.18 Phase 3)', () => {
-      it('appends all four live-tool nudges when MCP URL is set', () => {
+      it('appends all five live-tool nudges when MCP URL is set', () => {
         const ao = new AgentOptions(baseConfDict, 'default');
         const opts = ao.getDiffReviewerOptions(
           'pr_reviewer',
@@ -234,6 +237,7 @@ describe('AgentOptions MCP wiring', () => {
           '`mcp__appsec-internal__queryRuntimeEnrichment`',
         );
         expect(prompt).toContain('`mcp__appsec-internal__queryCodebaseGraph`');
+        expect(prompt).toContain('`mcp__appsec-internal__queryCrossRepoGraph`');
       });
 
       it('uses mcpServerName in the nudge tool ids', () => {
@@ -260,6 +264,9 @@ describe('AgentOptions MCP wiring', () => {
         );
         expect(prompt).toContain(
           `\`mcp__${CUSTOM_SERVER_NAME}__queryCodebaseGraph\``,
+        );
+        expect(prompt).toContain(
+          `\`mcp__${CUSTOM_SERVER_NAME}__queryCrossRepoGraph\``,
         );
       });
 
@@ -304,6 +311,9 @@ describe('AgentOptions MCP wiring', () => {
         );
         expect(suffix).toContain(
           `\`mcp__${CUSTOM_SERVER_NAME}__queryCodebaseGraph\``,
+        );
+        expect(suffix).toContain(
+          `\`mcp__${CUSTOM_SERVER_NAME}__queryCrossRepoGraph\``,
         );
       });
     });
@@ -384,6 +394,7 @@ describe('AgentOptions MCP wiring', () => {
         '`mcp__appsec-internal__queryRuntimeEnrichment`',
       );
       expect(prompt).toContain('`mcp__appsec-internal__queryCodebaseGraph`');
+      expect(prompt).toContain('`mcp__appsec-internal__queryCrossRepoGraph`');
     });
 
     it('does not append the nudge when mcpServerUrl is omitted', () => {
@@ -439,7 +450,7 @@ describe('AgentOptions MCP wiring', () => {
       expect(agent.tools).toEqual(['Read', 'Grep', ...expectedCustomMcpToolNames]);
     });
 
-    it('exposes all four MCP_INTERNAL_TOOL_NAMES to the agent', () => {
+    it('exposes all five MCP_INTERNAL_TOOL_NAMES to the agent', () => {
       const ao = new AgentOptions(baseConfDict, 'default');
       const opts = ao.getFpAdversaryOptions(
         'fp_adversary',

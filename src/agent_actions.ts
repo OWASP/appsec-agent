@@ -48,9 +48,9 @@ export interface AgentArgs {
   /**
    * URL of a parent-app-managed per-scan MCP server exposing backend-backed
    * tools (`queryFindingsHistory`, `queryImportGraph`,
-   * `queryRuntimeEnrichment`, `queryCodebaseGraph`). When set, the role builders attach
+   * `queryRuntimeEnrichment`, `queryCodebaseGraph`, `queryCrossRepoGraph`). When set, the role builders attach
    * `Options.mcpServers` and extend each agent's `tools` whitelist with the
-   * four `mcp__<server-name>__*` names so the SDK routes those
+   * five `mcp__<server-name>__*` names so the SDK routes those
    * `tool_use` blocks to the parent app's HTTP server. When omitted, the
    * agent's tool surface is unchanged from v2.3.0 (Read/Grep/Write/Bash only,
    * per role) — the front-loaded `--import-graph-context` /

@@ -348,7 +348,7 @@ export function buildFpAdversaryUserPrompt(
   lines.push('```');
   lines.push('');
   lines.push(
-    'Analyze with Read/Grep against the source tree (and MCP tools if available — queryImportGraph for reachability, queryCodebaseGraph for callers/callees, queryRuntimeEnrichment for runtime-incident overlap) as needed, then output the verdict array JSON only (structured output).',
+    'Analyze with Read/Grep against the source tree (and MCP tools if available — queryImportGraph for reachability, queryCodebaseGraph for callers/callees, queryRuntimeEnrichment for runtime-incident overlap, queryCrossRepoGraph for peer-repo enforcement posture when a finding\'s exploitability depends on a BFF or shared-library peer) as needed, then output the verdict array JSON only (structured output).',
   );
 
   return lines.join('\n');

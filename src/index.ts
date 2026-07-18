@@ -101,3 +101,9 @@ export {
   parseQueryCodebaseGraphToolArgs,
 } from './schemas/mcp_query_codebase_graph';
 
+export {
+  queryCrossRepoGraphToolArgsSchema,
+  type QueryCrossRepoGraphToolArgs,
+  parseQueryCrossRepoGraphToolArgs,
+} from './schemas/mcp_query_cross_repo';
+

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.5.0] - 2026-07-18
+
+### Added — `queryCrossRepoGraph` MCP tool (Lane 3 Phase 3/B, parent-app `docs/LANE3_CROSS_REPO_TOPOLOGY_PLAN.md`)
+
+Fifth backend-backed MCP tool, the live counterpart to the `--cross-repo-context` front-load slot shipped in 3.4.0. `src/mcp_internal.ts`: `queryCrossRepoGraph` added to `MCP_INTERNAL_TOOL_NAMES`, auto-attached to every MCP-aware role via the existing shared array — no per-role wiring code. New `src/schemas/mcp_query_cross_repo.ts` (`queryCrossRepoGraphToolArgsSchema`, Zod `.strict()`): args are `{ peer_name_filter?: string }` (1–256 chars), matching the parent app's actual `internalToolsServer.ts` wire contract rather than the originally-sketched `{target, direction}` shape. `buildPrReviewerMcpNudgeSystemPromptSuffix()` gains a fifth sentence naming the tool and when to call it — "a finding's true impact depends on a peer repo you can't see in this diff (a BFF's fail-open middleware, a shared library's default, or which services call this endpoint)". `fp_adversary_pass.ts`'s prompt builder also lists it for peer-repo enforcement posture during the adversarial re-check pass.
+
+- **Why a dedicated tool, not `queryCodebaseGraph{kind:'cross_service'}`** — a latent `cross_service` kind already exists on `queryCodebaseGraph`, but a separate tool keeps a clean per-scan budget/telemetry boundary between symbol-level structural queries and typed cross-repo-relationship queries.
+- **Tests** — `mcp_query_cross_repo.test.ts` (7 cases: empty object, filter bounds, non-string/extra-key rejection). Updated the hardcoded "four tools" → "five tools" assertions across `agent_options.mcp.test.ts` (both tool-name arrays + every nudge-text `toContain` site for `pr_reviewer`/`code_reviewer`/`fp_adversary`) and `e2e/pr_reviewer_mcp.e2e.test.ts` (fifth-tool-in-whitelist + nudge-text assertions).
+- **Scope note** — no dedicated system-prompt block was added; peer-enforcement reasoning guidance is covered by the front-loaded user-prompt block (3.4.0) plus this nudge sentence. Revisit with a heavier system-prompt treatment only if shadow-mode scan data shows the lighter guidance insufficient.
+- Full suite green (43 suites / 681 tests) + `tsc --noEmit` clean.
+
 ## [3.4.0] - 2026-07-18
 
 ### Added — `--cross-repo-context` front-load (Lane 3 Phase 2/A, parent-app `docs/LANE3_CROSS_REPO_TOPOLOGY_PLAN.md`)

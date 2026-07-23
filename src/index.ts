@@ -55,6 +55,18 @@ export {
   emptySecurityReport,
 } from './schemas/adversarial_pass';
 export {
+  type QaFinding,
+  type QaReviewReport,
+  QA_REPORT_SCHEMA,
+} from './schemas/qa_report';
+export {
+  type QaAdversarialPassContext,
+  parseQaAdversarialPassContext,
+  buildQaAdversarialUserPrompt,
+  toQaFindings,
+  emptyQaReport,
+} from './schemas/qa_adversarial_pass';
+export {
   type FpAdversaryPassContext,
   type FpAdversaryPassFinding,
   type FpAdversaryVerdict,

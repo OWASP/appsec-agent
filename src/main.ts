@@ -34,6 +34,12 @@ import {
   type AdversarialPassContext,
 } from './schemas/adversarial_pass';
 import {
+  parseQaAdversarialPassContext,
+  buildQaAdversarialUserPrompt,
+  emptyQaReport,
+  type QaAdversarialPassContext,
+} from './schemas/qa_adversarial_pass';
+import {
   parseFpAdversaryPassContext,
   buildFpAdversaryUserPrompt,
   emptyFpAdversaryReport,
@@ -377,6 +383,43 @@ function loadAdversarialContextFile(adversarialContextPath: string, cwd: string)
     console.error(`Error: Invalid adversarial context: ${e?.message || e}`);
     process.exit(1);
   }
+  throw new Error('unreachable');
+}
+
+/**
+ * Load QA adversarial pass input (candidate correctness findings + optional PR metadata).
+ */
+function loadQaAdversarialContextFile(
+  adversarialContextPath: string,
+  cwd: string,
+): QaAdversarialPassContext {
+  const resolvedPath = validateInputFilePath(adversarialContextPath, cwd);
+  if (!resolvedPath) {
+    const safePath = sanitizePathForError(adversarialContextPath);
+    console.error(`Error: Invalid QA adversarial context file path: ${safePath}`);
+    process.exit(1);
+  }
+  const safePath = sanitizePathForError(resolvedPath);
+  if (!fs.existsSync(resolvedPath)) {
+    console.error(`Error: QA adversarial context file not found: ${safePath}`);
+    process.exit(1);
+  }
+  let data: unknown;
+  try {
+    const content = fs.readFileSync(resolvedPath, 'utf-8');
+    data = JSON.parse(content);
+  } catch (error: any) {
+    const errorMessage = error?.message || 'Unknown error';
+    console.error(`Error: Failed to read QA adversarial context file ${safePath}: ${errorMessage}`);
+    process.exit(1);
+  }
+  try {
+    return parseQaAdversarialPassContext(data);
+  } catch (e: any) {
+    console.error(`Error: Invalid QA adversarial context: ${e?.message || e}`);
+    process.exit(1);
+  }
+  throw new Error('unreachable');
 }
 
 /**
@@ -747,7 +790,12 @@ const DEFAULT_MAX_BATCHES = 3;
  * Get chunking options from config and args (args override config).
  */
 function getChunkingOptions(confDict: any, environment: string, args: AgentArgs): ChunkingOptions {
-  const role = args.role === 'pr_reviewer' || args.role === 'code_reviewer' ? args.role : 'code_reviewer';
+  const role =
+    args.role === 'pr_reviewer' ||
+    args.role === 'pr_qa_reviewer' ||
+    args.role === 'code_reviewer'
+      ? args.role
+      : 'code_reviewer';
   const roleOpts = confDict?.[environment]?.[role]?.options ?? confDict?.default?.[role]?.options;
   const fromConfig = {
     maxTokensPerBatch: roleOpts?.diff_review_max_tokens_per_batch ?? DEFAULT_MAX_TOKENS_PER_BATCH,
@@ -764,7 +812,7 @@ function getChunkingOptions(confDict: any, environment: string, args: AgentArgs)
 }
 
 /**
- * Build user prompt for PR diff-focused code review
+ * Build user prompt for PR diff-focused security code review
  */
 function buildDiffReviewPrompt(
   diffContext: DiffContext, 
@@ -841,6 +889,91 @@ Focus only on the changed code - do not report issues in unchanged code.`;
   return prompt;
 }
 
+/**
+ * Build user prompt for PR diff-focused QA / correctness review (Lane 5).
+ * Writes to the caller-requested filename (typically `code_review_report.json`).
+ */
+function buildQaDiffReviewPrompt(
+  diffContext: DiffContext,
+  outputFile: string,
+  outputFormat: string,
+  additionalContext?: string,
+  importGraphSummary?: string,
+  runtimeEnrichmentSummary?: string,
+  codebaseGraphSummary?: string,
+  crossRepoSummary?: string,
+): string {
+  const formattedDiff = formatDiffContextForPrompt(diffContext);
+
+  let prompt = `You are reviewing a Pull Request for correctness / QA bugs (not security vulnerabilities).
+
+${formattedDiff}
+
+## Review Instructions
+
+Analyze ONLY the changed code shown above for logic and correctness issues. Focus on:
+1. **Null / undefined dereferences** and missing guards
+2. **Unhandled errors / promises** (missing await, swallowed exceptions)
+3. **Resource leaks** (handles, listeners, streams, timers)
+4. **Off-by-one / boundary** and empty-collection edge cases
+5. **Incorrect conditionals** and inverted logic
+6. **Race conditions / await-in-loop / missing await**
+7. **Type coercion** surprises and unsafe casts
+8. **Dead or unreachable branches** introduced by the change
+9. **API contract misuse** (wrong args, ignored returns, broken invariants)
+
+For each issue found:
+- Use finding ids \`QA-001\`, \`QA-002\`, … and a stable \`bug_class\`
+- Cite the specific file and line numbers from the changes
+- Provide \`reproduction_steps\` (concrete steps) and a short \`causal_chain\` (x -> y -> z)
+- Explain the concrete incorrect outcome (impact) and a remediation recommendation
+- Do NOT report style, naming, or pure refactor suggestions
+- Do NOT report security vulnerabilities (separate reviewer handles those)
+
+`;
+
+  if (additionalContext) {
+    prompt += `## Project Intelligence (use this to reduce false positives)
+${additionalContext}
+
+When project intelligence indicates guards, frameworks, or patterns that already prevent a class of correctness bug, DO NOT report findings those defenses already mitigate unless you can verify the defense is not applied to the specific code path in question.
+
+Developer context reflects the team's stated practices. If you find evidence in the code that contradicts the developer context, trust the code and report the finding.
+
+`;
+  }
+
+  if (importGraphSummary && importGraphSummary.trim()) {
+    prompt += `${importGraphSummary}
+`;
+  }
+
+  if (runtimeEnrichmentSummary && runtimeEnrichmentSummary.trim()) {
+    prompt += `${runtimeEnrichmentSummary}
+`;
+  }
+
+  if (codebaseGraphSummary && codebaseGraphSummary.trim()) {
+    prompt += `${codebaseGraphSummary}
+`;
+  }
+
+  if (crossRepoSummary && crossRepoSummary.trim()) {
+    prompt += `${crossRepoSummary}
+`;
+  }
+
+  if (outputFormat?.toLowerCase() === 'json') {
+    prompt += `Provide the QA review report as your structured JSON response (follow the required \`qa_review_report\` schema). Do not write the report to a file; the system will save it to ${outputFile}.
+Focus only on the changed code - do not report issues in unchanged code.`;
+  } else {
+    prompt += `Write a comprehensive QA / correctness review report to ${outputFile} in ${outputFormat} format.
+Focus only on the changed code - do not report issues in unchanged code.`;
+  }
+
+  return prompt;
+}
+
 export async function main(confDict: any, args: AgentArgs): Promise<void> {
   const currentWorkingDir = process.cwd();
   const agentActions = new AgentActions(confDict, args.environment, args);
@@ -881,13 +1014,23 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
     
     cleanupTmpDir(tmpSrcDir, true);
 
-  } else if (args.role === 'code_reviewer' || args.role === 'pr_reviewer') {
+  } else if (
+    args.role === 'code_reviewer' ||
+    args.role === 'pr_reviewer' ||
+    args.role === 'pr_qa_reviewer'
+  ) {
+    const isQaReviewer = args.role === 'pr_qa_reviewer';
     const extension = getExtensionForFormat(args.output_format);
     const outputFile = validateOutputFile(args.output_file || `code_review_report.${extension}`, currentWorkingDir);
+    const buildPrompt = isQaReviewer ? buildQaDiffReviewPrompt : buildDiffReviewPrompt;
     
     // Check if running in diff-context mode (PR-focused review)
     if (args.diff_context) {
-      console.log('Running PR Diff Code Review Agent (focused context mode)');
+      console.log(
+        isQaReviewer
+          ? 'Running PR Diff QA Review Agent (correctness / focused context mode)'
+          : 'Running PR Diff Code Review Agent (focused context mode)',
+      );
       
       const diffContext = loadDiffContext(args.diff_context, currentWorkingDir);
       console.log(`Reviewing PR #${diffContext.prNumber}: ${diffContext.totalFilesChanged} files (+${diffContext.totalLinesAdded}/-${diffContext.totalLinesRemoved})`);
@@ -963,7 +1106,7 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
       const singleBatchNoSkipped = batches.length === 1 && skippedFiles.length === 0 && !skippedDueToBatches;
 
       if (singleBatchNoSkipped) {
-        const userPrompt = buildDiffReviewPrompt(
+        const userPrompt = buildPrompt(
           batches[0],
           outputFile,
           args.output_format || 'json',
@@ -989,7 +1132,7 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
         try {
           for (let i = 0; i < batches.length; i++) {
             const batchOutputPath = path.join(tempDir, `code_review_batch_${i + 1}.${extension}`);
-            const userPrompt = buildDiffReviewPrompt(
+            const userPrompt = buildPrompt(
               batches[i],
               batchOutputPath,
               args.output_format || 'json',
@@ -1046,6 +1189,12 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
         cleanupTmpDir(tmpSrcDir);
       }
     } else {
+      if (isQaReviewer) {
+        console.error(
+          'Error: --diff-context is required for the pr_qa_reviewer role (Lane 5 PR QA is diff-scoped).',
+        );
+        process.exit(1);
+      }
       // Standard full-repository code review
       console.log('Running Code Review Agent');
       
@@ -1310,6 +1459,55 @@ Use sequential IDs: node-001/flow-001/tb-001 for DFD elements, THREAT-001 for th
       if (structuredResult) {
         fs.writeFileSync(outputFile, structuredResult, 'utf-8');
         console.log(`Adversarial report written to ${outputFile}`);
+      }
+      cleanupTmpDir(tmpSrcDir);
+    }
+
+  } else if (args.role === 'pr_qa_adversary') {
+    console.log('Running PR QA Adversary (concrete-repro second pass)');
+
+    if (!args.adversarial_context) {
+      console.error('Error: --adversarial-context is required for the pr_qa_adversary role.');
+      process.exit(1);
+    }
+
+    const qaAdvCtx = loadQaAdversarialContextFile(args.adversarial_context, currentWorkingDir);
+    if (args.output_format && args.output_format.toLowerCase() !== 'json') {
+      console.warn('pr_qa_adversary always emits JSON (structured); ignoring -f for file content.');
+    }
+    // Backend discovers `code_review_report.json`; honor caller -o (same filename contract as reviewer).
+    const outputFile = validateOutputFile(
+      args.output_file || 'code_review_report.json',
+      currentWorkingDir,
+    );
+
+    let diffExcerpt: string | undefined;
+    if (args.diff_context) {
+      const diffContext = loadDiffContext(args.diff_context, currentWorkingDir);
+      const full = formatDiffContextForPrompt(diffContext);
+      const max = 120000;
+      diffExcerpt = full.length > max ? `${full.slice(0, max)}\n... [truncated] ...` : full;
+    }
+
+    const userPrompt = buildQaAdversarialUserPrompt(qaAdvCtx, {
+      diffExcerpt,
+      additionalContext: args.context,
+    });
+
+    const tmpSrcDir = args.src_dir
+      ? validateAndCopySrcDir(args.src_dir, currentWorkingDir)
+      : null;
+
+    if (qaAdvCtx.findings.length === 0) {
+      const empty = emptyQaReport(qaAdvCtx.metadata?.project_name);
+      fs.writeFileSync(outputFile, JSON.stringify(empty, null, 2), 'utf-8');
+      console.log(`No candidate findings; wrote empty QA report to ${outputFile}`);
+      cleanupTmpDir(tmpSrcDir);
+    } else {
+      const structuredResult = await agentActions.prQaAdversaryWithOptions(userPrompt, tmpSrcDir);
+      if (structuredResult) {
+        fs.writeFileSync(outputFile, structuredResult, 'utf-8');
+        console.log(`QA adversarial report written to ${outputFile}`);
       }
       cleanupTmpDir(tmpSrcDir);
     }

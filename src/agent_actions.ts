@@ -23,19 +23,19 @@ export interface AgentArgs {
   qa_context?: string;   // Path to JSON file with QA context for qa_verifier role
   retest_context?: string; // Path to JSON file with retest context for finding_validator role
   extract_context?: string; // Path to JSON file with extraction context for context_extractor role
-  /** v5.3.0: candidate findings JSON for pr_adversary second pass (parent-app `adversarialPassService`) */
+  /** v5.3.0: candidate findings JSON for pr_adversary / pr_qa_adversary second pass */
   adversarial_context?: string;
-  /** v5.4.0 / plan §3.1 Stage B: import-graph reachability summary JSON (pr_reviewer only). */
+  /** v5.4.0 / plan §3.1 Stage B: import-graph reachability summary JSON (pr_reviewer / pr_qa_reviewer). */
   import_graph_context?: string;
-  /** v2.3.0 / parent-app plan §4 + §8.14: per-file production-incident summary JSON (pr_reviewer only). */
+  /** v2.3.0 / parent-app plan §4 + §8.14: per-file production-incident summary JSON (pr_reviewer / pr_qa_reviewer). */
   runtime_enrichment_context?: string;
-  /** v2.6.0 / parent-app plan §8.18 Phase 2: per-changed-file structural-graph summary (callers/callees/blast-radius) JSON (pr_reviewer only). */
+  /** v2.6.0 / parent-app plan §8.18 Phase 2: per-changed-file structural-graph summary (callers/callees/blast-radius) JSON (pr_reviewer / pr_qa_reviewer). */
   codebase_graph_context?: string;
-  /** Lane 3 Phase 2 / parent-app plan docs/LANE3_CROSS_REPO_TOPOLOGY_PLAN.md: cross-repo service-topology peers (typed relationship + enforcement note) JSON (pr_reviewer only). */
+  /** Lane 3 Phase 2 / parent-app plan docs/LANE3_CROSS_REPO_TOPOLOGY_PLAN.md: cross-repo service-topology peers (typed relationship + enforcement note) JSON (pr_reviewer / pr_qa_reviewer). */
   cross_repo_context?: string;
   /** v2.5.0 / parent-app plan §3.8: bucketed dismissal-signal JSON for the learned_guidance_synthesizer role. */
   inputs?: string;
-  /** A/B: treatment arm for pr_reviewer (stricter false-positive instructions). */
+  /** A/B: treatment arm for pr_reviewer / pr_qa_reviewer (stricter false-positive instructions). */
   experiment_enabled?: boolean;
   model?: string;  // Claude model selection: sonnet, opus, haiku
   // PR diff chunking (optional; 0 or omit = no chunking)
@@ -938,6 +938,70 @@ export class AgentActions {
   }
 
   /**
+   * pr_qa_adversary: batch adversarial pass over QA findings (filtered qa_review_report out).
+   */
+  async prQaAdversaryWithOptions(userPrompt: string, srcDir?: string | null): Promise<string> {
+    const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
+    const roleSpec = agentOptions.getPrQaAdversaryRoleSpec(
+      this.args.role,
+      srcDir,
+      this.args.max_turns,
+      this.args.experiment_enabled,
+      this.args.mcp_server_url,
+      this.args.mcp_server_name,
+      this.args.mcp_server_bearer,
+    );
+
+    let cursor: BlinkingCursor | null = null;
+    let structuredJson = '';
+
+    try {
+      cursor = new BlinkingCursor();
+      cursor.start();
+      try {
+        for await (const message of resolveProvider().run({ prompt: userPrompt, roleSpec })) {
+          if (message.type === 'stream_event') {
+            if (cursor) cursor.stop();
+          } else if (message.type === 'assistant') {
+            if (cursor) cursor.stop();
+            const assistantMsg = message as SDKAssistantMessage;
+            if (this.args.verbose && assistantMsg.message.content) {
+              for (const block of assistantMsg.message.content) {
+                if (block.type === 'text') {
+                  console.log(`Claude: ${block.text}`);
+                }
+              }
+            }
+          } else if (message.type === 'result') {
+            if (cursor) cursor.stop();
+            const resultMsg = message as SDKResultMessage;
+            if ((resultMsg as any).structured_output) {
+              structuredJson = JSON.stringify((resultMsg as any).structured_output, null, 2);
+            }
+            if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
+              console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);
+            }
+          }
+        }
+      } finally {
+        if (cursor) cursor.stop();
+      }
+    } catch (error) {
+      if (cursor) {
+        try {
+          cursor.stop();
+        } catch {
+          // ignore
+        }
+      }
+      console.error('Error during QA adversarial pass:', error);
+      throw error;
+    }
+    console.log();
+    return structuredJson;
+  }
+
+  /**
    * threat_adversary: adversarial second pass over first-pass threat model (filtered report out).
    */
   async threatAdversaryWithOptions(userPrompt: string, srcDir?: string | null): Promise<string> {
@@ -1009,17 +1073,30 @@ export class AgentActions {
     noTools?: boolean,
   ): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
-    const roleSpec = agentOptions.getDiffReviewerRoleSpec(
-      this.args.role,
-      srcDir,
-      this.args.output_format,
-      this.args.max_turns,
-      noTools,
-      this.args.experiment_enabled,
-      this.args.mcp_server_url,
-      this.args.mcp_server_name,
-      this.args.mcp_server_bearer,
-    );
+    const isQaReviewer = this.args.role === 'pr_qa_reviewer';
+    const roleSpec = isQaReviewer
+      ? agentOptions.getPrQaReviewerRoleSpec(
+          this.args.role,
+          srcDir,
+          this.args.output_format,
+          this.args.max_turns,
+          noTools,
+          this.args.experiment_enabled,
+          this.args.mcp_server_url,
+          this.args.mcp_server_name,
+          this.args.mcp_server_bearer,
+        )
+      : agentOptions.getDiffReviewerRoleSpec(
+          this.args.role,
+          srcDir,
+          this.args.output_format,
+          this.args.max_turns,
+          noTools,
+          this.args.experiment_enabled,
+          this.args.mcp_server_url,
+          this.args.mcp_server_name,
+          this.args.mcp_server_bearer,
+        );
 
     let cursor: BlinkingCursor | null = null;
     let structuredJson = '';
@@ -1113,28 +1190,45 @@ export class AgentActions {
     // generate an empty report to avoid "No report generated" errors
     if (!structuredJson && hadSuccessfulRun && this.args.output_format?.toLowerCase() === 'json') {
       console.log('[Fallback] Agent completed but no structured output received, generating empty report');
-      const fallbackReport = {
-        security_review_report: {
-          metadata: {
-            scan_date: new Date().toISOString(),
-            scan_type: 'PR Diff Review',
-            total_files_reviewed: 0,
-            total_issues_found: 0
-          },
-          executive_summary: {
-            overview: 'Security review completed. The AI agent analyzed the code but did not return structured findings. This may indicate no security issues were found, or the review requires manual follow-up.',
-            risk_rating: 'UNKNOWN',
-            critical: 0,
-            high: 0,
-            medium: 0,
-            low: 0,
-            info: 0
-          },
-          findings: [],
-          recommendations: [],
-          conclusion: `Review completed with $${apiCostUsd.toFixed(4)} API cost but no structured output was returned. Consider re-running the scan or performing manual review.`
-        }
-      };
+      const fallbackReport = isQaReviewer
+        ? {
+            qa_review_report: {
+              review_date: new Date().toISOString().slice(0, 10),
+              reviewer: 'Code Quality Analysis',
+              summary: {
+                total_issues_found: 0,
+                critical: 0,
+                high: 0,
+                medium: 0,
+                low: 0,
+                overall_risk_level: 'NONE' as const,
+              },
+              findings: [],
+            },
+          }
+        : {
+            security_review_report: {
+              metadata: {
+                scan_date: new Date().toISOString(),
+                scan_type: 'PR Diff Review',
+                total_files_reviewed: 0,
+                total_issues_found: 0,
+              },
+              executive_summary: {
+                overview:
+                  'Security review completed. The AI agent analyzed the code but did not return structured findings. This may indicate no security issues were found, or the review requires manual follow-up.',
+                risk_rating: 'UNKNOWN',
+                critical: 0,
+                high: 0,
+                medium: 0,
+                low: 0,
+                info: 0,
+              },
+              findings: [],
+              recommendations: [],
+              conclusion: `Review completed with $${apiCostUsd.toFixed(4)} API cost but no structured output was returned. Consider re-running the scan or performing manual review.`,
+            },
+          };
       structuredJson = JSON.stringify(fallbackReport, null, 2);
     }
     

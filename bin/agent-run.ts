@@ -31,23 +31,23 @@ program
   .option('--retest-context <file>', 'JSON file with retest context for finding_validator role (finding + code snippet)')
   .option(
     '--adversarial-context <file>',
-    'JSON file with candidate findings for pr_adversary second pass (v5.3.0; use with -r pr_adversary)',
+    'JSON file with candidate findings for pr_adversary / pr_qa_adversary second pass (use with -r pr_adversary or -r pr_qa_adversary)',
   )
   .option(
     '--import-graph-context <file>',
-    'JSON file with per-file import-graph reachability summary (v5.4.0, plan §3.1 Stage B; use with -r pr_reviewer)',
+    'JSON file with per-file import-graph reachability summary (v5.4.0, plan §3.1 Stage B; use with -r pr_reviewer or -r pr_qa_reviewer)',
   )
   .option(
     '--runtime-enrichment-context <file>',
-    'JSON file with per-file production-incident summary for hot files (v2.3.0 / parent-app plan §4 + §8.14; use with -r pr_reviewer)',
+    'JSON file with per-file production-incident summary for hot files (v2.3.0 / parent-app plan §4 + §8.14; use with -r pr_reviewer or -r pr_qa_reviewer)',
   )
   .option(
     '--codebase-graph-context <file>',
-    'JSON file with per-changed-file structural-graph summary (callers/callees/blast-radius) sourced from codebase-memory-mcp (v2.6.0 / parent-app plan §8.18 Phase 2; use with -r pr_reviewer)',
+    'JSON file with per-changed-file structural-graph summary (callers/callees/blast-radius) sourced from codebase-memory-mcp (v2.6.0 / parent-app plan §8.18 Phase 2; use with -r pr_reviewer or -r pr_qa_reviewer)',
   )
   .option(
     '--cross-repo-context <file>',
-    'JSON file with cross-repo service-topology peers (typed relationship + enforcement note) sourced from the parent app\'s project_relationships graph (Lane 3 Phase 2; use with -r pr_reviewer)',
+    'JSON file with cross-repo service-topology peers (typed relationship + enforcement note) sourced from the parent app\'s project_relationships graph (Lane 3 Phase 2; use with -r pr_reviewer or -r pr_qa_reviewer)',
   )
   .option(
     '--inputs <file>',
@@ -55,7 +55,7 @@ program
   )
   .option(
     '--experiment-enabled',
-    'A/B treatment arm: stricter FP controls for pr_reviewer diff mode; optional variant for pr_adversary',
+    'A/B treatment arm: stricter FP controls for pr_reviewer / pr_qa_reviewer diff mode; optional variant for adversaries',
   )
   .option('--extract-context <file>', 'JSON file with extraction context for context_extractor role (repo metadata + files)')
   .option('--diff-max-tokens <n>', 'Max tokens per batch for PR chunking (0 = disabled). Overrides config.')
@@ -190,62 +190,71 @@ if (args.context) {
   console.log('Using context:', args.context.substring(0, 50) + (args.context.length > 50 ? '...' : ''));
 }
 
+const DIFF_CONTEXT_ROLES = new Set([
+  'code_reviewer',
+  'pr_reviewer',
+  'pr_qa_reviewer',
+  'pr_adversary',
+  'pr_qa_adversary',
+]);
+const DIFF_FRONTLOAD_ROLES = new Set(['pr_reviewer', 'pr_qa_reviewer']);
+
 // Log diff context if provided and validate role compatibility
 if (args.diff_context) {
   console.log('Using diff context file:', args.diff_context);
-  if (args.role !== 'code_reviewer' && args.role !== 'pr_reviewer') {
-    console.warn('⚠️  Warning: --diff-context is only used with the code_reviewer or pr_reviewer role.');
+  if (!DIFF_CONTEXT_ROLES.has(args.role)) {
+    console.warn('⚠️  Warning: --diff-context is only used with code_reviewer / pr_reviewer / pr_qa_reviewer / pr_adversary / pr_qa_adversary.');
     console.warn(`   Current role: ${args.role}. The diff context will be ignored.`);
-    console.warn('   Use -r code_reviewer or -r pr_reviewer to enable PR diff-focused code review.\n');
+    console.warn('   Use -r pr_reviewer or -r pr_qa_reviewer to enable PR diff-focused review.\n');
   }
 }
 
 // v5.4.0 / plan §3.1 Stage B: import-graph context is only consumed by the
-// pr_reviewer diff-mode prompt. Other roles simply ignore it (fail-open).
+// pr_reviewer / pr_qa_reviewer diff-mode prompt. Other roles simply ignore it (fail-open).
 if (args.import_graph_context) {
   console.log('Using import-graph context file:', args.import_graph_context);
-  if (!(args.role === 'pr_reviewer' && args.diff_context)) {
-    console.warn('⚠️  Warning: --import-graph-context is only consumed by pr_reviewer in diff-context mode.');
+  if (!(DIFF_FRONTLOAD_ROLES.has(args.role) && args.diff_context)) {
+    console.warn('⚠️  Warning: --import-graph-context is only consumed by pr_reviewer / pr_qa_reviewer in diff-context mode.');
     console.warn(`   Current role: ${args.role}${args.diff_context ? '' : ' (no --diff-context supplied)'}. The import-graph context will be ignored.`);
-    console.warn('   Use -r pr_reviewer --diff-context <file> to enable Stage B reachability hints.\n');
+    console.warn('   Use -r pr_reviewer or -r pr_qa_reviewer --diff-context <file> to enable Stage B reachability hints.\n');
   }
 }
 
 // v2.3.0 / parent-app plan §4 + §8.14: runtime-enrichment context is only
-// consumed by the pr_reviewer diff-mode prompt. Same role-gate as
+// consumed by the pr_reviewer / pr_qa_reviewer diff-mode prompt. Same role-gate as
 // --import-graph-context — other roles simply ignore it (fail-open).
 if (args.runtime_enrichment_context) {
   console.log('Using runtime-enrichment context file:', args.runtime_enrichment_context);
-  if (!(args.role === 'pr_reviewer' && args.diff_context)) {
-    console.warn('⚠️  Warning: --runtime-enrichment-context is only consumed by pr_reviewer in diff-context mode.');
+  if (!(DIFF_FRONTLOAD_ROLES.has(args.role) && args.diff_context)) {
+    console.warn('⚠️  Warning: --runtime-enrichment-context is only consumed by pr_reviewer / pr_qa_reviewer in diff-context mode.');
     console.warn(`   Current role: ${args.role}${args.diff_context ? '' : ' (no --diff-context supplied)'}. The runtime-enrichment context will be ignored.`);
-    console.warn('   Use -r pr_reviewer --diff-context <file> to enable §4 hot-file hints.\n');
+    console.warn('   Use -r pr_reviewer or -r pr_qa_reviewer --diff-context <file> to enable §4 hot-file hints.\n');
   }
 }
 
 // v2.6.0 / parent-app plan §8.18 Phase 2: codebase-graph context is only
-// consumed by the pr_reviewer diff-mode prompt. Same role-gate as
+// consumed by the pr_reviewer / pr_qa_reviewer diff-mode prompt. Same role-gate as
 // --import-graph-context / --runtime-enrichment-context — other roles
 // simply ignore it (fail-open).
 if (args.codebase_graph_context) {
   console.log('Using codebase-graph context file:', args.codebase_graph_context);
-  if (!(args.role === 'pr_reviewer' && args.diff_context)) {
-    console.warn('⚠️  Warning: --codebase-graph-context is only consumed by pr_reviewer in diff-context mode.');
+  if (!(DIFF_FRONTLOAD_ROLES.has(args.role) && args.diff_context)) {
+    console.warn('⚠️  Warning: --codebase-graph-context is only consumed by pr_reviewer / pr_qa_reviewer in diff-context mode.');
     console.warn(`   Current role: ${args.role}${args.diff_context ? '' : ' (no --diff-context supplied)'}. The codebase-graph context will be ignored.`);
-    console.warn('   Use -r pr_reviewer --diff-context <file> to enable §8.18 Phase 2 structural-graph hints.\n');
+    console.warn('   Use -r pr_reviewer or -r pr_qa_reviewer --diff-context <file> to enable §8.18 Phase 2 structural-graph hints.\n');
   }
 }
 
 // Lane 3 Phase 2 / parent-app plan docs/LANE3_CROSS_REPO_TOPOLOGY_PLAN.md:
-// cross-repo context is only consumed by the pr_reviewer diff-mode prompt.
+// cross-repo context is only consumed by the pr_reviewer / pr_qa_reviewer diff-mode prompt.
 // Same role-gate as --import-graph-context / --runtime-enrichment-context /
 // --codebase-graph-context — other roles simply ignore it (fail-open).
 if (args.cross_repo_context) {
   console.log('Using cross-repo context file:', args.cross_repo_context);
-  if (!(args.role === 'pr_reviewer' && args.diff_context)) {
-    console.warn('⚠️  Warning: --cross-repo-context is only consumed by pr_reviewer in diff-context mode.');
+  if (!(DIFF_FRONTLOAD_ROLES.has(args.role) && args.diff_context)) {
+    console.warn('⚠️  Warning: --cross-repo-context is only consumed by pr_reviewer / pr_qa_reviewer in diff-context mode.');
     console.warn(`   Current role: ${args.role}${args.diff_context ? '' : ' (no --diff-context supplied)'}. The cross-repo context will be ignored.`);
-    console.warn('   Use -r pr_reviewer --diff-context <file> to enable Lane 3 cross-repo hints.\n');
+    console.warn('   Use -r pr_reviewer or -r pr_qa_reviewer --diff-context <file> to enable Lane 3 cross-repo hints.\n');
   }
 }
 
@@ -261,12 +270,12 @@ if (args.inputs) {
   }
 }
 
-// v2.4.0: the MCP server URL is consumed by the four reasoning roles
-// whose Options builders accept it (pr_reviewer / pr_adversary /
-// finding_validator / code_fixer). Other roles silently ignore the flag
-// — same fail-open shape as --import-graph-context. The wiring is in
-// `agent_options.ts`; this block only surfaces a friendly warning when
-// the flag is set on a role that won't pick it up.
+// v2.4.0: the MCP server URL is consumed by the reasoning roles whose
+// Options builders accept it (pr_reviewer / pr_qa_reviewer / pr_adversary /
+// pr_qa_adversary / finding_validator / code_fixer / …). Other roles
+// silently ignore the flag — same fail-open shape as --import-graph-context.
+// The wiring is in `agent_options.ts`; this block only surfaces a friendly
+// warning when the flag is set on a role that won't pick it up.
 if (args.mcp_server_url) {
   console.log('Using MCP server URL:', args.mcp_server_url);
   if (args.mcp_server_name) {
@@ -274,14 +283,16 @@ if (args.mcp_server_url) {
   }
   const mcpAwareRoles = new Set([
     'pr_reviewer',
+    'pr_qa_reviewer',
     'code_reviewer',
     'pr_adversary',
+    'pr_qa_adversary',
     'fp_adversary',
     'finding_validator',
     'code_fixer',
   ]);
   if (!mcpAwareRoles.has(args.role)) {
-    console.warn('⚠️  Warning: --mcp-server-url is only consumed by pr_reviewer / code_reviewer / pr_adversary / fp_adversary / finding_validator / code_fixer.');
+    console.warn('⚠️  Warning: --mcp-server-url is only consumed by pr_reviewer / pr_qa_reviewer / code_reviewer / pr_adversary / pr_qa_adversary / fp_adversary / finding_validator / code_fixer.');
     console.warn(`   Current role: ${args.role}. The MCP server config will be ignored.\n`);
   }
 } else if (args.mcp_server_name) {

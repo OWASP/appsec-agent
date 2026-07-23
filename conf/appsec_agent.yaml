@@ -62,6 +62,22 @@ default: &default
       output_format: "json"
       max_turns: 15
       verbose: True
+  # Lane 5 — PR QA / correctness reviewer (sibling of pr_reviewer; do NOT overload qa_verifier)
+  pr_qa_reviewer:
+    options:
+      diff_reviewer_system_prompt: null  # Use correctness checklist in agent_options; set here to override
+      output_format: "markdown"
+      verbose: True
+      # PR diff chunking (for -d/--diff-context): mirror pr_reviewer
+      diff_review_max_tokens_per_batch: 150000
+      diff_review_max_batches: 3
+      diff_review_max_files: 80
+  pr_qa_adversary:
+    options:
+      system_prompt: "You are a senior QA engineer performing an adversarial second pass on correctness findings. Keep a finding only if you can produce/validate concrete reproduction_steps and a causal_chain (specific input/state, concrete incorrect outcome, reachability on a changed line). Drop vague, stylistic, or 'could theoretically' findings. Output only a filtered qa_review_report JSON."
+      output_format: "json"
+      max_turns: 15
+      verbose: True
   fp_adversary:
     options:
       # v2.8.0 / parent app full-repo Phase 2.5: full-tree adversarial false-positive

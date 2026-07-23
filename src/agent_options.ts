@@ -7,6 +7,7 @@
 import { Options, AgentDefinition, PermissionResult, CanUseTool } from '@anthropic-ai/claude-agent-sdk';
 import { ConfigDict } from './utils';
 import { SECURITY_REPORT_SCHEMA } from './schemas/security_report';
+import { QA_REPORT_SCHEMA } from './schemas/qa_report';
 import { THREAT_MODEL_REPORT_SCHEMA } from './schemas/threat_model_report';
 import { FIX_OUTPUT_SCHEMA } from './schemas/security_fix';
 import { QA_VERDICT_SCHEMA } from './schemas/qa_context';
@@ -762,6 +763,217 @@ You have access to Read, Grep, and Write tools:
     mcpServerBearer?: string,
   ): Options {
     return roleSpecToClaudeOptions(this.getPrAdversaryRoleSpec(
+      role,
+      srcDir,
+      maxTurns,
+      experimentEnabled,
+      mcpServerUrl,
+      mcpServerName,
+      mcpServerBearer,
+    ));
+  }
+
+  /**
+   * Lane 5 — PR QA / correctness reviewer (sibling of `pr_reviewer`).
+   * Distinct from remediation `qa_verifier` (Lane 3b).
+   */
+  getPrQaReviewerRoleSpec(
+    role: string = 'pr_qa_reviewer',
+    srcDir?: string | null,
+    outputFormat?: string,
+    maxTurns?: number,
+    noTools?: boolean,
+    experimentEnabled?: boolean,
+    mcpServerUrl?: string,
+    mcpServerName?: string,
+    mcpServerBearer?: string,
+  ): RoleSpec {
+    const roleConfig = this.confDict[this.environment]?.[role];
+
+    let systemPrompt: string;
+
+    if (noTools) {
+      systemPrompt = `You are a senior software QA engineer specializing in Pull Request correctness reviews.
+
+Your task is to analyze the changed code provided in the diff context for logic and correctness bugs — not security vulnerabilities (those are handled by a separate security reviewer).
+
+The diff context already includes relevant imports, function signatures, and surrounding code for each changed file. Produce your complete QA review report directly from this provided context.
+
+Correctness checklist (flag only bugs you can ground in the diff):
+- Null / undefined dereferences and missing optional chaining
+- Unhandled errors, rejected promises, or swallowed exceptions
+- Resource leaks (unclosed handles, listeners, streams, timers)
+- Off-by-one and boundary / empty-collection edge cases
+- Incorrect conditionals, inverted logic, wrong operators
+- Race conditions, await-in-loop hazards, missing await
+- Type coercion surprises and unsafe casts
+- Dead or unreachable branches introduced by the change
+- API contract misuse (wrong args, ignored return values, broken invariants)
+
+When reviewing PR changes:
+1. Focus on correctness of the new or modified code
+2. Consider whether surrounding context suggests the bug is unreachable or already guarded
+3. Cite specific line numbers from the provided diff
+4. Do NOT report issues in unchanged code
+5. Do NOT report style, naming, or pure refactor suggestions
+6. For each finding provide reproduction_steps and a short causal_chain
+7. Rate your confidence (high/medium/low) for each finding`;
+    } else {
+      systemPrompt = `You are a senior software QA engineer specializing in Pull Request correctness reviews.
+
+Your task is to analyze the changed code provided in the diff context for logic and correctness bugs — not security vulnerabilities (those are handled by a separate security reviewer).
+
+IMPORTANT: Before reporting a finding, verify it by gathering additional context:
+- Use Grep to search for guards, error handlers, null checks, or callers that may mitigate the issue
+- Use Read to inspect imported modules, utility functions, or configuration files referenced in the diff
+- Confirm the buggy path is reachable from the changed lines
+
+Correctness checklist (flag only bugs you can ground in the diff):
+- Null / undefined dereferences and missing optional chaining
+- Unhandled errors, rejected promises, or swallowed exceptions
+- Resource leaks (unclosed handles, listeners, streams, timers)
+- Off-by-one and boundary / empty-collection edge cases
+- Incorrect conditionals, inverted logic, wrong operators
+- Race conditions, await-in-loop hazards, missing await
+- Type coercion surprises and unsafe casts
+- Dead or unreachable branches introduced by the change
+- API contract misuse (wrong args, ignored return values, broken invariants)
+
+When reviewing PR changes:
+1. Focus on correctness of the new or modified code
+2. VERIFY findings by reading referenced files before reporting them
+3. Cite specific line numbers from the provided diff
+4. Do NOT report issues in unchanged code
+5. Do NOT report style, naming, or pure refactor suggestions
+6. For each finding provide reproduction_steps and a short causal_chain (x -> y -> z)
+7. Rate your confidence (high/medium/low) for each finding
+
+You have access to Read, Grep, and Write tools:
+- Grep: Search the codebase for patterns (e.g., callers, guards, error handlers)
+- Read: Read full file contents for additional context
+- Write: Write the QA review report`;
+    }
+
+    if (srcDir) {
+      systemPrompt += `\n\nSource directory available at: ${srcDir}`;
+    }
+
+    if (roleConfig?.options?.diff_reviewer_system_prompt) {
+      systemPrompt = roleConfig.options.diff_reviewer_system_prompt;
+    }
+
+    if (experimentEnabled) {
+      systemPrompt += `
+
+**Experiment (treatment arm):** Apply stricter false-positive controls. Before reporting a finding, require concrete reproduction_steps and a causal_chain visible from the diff or verified in-repo (Grep/Read). Prefer MEDIUM over HIGH when evidence is mostly circumstantial. Drop stylistic or "could theoretically" issues.`;
+    }
+
+    if (mcpServerUrl) {
+      systemPrompt += buildPrReviewerMcpNudgeSystemPromptSuffix(mcpServerName);
+    }
+
+    const spec: RoleSpec = {
+      roleId: 'pr_qa_reviewer',
+      systemPrompt,
+      maxTurns: maxTurns ?? roleConfig?.options?.max_turns ?? 10,
+      agentName: 'pr-qa-reviewer',
+      agentDescription: 'Reviews PR diff changes for correctness / QA bugs',
+      capabilities: noTools ? {} : { read: true, grep: true, write: true },
+      allowedTools: noTools ? ['Write'] : undefined,
+      permissionMode: 'bypassPermissions',
+      model: this.model,
+      workingDirectory: srcDir ?? undefined,
+    };
+
+    if (outputFormat?.toLowerCase() === 'json') {
+      spec.outputSchema = QA_REPORT_SCHEMA;
+    }
+
+    attachMcpToRoleSpec(spec, mcpServerUrl, mcpServerName, mcpServerBearer);
+    return spec;
+  }
+
+  getPrQaReviewerOptions(
+    role: string = 'pr_qa_reviewer',
+    srcDir?: string | null,
+    outputFormat?: string,
+    maxTurns?: number,
+    noTools?: boolean,
+    experimentEnabled?: boolean,
+    mcpServerUrl?: string,
+    mcpServerName?: string,
+    mcpServerBearer?: string,
+  ): Options {
+    return roleSpecToClaudeOptions(this.getPrQaReviewerRoleSpec(
+      role,
+      srcDir,
+      outputFormat,
+      maxTurns,
+      noTools,
+      experimentEnabled,
+      mcpServerUrl,
+      mcpServerName,
+      mcpServerBearer,
+    ));
+  }
+
+  /**
+   * Lane 5 — adversarial second pass over QA findings (concrete-repro bar).
+   */
+  getPrQaAdversaryRoleSpec(
+    role: string = 'pr_qa_adversary',
+    srcDir?: string | null,
+    maxTurns?: number,
+    experimentEnabled?: boolean,
+    mcpServerUrl?: string,
+    mcpServerName?: string,
+    mcpServerBearer?: string,
+  ): RoleSpec {
+    const roleConfig = this.confDict[this.environment]?.[role];
+    let systemPrompt =
+      roleConfig?.options?.system_prompt ||
+      'You are a senior QA engineer performing an adversarial second pass on correctness findings. ' +
+        'You skeptically test whether each reported issue has concrete reproduction_steps and a causal_chain ' +
+        '(specific input/state, concrete incorrect outcome, reachability on a changed line). ' +
+        'You have Read and Grep to verify guards, reachability, and false positives. ' +
+        'Your output is only the filtered qa_review_report JSON: drop findings that are vague, stylistic, or "could theoretically" fail.';
+
+    if (srcDir) {
+      systemPrompt += `\n\nSource code is available at: ${srcDir}. Use Read and Grep to verify code paths before keeping a finding.`;
+    }
+    if (experimentEnabled) {
+      systemPrompt +=
+        '\n\n**Experiment (treatment):** Bias toward dropping borderline issues unless the diff plus quick repo checks show a real, reproducible correctness failure.';
+    }
+
+    const spec: RoleSpec = {
+      roleId: 'pr_qa_adversary',
+      systemPrompt,
+      maxTurns: maxTurns ?? roleConfig?.options?.max_turns ?? 15,
+      agentName: 'pr-qa-adversary',
+      agentDescription:
+        'Adversarial second pass: filters PR QA findings by concrete reproduction_steps + causal_chain',
+      capabilities: { read: true, grep: true },
+      permissionMode: 'bypassPermissions',
+      model: this.model,
+      outputSchema: QA_REPORT_SCHEMA,
+      workingDirectory: srcDir ?? undefined,
+    };
+
+    attachMcpToRoleSpec(spec, mcpServerUrl, mcpServerName, mcpServerBearer);
+    return spec;
+  }
+
+  getPrQaAdversaryOptions(
+    role: string = 'pr_qa_adversary',
+    srcDir?: string | null,
+    maxTurns?: number,
+    experimentEnabled?: boolean,
+    mcpServerUrl?: string,
+    mcpServerName?: string,
+    mcpServerBearer?: string,
+  ): Options {
+    return roleSpecToClaudeOptions(this.getPrQaAdversaryRoleSpec(
       role,
       srcDir,
       maxTurns,

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.6.0] - 2026-07-23
+
+### Added — Lane 5 PR QA roles (`pr_qa_reviewer`, `pr_qa_adversary`)
+
+Sibling correctness-review lane to `pr_reviewer` / `pr_adversary` — distinct from remediation `qa_verifier` (Lane 3b). New `src/schemas/qa_report.ts` (`QA_REPORT_SCHEMA`, `qa_review_report` envelope, `QA-NNN` finding ids, required `reproduction_steps` + `causal_chain` per finding) and `src/schemas/qa_adversarial_pass.ts` (adversarial context parser + filtered-report prompt builder, mirroring the security adversarial pass). `agent_options.ts` adds `getPrQaReviewerRoleSpec` / `getPrQaAdversaryRoleSpec` with correctness checklist system prompts, JSON structured output on the reviewer when `-f json`, MCP nudge parity with `pr_reviewer`, and `--experiment-enabled` treatment arm. `main.ts` wires diff-context chunking, all four structural front-load slots (`--import-graph-context`, `--runtime-enrichment-context`, `--codebase-graph-context`, `--cross-repo-context`), and adversarial second-pass execution. `conf/appsec_agent.yaml` adds default role configs. CLI role-gates in `bin/agent-run.ts` extended so front-load flags and `--diff-context` accept `pr_qa_reviewer` / `pr_qa_adversary` alongside the security roles.
+
 ## [3.5.0] - 2026-07-18
 
 ### Added — `queryCrossRepoGraph` MCP tool (Lane 3 Phase 3/B, parent-app `docs/LANE3_CROSS_REPO_TOPOLOGY_PLAN.md`)

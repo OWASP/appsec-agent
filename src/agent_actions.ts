@@ -9,6 +9,15 @@ import { AgentOptions } from './agent_options';
 import { resolveProvider } from './providers/resolve_provider';
 import { ConfigDict } from './utils';
 import { BlinkingCursor } from './blinking_cursor';
+import {
+  accumulateUsage,
+  emptyUsageCounters,
+  printUsageCounters,
+  roleResultFromCounters,
+  type RoleResultUsage,
+} from './utils/usage_counters';
+
+export type { RoleResultUsage };
 
 export interface AgentArgs {
   role: string;
@@ -584,6 +593,7 @@ export class AgentActions {
 
     let cursor: BlinkingCursor | null = null;
     let structuredJson = '';
+    const usage = emptyUsageCounters();
 
     try {
       cursor = new BlinkingCursor();
@@ -608,9 +618,11 @@ export class AgentActions {
             if ((resultMsg as any).structured_output) {
               structuredJson = JSON.stringify((resultMsg as any).structured_output, null, 2);
             }
+            accumulateUsage(usage, resultMsg);
             if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
               console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);
             }
+            printUsageCounters(usage);
           }
         }
       } finally {
@@ -890,6 +902,7 @@ export class AgentActions {
 
     let cursor: BlinkingCursor | null = null;
     let structuredJson = '';
+    const usage = emptyUsageCounters();
 
     try {
       cursor = new BlinkingCursor();
@@ -914,9 +927,11 @@ export class AgentActions {
             if ((resultMsg as any).structured_output) {
               structuredJson = JSON.stringify((resultMsg as any).structured_output, null, 2);
             }
+            accumulateUsage(usage, resultMsg);
             if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
               console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);
             }
+            printUsageCounters(usage);
           }
         }
       } finally {
@@ -954,6 +969,7 @@ export class AgentActions {
 
     let cursor: BlinkingCursor | null = null;
     let structuredJson = '';
+    const usage = emptyUsageCounters();
 
     try {
       cursor = new BlinkingCursor();
@@ -978,9 +994,11 @@ export class AgentActions {
             if ((resultMsg as any).structured_output) {
               structuredJson = JSON.stringify((resultMsg as any).structured_output, null, 2);
             }
+            accumulateUsage(usage, resultMsg);
             if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
               console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);
             }
+            printUsageCounters(usage);
           }
         }
       } finally {
@@ -1064,12 +1082,12 @@ export class AgentActions {
   /**
    * PR diff-focused code reviewer with options
    * Optimized for reviewing only changed code from a pull request
-   * @param onResult - Optional callback to collect cost for chunked runs (e.g. aggregate total_cost_usd across batches)
+   * @param onResult - Optional callback to collect cost/usage for chunked runs
    */
   async diffReviewerWithOptions(
     userPrompt: string,
     srcDir?: string | null,
-    onResult?: (result: { total_cost_usd?: number }) => void,
+    onResult?: (result: RoleResultUsage) => void,
     noTools?: boolean,
   ): Promise<string> {
     const agentOptions = new AgentOptions(this.confDict, this.environment, this.args.model);
@@ -1102,6 +1120,7 @@ export class AgentActions {
     let structuredJson = '';
     let hadSuccessfulRun = false;
     let apiCostUsd = 0;
+    const usage = emptyUsageCounters();
 
     try {
       cursor = new BlinkingCursor();
@@ -1158,10 +1177,12 @@ export class AgentActions {
             if (resultAny.num_turns !== undefined || resultAny.duration_ms !== undefined) {
               console.log(`[Agent Stats] turns=${resultAny.num_turns ?? turnCount}, duration=${resultAny.duration_ms ? Math.round(resultAny.duration_ms / 1000) + 's' : 'N/A'}, api_time=${resultAny.duration_api_ms ? Math.round(resultAny.duration_api_ms / 1000) + 's' : 'N/A'}`);
             }
+            accumulateUsage(usage, resultMsg);
             if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
               console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);
             }
-            onResult?.({ total_cost_usd: resultMsg.total_cost_usd });
+            printUsageCounters(usage);
+            onResult?.(roleResultFromCounters(resultMsg.total_cost_usd, usage));
           } else if (message.type === 'tool_progress') {
             if (this.args.verbose) {
               const toolMsg = message as any;

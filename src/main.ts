@@ -925,7 +925,7 @@ Analyze ONLY the changed code shown above for logic and correctness issues. Focu
 For each issue found:
 - Use finding ids \`QA-001\`, \`QA-002\`, … and a stable \`bug_class\`
 - Cite the specific file and line numbers from the changes
-- Provide \`reproduction_steps\` (concrete steps) and a short \`causal_chain\` (x -> y -> z)
+- For HIGH/CRITICAL findings, provide \`reproduction_steps\` (concrete steps) and a short \`causal_chain\` (x -> y -> z); for MEDIUM/LOW, omit those fields unless the integrator context requires them
 - Explain the concrete incorrect outcome (impact) and a remediation recommendation
 - Do NOT report style, naming, or pure refactor suggestions
 - Do NOT report security vulnerabilities (separate reviewer handles those)
@@ -1128,6 +1128,11 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
         fs.ensureDirSync(tempDir);
         const batchPaths: string[] = [];
         const batchCosts: number[] = [];
+        let batchTokensIn = 0;
+        let batchTokensOut = 0;
+        let batchCacheRead = 0;
+        let batchCacheWrite = 0;
+        let batchTurns = 0;
 
         try {
           for (let i = 0; i < batches.length; i++) {
@@ -1146,6 +1151,11 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
               if (result.total_cost_usd !== undefined && result.total_cost_usd > 0) {
                 batchCosts.push(result.total_cost_usd);
               }
+              if (typeof result.tokens_input === 'number') batchTokensIn += result.tokens_input;
+              if (typeof result.tokens_output === 'number') batchTokensOut += result.tokens_output;
+              if (typeof result.tokens_cache_read === 'number') batchCacheRead += result.tokens_cache_read;
+              if (typeof result.tokens_cache_write === 'number') batchCacheWrite += result.tokens_cache_write;
+              if (typeof result.turns_used === 'number') batchTurns += result.turns_used;
             }, args.no_tools);
             if (batchResult) {
               fs.writeFileSync(batchOutputPath, batchResult, 'utf-8');
@@ -1180,6 +1190,11 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
             const total = batchCosts.reduce((a, b) => a + b, 0);
             console.log(`Total API cost: $${total.toFixed(4)}`);
           }
+          if (batchTokensIn > 0) console.log(`Tokens input: ${batchTokensIn}`);
+          if (batchTokensOut > 0) console.log(`Tokens output: ${batchTokensOut}`);
+          if (batchCacheRead > 0) console.log(`Cache read: ${batchCacheRead}`);
+          if (batchCacheWrite > 0) console.log(`Cache write: ${batchCacheWrite}`);
+          if (batchTurns > 0) console.log(`Turns used: ${batchTurns}`);
         } finally {
           cleanupTmpDir(tempDir, args.verbose ?? false);
           cleanupTmpDir(tmpSrcDir);

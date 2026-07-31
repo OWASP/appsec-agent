@@ -816,7 +816,7 @@ When reviewing PR changes:
 3. Cite specific line numbers from the provided diff
 4. Do NOT report issues in unchanged code
 5. Do NOT report style, naming, or pure refactor suggestions
-6. For each finding provide reproduction_steps and a short causal_chain
+6. For HIGH/CRITICAL findings provide reproduction_steps and a short causal_chain; for MEDIUM/LOW omit those fields unless integrator context requires them
 7. Rate your confidence (high/medium/low) for each finding`;
     } else {
       systemPrompt = `You are a senior software QA engineer specializing in Pull Request correctness reviews.
@@ -845,7 +845,7 @@ When reviewing PR changes:
 3. Cite specific line numbers from the provided diff
 4. Do NOT report issues in unchanged code
 5. Do NOT report style, naming, or pure refactor suggestions
-6. For each finding provide reproduction_steps and a short causal_chain (x -> y -> z)
+6. For HIGH/CRITICAL findings provide reproduction_steps and a short causal_chain (x -> y -> z); for MEDIUM/LOW omit those fields unless integrator context requires them
 7. Rate your confidence (high/medium/low) for each finding
 
 You have access to Read, Grep, and Write tools:
@@ -865,7 +865,7 @@ You have access to Read, Grep, and Write tools:
     if (experimentEnabled) {
       systemPrompt += `
 
-**Experiment (treatment arm):** Apply stricter false-positive controls. Before reporting a finding, require concrete reproduction_steps and a causal_chain visible from the diff or verified in-repo (Grep/Read). Prefer MEDIUM over HIGH when evidence is mostly circumstantial. Drop stylistic or "could theoretically" issues.`;
+**Experiment (treatment arm):** Apply stricter false-positive controls. Before reporting a HIGH/CRITICAL finding, require concrete reproduction_steps and a causal_chain visible from the diff or verified in-repo (Grep/Read). Prefer MEDIUM over HIGH when evidence is mostly circumstantial. Drop stylistic or "could theoretically" issues.`;
     }
 
     if (mcpServerUrl) {
@@ -933,8 +933,9 @@ You have access to Read, Grep, and Write tools:
     let systemPrompt =
       roleConfig?.options?.system_prompt ||
       'You are a senior QA engineer performing an adversarial second pass on correctness findings. ' +
-        'You skeptically test whether each reported issue has concrete reproduction_steps and a causal_chain ' +
+        'For HIGH/CRITICAL findings, skeptically test whether each has concrete reproduction_steps and a causal_chain ' +
         '(specific input/state, concrete incorrect outcome, reachability on a changed line). ' +
+        'For MEDIUM/LOW, keep when concrete and reachable — do not require reproduction_steps / causal_chain. ' +
         'You have Read and Grep to verify guards, reachability, and false positives. ' +
         'Your output is only the filtered qa_review_report JSON: drop findings that are vague, stylistic, or "could theoretically" fail.';
 
@@ -952,7 +953,7 @@ You have access to Read, Grep, and Write tools:
       maxTurns: maxTurns ?? roleConfig?.options?.max_turns ?? 15,
       agentName: 'pr-qa-adversary',
       agentDescription:
-        'Adversarial second pass: filters PR QA findings by concrete reproduction_steps + causal_chain',
+        'Adversarial second pass: filters PR QA findings (HIGH/CRITICAL require concrete reproduction_steps + causal_chain; MEDIUM/LOW do not)',
       capabilities: { read: true, grep: true },
       permissionMode: 'bypassPermissions',
       model: this.model,

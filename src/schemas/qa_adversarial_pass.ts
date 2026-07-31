@@ -47,6 +47,11 @@ function normalizeConf(c: string | undefined): QaFinding['confidence'] {
 
 /**
  * Map normalized context findings into `QaFinding` (schema-aligned for prompts).
+ *
+ * Placeholder injection for missing reproduction_steps / causal_chain is gated
+ * by severity: HIGH/CRITICAL still get the "(missing — …)" placeholders so the
+ * adversary must supply them; MEDIUM/LOW keep the fields undefined so the
+ * severity-tiered keep bar can accept them without regenerating evidence.
  */
 export function toQaFindings(ctx: QaAdversarialPassContext): QaFinding[] {
   return ctx.findings.map((f, i) => {
@@ -54,14 +59,27 @@ export function toQaFindings(ctx: QaAdversarialPassContext): QaFinding[] {
       typeof f.id === 'string' && /^QA-\d{3}$/.test(f.id)
         ? f.id
         : `QA-${String(i + 1).padStart(3, '0')}`;
-    const steps =
-      Array.isArray(f.reproduction_steps) && f.reproduction_steps.length > 0
-        ? f.reproduction_steps.filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
-        : ['(missing — adversary must supply concrete steps)'];
+    const severity = normalizeSev(f.severity);
+    const needsEvidence = severity === 'CRITICAL' || severity === 'HIGH';
+    const hasSteps =
+      Array.isArray(f.reproduction_steps) && f.reproduction_steps.length > 0;
+    const steps = hasSteps
+      ? f.reproduction_steps!.filter(
+          (s): s is string => typeof s === 'string' && s.trim().length > 0,
+        )
+      : needsEvidence
+        ? ['(missing — adversary must supply concrete steps)']
+        : undefined;
+    const causal =
+      f.causal_chain && f.causal_chain.trim()
+        ? f.causal_chain
+        : needsEvidence
+          ? '(missing — adversary must supply x -> y -> z)'
+          : undefined;
     return {
       id,
       title: f.title,
-      severity: normalizeSev(f.severity),
+      severity,
       confidence: normalizeConf(f.confidence),
       bug_class: f.bug_class && f.bug_class.trim() ? f.bug_class : 'quality',
       category: f.category,
@@ -73,11 +91,8 @@ export function toQaFindings(ctx: QaAdversarialPassContext): QaFinding[] {
       impact: f.impact || '',
       recommendation: f.recommendation || '',
       code_snippet: f.code_snippet,
-      reproduction_steps: steps,
-      causal_chain:
-        f.causal_chain && f.causal_chain.trim()
-          ? f.causal_chain
-          : '(missing — adversary must supply x -> y -> z)',
+      ...(steps ? { reproduction_steps: steps } : {}),
+      ...(causal ? { causal_chain: causal } : {}),
     };
   });
 }
@@ -135,14 +150,16 @@ export function buildQaAdversarialUserPrompt(
     '',
     'You are given candidate correctness findings from an initial PR QA scan. For each finding, you must either **keep** it or **drop** it.',
     '',
-    '**Keep** only if you can produce/validate both `reproduction_steps` and `causal_chain` that together show:',
-    '1. A **specific input, state, or call sequence** that triggers the bug',
-    '2. A **concrete incorrect outcome** (crash, wrong value, resource leak, hang, unhandled rejection — not a style preference)',
-    '3. **Reachability on a changed line** in the PR diff (the buggy path is introduced or exercised by this change)',
+    '**Keep criteria (severity-tiered):**',
+    '- **HIGH / CRITICAL:** Keep only if you can produce/validate both `reproduction_steps` and `causal_chain` that together show:',
+    '  1. A **specific input, state, or call sequence** that triggers the bug',
+    '  2. A **concrete incorrect outcome** (crash, wrong value, resource leak, hang, unhandled rejection — not a style preference)',
+    '  3. **Reachability on a changed line** in the PR diff (the buggy path is introduced or exercised by this change)',
+    '- **MEDIUM / LOW:** Keep when the finding is concrete, reachable on a changed line, and describes a real incorrect outcome. Do **not** require `reproduction_steps` / `causal_chain` for these severities — omit those fields rather than inventing them.',
     '',
-    '**Drop** the finding if it is vague, stylistic, "could theoretically" fail, already mitigated by code you can see, test-only noise, or you cannot name concrete reproduction_steps + causal_chain.',
+    '**Drop** the finding if it is vague, stylistic, "could theoretically" fail, already mitigated by code you can see, test-only noise, or (for HIGH/CRITICAL) you cannot name concrete reproduction_steps + causal_chain.',
     '',
-    'Return one JSON object matching the required `qa_review_report` schema. Include **only** findings that pass this bar. Recompute `summary` counts to match the filtered `findings` list. If none survive, return empty `findings` and zero counts. Preserve `QA-NNN` ids for kept findings; refresh reproduction_steps / causal_chain when you improve them.',
+    'Return one JSON object matching the required `qa_review_report` schema. Include **only** findings that pass this bar. Recompute `summary` counts to match the filtered `findings` list. If none survive, return empty `findings` and zero counts. Preserve `QA-NNN` ids for kept findings; refresh reproduction_steps / causal_chain when you improve them on HIGH/CRITICAL.',
     '',
   ];
 

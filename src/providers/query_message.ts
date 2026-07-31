@@ -22,7 +22,14 @@ export type ResultMessage = {
   errors?: unknown[];
   error_message?: string;
   structured_output?: unknown;
-  usage?: { input_tokens?: number; output_tokens?: number };
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    /** Tokens written into the prompt cache this turn (~125% of input rate). */
+    cache_creation_input_tokens?: number;
+    /** Tokens served from the prompt cache this turn (~10% of input rate). */
+    cache_read_input_tokens?: number;
+  };
 };
 /** Passthrough for SDK-only types (e.g. tool_progress) when using Anthropic. */
 export type QueryMessage =

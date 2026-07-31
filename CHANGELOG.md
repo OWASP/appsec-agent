@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.7.0] - 2026-07-31
+
+### Changed — Lane 5 token economy (severity-tiered evidence + usage instrumentation)
+
+- **Usage instrumentation.** Widen `ResultMessage.usage` with `cache_creation_input_tokens` / `cache_read_input_tokens`. New `src/utils/usage_counters.ts` accumulates and prints `Tokens input/output:`, `Cache read/write:`, and `Turns used:` for `pr_reviewer` / `pr_qa_reviewer` (`diffReviewerWithOptions`), `pr_adversary`, `pr_qa_adversary`, and `context_extractor`. `onResult` carries the full usage payload; multi-batch runs in `main.ts` sum tokens and turns across batches.
+- **Optional evidence fields.** `QA_REPORT_SCHEMA` drops `reproduction_steps` and `causal_chain` from the finding `required` array (and removes `minItems: 1`). `bug_class` stays required. Soften unconditional reviewer instructions in `agent_options.ts` / `main.ts` so the parent-app `-c` text can drive policy.
+- **Severity-tiered QA adversary.** Keep bar and placeholder injection require concrete repro only for HIGH/CRITICAL; MEDIUM/LOW may omit those fields. Mirrored in `agent_options.ts` and `conf/appsec_agent.yaml`.
+
 ## [3.6.0] - 2026-07-23
 
 ### Added — Lane 5 PR QA roles (`pr_qa_reviewer`, `pr_qa_adversary`)

@@ -19,10 +19,10 @@ export interface QaFinding {
   description: string;
   impact: string;
   recommendation: string;
-  /** Concrete steps to trigger the bug; each step ≤ 15 words. */
-  reproduction_steps: string[];
-  /** Short x -> y -> z chain explaining why the bug triggers. */
-  causal_chain: string;
+  /** Concrete steps to trigger the bug; each step ≤ 15 words. Required for HIGH/CRITICAL; optional for MEDIUM/LOW. */
+  reproduction_steps?: string[];
+  /** Short x -> y -> z chain explaining why the bug triggers. Required for HIGH/CRITICAL; optional for MEDIUM/LOW. */
+  causal_chain?: string;
   category?: string;
   line_numbers?: string;
   code_snippet?: string;
@@ -103,8 +103,6 @@ export const QA_REPORT_SCHEMA: Record<string, unknown> = {
               'description',
               'impact',
               'recommendation',
-              'reproduction_steps',
-              'causal_chain',
             ],
             properties: {
               id: {
@@ -150,13 +148,14 @@ export const QA_REPORT_SCHEMA: Record<string, unknown> = {
               },
               reproduction_steps: {
                 type: 'array',
-                description: 'Concrete steps to trigger the bug; each step ≤ 15 words',
+                description:
+                  'Concrete steps to trigger the bug; each step ≤ 15 words. Required for HIGH/CRITICAL; omit for MEDIUM/LOW unless integrator context requires them.',
                 items: { type: 'string', maxLength: 120 },
-                minItems: 1,
               },
               causal_chain: {
                 type: 'string',
-                description: 'Short x -> y -> z chain explaining why the bug triggers',
+                description:
+                  'Short x -> y -> z chain explaining why the bug triggers. Required for HIGH/CRITICAL; omit for MEDIUM/LOW unless integrator context requires them.',
               },
               fixed_code: {
                 type: 'string',

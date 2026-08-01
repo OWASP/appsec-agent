@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.7.1] - 2026-07-31
+
+### Fixed — batched usage totals were indistinguishable from the first batch
+
+- **Batch totals now use `Total …` labels.** A batched review prints one per-batch usage block from `printUsageCounters` before its cross-batch summary, and the parent app scrapes stdout with a first-match regex. In 3.7.0 the summary reused the per-batch labels, so a consumer read batch one's tokens while `Total API cost:` gave it the whole run's cost — cost and tokens described different spans of work, and only on the large PRs that batch at all. The summary now emits `Total tokens input/output:`, `Total cache read/write:` and `Total turns used:` via `printUsageTotals`, mirroring the existing `Total API cost:` line. Purely additive: the per-batch lines are unchanged, so a consumer that only knows the 3.7.0 labels keeps working.
+
 ## [3.7.0] - 2026-07-31
 
 ### Changed — Lane 5 token economy (severity-tiered evidence + usage instrumentation)

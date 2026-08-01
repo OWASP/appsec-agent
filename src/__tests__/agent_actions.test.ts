@@ -1051,6 +1051,104 @@ describe('AgentActions', () => {
     });
   });
 
+  /**
+   * The parent app (sast-ai-app) reads these counters by scraping stdout, so the
+   * exact line text is a cross-repo contract. Assert it on every PR role: a role
+   * that silently stops printing costs the measurement its data with no error.
+   */
+  describe('token emission on the PR roles', () => {
+    const resultWithUsage = {
+      type: 'result',
+      structured_output: { ok: true },
+      total_cost_usd: 0.05,
+      num_turns: 4,
+      usage: {
+        input_tokens: 1200,
+        output_tokens: 340,
+        cache_read_input_tokens: 9000,
+        cache_creation_input_tokens: 150,
+      },
+    };
+
+    const expectedLines = [
+      'Tokens input: 1200',
+      'Tokens output: 340',
+      'Cache read: 9000',
+      'Cache write: 150',
+      'Turns used: 4',
+    ];
+
+    const roles: ReadonlyArray<{
+      name: string;
+      role: string;
+      run: (a: AgentActions) => Promise<string>;
+    }> = [
+      {
+        name: 'contextExtractorWithOptions',
+        role: 'context_extractor',
+        run: (a) => a.contextExtractorWithOptions('Extract'),
+      },
+      {
+        name: 'prAdversaryWithOptions',
+        role: 'pr_adversary',
+        run: (a) => a.prAdversaryWithOptions('Filter'),
+      },
+      {
+        name: 'prQaAdversaryWithOptions',
+        role: 'pr_qa_adversary',
+        run: (a) => a.prQaAdversaryWithOptions('Filter QA'),
+      },
+      {
+        name: 'diffReviewerWithOptions',
+        role: 'code_reviewer',
+        run: (a) => a.diffReviewerWithOptions('Diff review'),
+      },
+    ];
+
+    it.each(roles)('$name prints all four token fields plus turns', async ({ role, run }) => {
+      mockQueryWith([resultWithUsage]);
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      await run(
+        new AgentActions(mockConfDict, environment, {
+          role,
+          environment: 'default',
+          output_format: 'json',
+          verbose: false,
+        }),
+      );
+
+      const logged = consoleSpy.mock.calls.map((c) => String(c[0]));
+      for (const line of expectedLines) {
+        expect(logged).toContain(line);
+      }
+      consoleSpy.mockRestore();
+    });
+
+    it('carries usage and turns through the diff reviewer onResult callback', async () => {
+      mockQueryWith([resultWithUsage]);
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      const onResult = jest.fn();
+
+      await new AgentActions(mockConfDict, environment, {
+        role: 'code_reviewer',
+        environment: 'default',
+        output_format: 'json',
+        verbose: false,
+      }).diffReviewerWithOptions('Diff review', null, onResult);
+
+      expect(onResult).toHaveBeenCalledWith({
+        total_cost_usd: 0.05,
+        tokens_input: 1200,
+        tokens_output: 340,
+        tokens_cache_read: 9000,
+        tokens_cache_write: 150,
+        turns_used: 4,
+      });
+      consoleSpy.mockRestore();
+    });
+  });
+
   describe('codeReviewerWithOptions - extra coverage', () => {
     it('should generate fallback report when JSON output and no structured_output', async () => {
       mockQueryWith([{ type: 'result', total_cost_usd: 0.01 }]);

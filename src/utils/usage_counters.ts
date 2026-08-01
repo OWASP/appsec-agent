@@ -70,6 +70,24 @@ export function printUsageCounters(counters: UsageCounters): void {
   if (counters.turns > 0) console.log(`Turns used: ${counters.turns}`);
 }
 
+/**
+ * Print the cross-batch totals under distinct `Total …` labels.
+ *
+ * A batched review prints one per-batch block from `printUsageCounters` before
+ * this summary, and the parent app scrapes with a first-match regex. Reusing the
+ * per-batch labels here would therefore report batch one while `Total API cost:`
+ * reports the whole run — cost and tokens would disagree on exactly the large
+ * PRs the measurement cares about. Mirror the cost line's `Total` prefix so the
+ * scraper can prefer the summary.
+ */
+export function printUsageTotals(counters: UsageCounters): void {
+  if (counters.inputTokens > 0) console.log(`Total tokens input: ${counters.inputTokens}`);
+  if (counters.outputTokens > 0) console.log(`Total tokens output: ${counters.outputTokens}`);
+  if (counters.cacheReadTokens > 0) console.log(`Total cache read: ${counters.cacheReadTokens}`);
+  if (counters.cacheWriteTokens > 0) console.log(`Total cache write: ${counters.cacheWriteTokens}`);
+  if (counters.turns > 0) console.log(`Total turns used: ${counters.turns}`);
+}
+
 /** Payload carried through onResult for batch aggregation. */
 export interface RoleResultUsage {
   total_cost_usd?: number;

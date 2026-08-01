@@ -7,6 +7,7 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import { AgentActions, AgentArgs } from './agent_actions';
+import { printUsageTotals } from './utils/usage_counters';
 import { copyProjectSrcDir, validateOutputFilePath, validateDirectoryPath, validateInputFilePath, sanitizePathForError, getExtensionForFormat } from './utils';
 import { DiffContext, formatDiffContextForPrompt, validateDiffContext } from './diff_context';
 import { splitIntoBatches, ChunkingOptions } from './diff_chunking';
@@ -1190,11 +1191,13 @@ export async function main(confDict: any, args: AgentArgs): Promise<void> {
             const total = batchCosts.reduce((a, b) => a + b, 0);
             console.log(`Total API cost: $${total.toFixed(4)}`);
           }
-          if (batchTokensIn > 0) console.log(`Tokens input: ${batchTokensIn}`);
-          if (batchTokensOut > 0) console.log(`Tokens output: ${batchTokensOut}`);
-          if (batchCacheRead > 0) console.log(`Cache read: ${batchCacheRead}`);
-          if (batchCacheWrite > 0) console.log(`Cache write: ${batchCacheWrite}`);
-          if (batchTurns > 0) console.log(`Turns used: ${batchTurns}`);
+          printUsageTotals({
+            inputTokens: batchTokensIn,
+            outputTokens: batchTokensOut,
+            cacheReadTokens: batchCacheRead,
+            cacheWriteTokens: batchCacheWrite,
+            turns: batchTurns,
+          });
         } finally {
           cleanupTmpDir(tempDir, args.verbose ?? false);
           cleanupTmpDir(tmpSrcDir);

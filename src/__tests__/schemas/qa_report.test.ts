@@ -9,6 +9,7 @@ import {
   accumulateUsage,
   emptyUsageCounters,
   printUsageCounters,
+  printUsageTotals,
   roleResultFromCounters,
 } from '../../utils/usage_counters';
 
@@ -147,6 +148,48 @@ describe('usage_counters', () => {
     expect(spy).toHaveBeenCalledWith('Cache read: 3');
     expect(spy).toHaveBeenCalledWith('Cache write: 2');
     expect(spy).toHaveBeenCalledWith('Turns used: 4');
+    spy.mockRestore();
+  });
+
+  /**
+   * A batched review prints one per-batch block before the cross-batch summary,
+   * and the parent app scrapes with a first-match regex. If the two share labels,
+   * the scrape silently reports batch one against a whole-run cost.
+   */
+  it('printUsageTotals uses labels distinct from the per-batch lines', () => {
+    const counters = {
+      inputTokens: 220,
+      outputTokens: 110,
+      cacheReadTokens: 1700,
+      cacheWriteTokens: 300,
+      turns: 7,
+    };
+
+    const perBatchSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    printUsageCounters(counters);
+    const perBatch = perBatchSpy.mock.calls.map((c) => String(c[0]));
+    perBatchSpy.mockRestore();
+
+    const totalsSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    printUsageTotals(counters);
+    const totals = totalsSpy.mock.calls.map((c) => String(c[0]));
+    totalsSpy.mockRestore();
+
+    expect(totals).toEqual([
+      'Total tokens input: 220',
+      'Total tokens output: 110',
+      'Total cache read: 1700',
+      'Total cache write: 300',
+      'Total turns used: 7',
+    ]);
+    // Same counters, no shared line: the scraper can always tell them apart.
+    expect(totals.filter((line) => perBatch.includes(line))).toEqual([]);
+  });
+
+  it('printUsageTotals stays silent when nothing was recorded', () => {
+    const spy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    printUsageTotals(emptyUsageCounters());
+    expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
   });
 });

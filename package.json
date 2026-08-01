@@ -1,6 +1,6 @@
 {
   "name": "appsec-agent",
-  "version": "3.7.1",
+  "version": "3.7.2",
   "description": "TypeScript package for AppSec AI Agent management",
   "author": "Sam Li",
   "date": "July 31 2026",
@@ -19,10 +19,11 @@
     "start": "node dist/src/main.js",
     "dev": "ts-node src/main.ts",
     "clean": "rm -rf dist",
+    "verify:dist": "test -x dist/bin/agent-run.js && test -f dist/src/main.js && test -f dist/conf/appsec_agent.yaml",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "prepublishOnly": "npm run clean && npm run build && npm test"
+    "prepublishOnly": "npm run clean && npm run build && npm run verify:dist && npm test"
   },
   "keywords": [
     "appsec",

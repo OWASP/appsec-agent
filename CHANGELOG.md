@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [3.7.1] - 2026-07-31
+## [3.7.2] - 2026-07-31
+
+### Fixed — 3.7.1 was published without `dist/`
+
+- **Use 3.7.2, not 3.7.1.** The 3.7.1 tarball on the registry contains only `LICENSE`, `README.md`, `package.json` and `conf/` — no `dist/` at all, so `bin.agent-run` resolves to a file that does not exist and the package cannot run. `prepublishOnly` starts with `npm run clean` (`rm -rf dist`), so a publish that reaches the pack step without a successful build produces an empty package rather than failing. 3.7.2 is the intended 3.7.1 content, unchanged apart from this note and the guard below.
+- **Guard against a repeat.** `prepublishOnly` now runs `verify:dist` between the build and the tests, asserting `dist/bin/agent-run.js` is executable and that `dist/src/main.js` and `dist/conf/appsec_agent.yaml` exist. A build that silently produces nothing now aborts the publish instead of shipping a hollow tarball. (This cannot protect a publish run with `--ignore-scripts`.)
+
+## [3.7.1] - 2026-07-31 [BROKEN — do not use]
 
 ### Fixed — batched usage totals were indistinguishable from the first batch
 

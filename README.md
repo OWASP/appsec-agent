@@ -17,7 +17,7 @@ You can use **AppSec Agent** in three ways:
 ## What you need first
 
 1. **Node.js 18+** — [nodejs.org](https://nodejs.org/)
-2. **An API key** — by default the **Claude** provider uses `ANTHROPIC_API_KEY` ([Anthropic console](https://console.anthropic.com/)). Optional **Codex** provider uses `CODEX_API_KEY` — see [Configuration](docs/configuration.md).
+2. **An API key** — by default the **Claude** provider uses `ANTHROPIC_API_KEY` ([Anthropic console](https://console.anthropic.com/)). Optional **Codex** (`CODEX_API_KEY`) and **Moonshot/Kimi** (`MOONSHOT_API_KEY`) providers are also supported — see [Model providers](#model-providers) and [Configuration](docs/configuration.md).
 3. **A terminal** — commands below use `npx`; if you installed globally, drop the `npx` prefix.
 
 ---
@@ -82,6 +82,28 @@ Each **role** is a specialized workflow. Pass it with `-r` / `--role`.
 
 Full descriptions: **[Agents guide](docs/agents.md)**  
 Copy-paste commands and JSON file formats: **[Examples](docs/examples.md)**
+
+---
+
+## Model providers
+
+Every role runs on a provider-neutral spec, so you can pick the backend at runtime with `--provider` (or the `AGENT_PROVIDER` env var). All three support the full tool-using agent loop, MCP, and structured JSON output.
+
+| Provider | Flag | API key | Model examples |
+|----------|------|---------|----------------|
+| **Claude** (default) | `--provider claude` | `ANTHROPIC_API_KEY` | `sonnet`, `opus`, `haiku`, `claude-sonnet-4-6` |
+| **Codex** (OpenAI) | `--provider codex` | `CODEX_API_KEY` | `gpt-4.1`, `o3` (Claude aliases map automatically) |
+| **Moonshot / Kimi** | `--provider moonshot` | `MOONSHOT_API_KEY` | `kimi-k2.6` (default), `kimi-k3`, `kimi-k2.7-code-highspeed` |
+
+```bash
+# Pick a provider + model per run
+npx agent-run -r code_reviewer -s ./src --provider moonshot -m kimi-k2.6
+
+# Or set it globally
+export AGENT_PROVIDER=moonshot
+```
+
+Base URLs are configurable via `ANTHROPIC_BASE_URL` / `CODEX_BASE_URL` / `MOONSHOT_BASE_URL`. Full details: **[Configuration — Model providers](docs/configuration.md#model-providers)**
 
 ---
 

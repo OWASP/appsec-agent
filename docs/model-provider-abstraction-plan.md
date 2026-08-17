@@ -4,6 +4,8 @@ Status: Draft for review
 Author: drafted for Sam Li
 Scope: `appsec-agent` package only (parent app `ai-threat-modeler` consumes it unchanged)
 
+> Update (v3.8.0): a third provider, `moonshot` (Kimi), was added alongside `claude` and `codex`. It talks to Moonshot's OpenAI-compatible API via the `openai` SDK and — because that API is a raw LLM, not an agent runtime — implements its own agent loop: local `Read`/`Grep`/`Write`/`Bash` executors (`src/tools/`), an MCP bridge (`src/providers/moonshot_mcp_bridge.ts`) exposing remote tools under the same `mcp__<name>__<tool>` ids, response streaming, and the full `ResultMessage` usage/turns contract. This validates `RoleSpec.mcp` on a non-Claude provider. Note: `Graphviz` is not a real Claude Agent SDK tool, so no provider implements it.
+
 ## Goal
 
 Let the agent switch the underlying model/runtime long-term without rewriting role logic, and migrate toward Codex (`@openai/codex-sdk`) as the target provider. Today every role is hard-bound to the Claude Agent SDK. We introduce a single seam - an abstract `ModelProvider` class - where `claude` (current default) and `codex` (migration target) are interchangeable, while keeping the output contract the parent app depends on. `cursor` is explicitly deferred and not in scope for this plan.

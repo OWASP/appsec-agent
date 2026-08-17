@@ -65,7 +65,7 @@ program
   .option('-m, --model <model>', 'Claude model: family alias (sonnet, opus, haiku), SDK model ID (claude-sonnet-4-6), or version prefix (sonnet-4-6) - default to "opus"', 'opus')
   .option(
     '--provider <provider>',
-    'Model provider: claude (default) or codex (opt-in; all roles via RoleSpec)',
+    'Model provider: claude (default), codex, or moonshot (opt-in; all roles via RoleSpec)',
     'claude',
   )
   .option('--max-turns <n>', 'Max agent turns (tool-use iterations). Overrides per-role default.')
@@ -126,13 +126,13 @@ if (options.anthropicBaseUrl) {
 }
 
 const providerId = (options.provider ?? 'claude').toLowerCase().trim();
-if (providerId !== 'claude' && providerId !== 'codex') {
-  console.error(`Error: Invalid provider "${options.provider}". Valid values: claude, codex`);
+if (providerId !== 'claude' && providerId !== 'codex' && providerId !== 'moonshot') {
+  console.error(`Error: Invalid provider "${options.provider}". Valid values: claude, codex, moonshot`);
   process.exit(1);
 }
 process.env.AGENT_PROVIDER = providerId;
 
-// Validate model option: provider-aware (Claude aliases/IDs vs Codex/OpenAI ids)
+// Validate model option: provider-aware (Claude aliases/IDs vs Codex/OpenAI ids vs Moonshot/Kimi ids)
 const FAMILY_ALIASES = ['sonnet', 'opus', 'haiku'];
 const model = options.model.toLowerCase().trim();
 const isClaudeModel =
@@ -140,11 +140,26 @@ const isClaudeModel =
   || model.startsWith('claude-')
   || FAMILY_ALIASES.some(f => model.startsWith(`${f}-`));
 const isCodexModel = model.startsWith('gpt-') || model.startsWith('o');
-const isValidModel = providerId === 'codex' ? (isCodexModel || isClaudeModel) : isClaudeModel;
+const isMoonshotModel = model.startsWith('kimi') || model.startsWith('moonshot-');
+let isValidModel: boolean;
+if (providerId === 'codex') {
+  isValidModel = isCodexModel || isClaudeModel;
+} else if (providerId === 'moonshot') {
+  // Claude aliases are accepted and mapped to the Moonshot default at runtime;
+  // the authoritative allowlist is fetched from /v1/models by the provider.
+  isValidModel = isMoonshotModel || isClaudeModel;
+} else {
+  isValidModel = isClaudeModel;
+}
 if (!isValidModel) {
-  const hint = providerId === 'codex'
-    ? 'Codex/OpenAI id (gpt-*, o*) or Claude alias (sonnet, opus, haiku)'
-    : 'family alias (sonnet, opus, haiku), SDK model ID (claude-sonnet-4-6), or version prefix (sonnet-4-6)';
+  let hint: string;
+  if (providerId === 'codex') {
+    hint = 'Codex/OpenAI id (gpt-*, o*) or Claude alias (sonnet, opus, haiku)';
+  } else if (providerId === 'moonshot') {
+    hint = 'Moonshot/Kimi id (kimi-*, moonshot-*) or Claude alias (sonnet, opus, haiku)';
+  } else {
+    hint = 'family alias (sonnet, opus, haiku), SDK model ID (claude-sonnet-4-6), or version prefix (sonnet-4-6)';
+  }
   console.error(`Error: Invalid model "${options.model}". Valid formats for ${providerId}: ${hint}`);
   process.exit(1);
 }

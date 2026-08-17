@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.8.0] - 2026-08-17
+
+### Added — Moonshot (Kimi) model provider
+
+- **Third model provider: `moonshot`.** `--provider moonshot` (or `AGENT_PROVIDER=moonshot`) runs roles against Moonshot's OpenAI-compatible API via the `openai` SDK. Unlike a raw chat-completions integration, `MoonshotProvider` drives a full agent loop, so every tool-using role works at parity with the Claude path:
+  - **Local tools.** New `src/tools/read_tool.ts`, `grep_tool.ts`, `write_tool.ts` (plus the existing `bash_tool.ts`) implement `Read` / `Grep` / `Write` / `Bash`. Tool-name resolution mirrors `resolveClaudeTools` exactly (`allowedTools` > `noTools` > capabilities). Because the loop has no runtime sandbox, `Read`/`Write` reject any path escaping the working directory (`src/tools/workdir.ts`) and all tool output is size-capped.
+  - **MCP proxying.** `src/providers/moonshot_mcp_bridge.ts` connects to the role's MCP server over Streamable HTTP, exposes remote tools as OpenAI functions under the exact `mcp__<name>__<tool>` ids the rest of the app assumes, and enforces OpenAI's 64-char function-name limit.
+  - **Streaming + usage.** Responses stream as `content_block_delta` events (parity with the Codex path); `prompt_tokens`/`completion_tokens` map to `input_tokens`/`output_tokens`, cached prompt tokens map to `cache_read_input_tokens`, and `num_turns` / `error_max_turns` are populated. Structured-output roles reuse `parseAndValidateStructuredOutput`.
+  - **Dynamic model detection.** Default `kimi-k2.6`; Claude aliases map to it; requested ids are verified against `GET /v1/models` (cached, fail-open) with fallback to the default.
+- **New env vars:** `MOONSHOT_API_KEY` (required for the provider) and `MOONSHOT_BASE_URL` (default `https://api.moonshot.ai/v1`).
+- **Dependencies:** add `openai`; promote `@modelcontextprotocol/sdk` from a transitive to a direct dependency.
+
 ## [3.7.2] - 2026-07-31
 
 ### Fixed — 3.7.1 was published without `dist/`

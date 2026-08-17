@@ -75,18 +75,19 @@ appsec-agent/
 
 - **`AgentActions`** — Runs agents via `resolveProvider().run()`. One instance per request in web apps.
 - **`AgentOptions`** — Builds provider-neutral `RoleSpec` and Claude-specific `Options`.
-- **`resolveProvider()`** — Returns `ClaudeProvider` or `CodexProvider` from `AGENT_PROVIDER`.
+- **`resolveProvider()`** — Returns `ClaudeProvider`, `CodexProvider`, or `MoonshotProvider` from `AGENT_PROVIDER`.
 - **`agent-run`** — Commander CLI; loads yaml, validates flags, calls `main()`.
 
 ### Provider abstraction (v3.0.0+)
 
-All roles expose `get*RoleSpec()` methods. Both providers consume the same `RoleSpec`:
+All roles expose `get*RoleSpec()` methods. Every provider consumes the same `RoleSpec`:
 
 - System prompt, max turns, capabilities, MCP config, output schema
 - Claude: `roleSpecToClaudeOptions()` → Claude Agent SDK
 - Codex: `roleSpecToCodexThreadOptions()` + `roleSpecToCodexClientOptions()` → `@openai/codex-sdk`
+- Moonshot: `roleSpecToMoonshotClientOptions()` + a local agent loop over the `openai` SDK, with local `Read`/`Grep`/`Write`/`Bash` tool executors (`src/tools/`) and an MCP bridge (`src/providers/moonshot_mcp_bridge.ts`)
 
-Structured JSON outputs are validated in `src/providers/structured_output.ts`.
+Structured JSON outputs are validated in `src/providers/structured_output.ts` (Codex and Moonshot paths).
 
 ---
 

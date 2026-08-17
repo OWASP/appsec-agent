@@ -184,5 +184,6 @@ All roles support:
 
 - **Claude** (default) — `ANTHROPIC_API_KEY`, `-m sonnet|opus|haiku`
 - **Codex** (opt-in) — `--provider codex`, `CODEX_API_KEY`, `-m gpt-*` or `o*`
+- **Moonshot/Kimi** (opt-in) — `--provider moonshot`, `MOONSHOT_API_KEY`, `-m kimi-*`
 
 Details: [Configuration — Model providers](configuration.md#model-providers)

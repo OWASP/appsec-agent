@@ -11,7 +11,7 @@ export type { QueryMessage } from './query_message';
 export type { RoleSpec, RoleCapabilities, RoleMcpConfig } from './role_spec';
 
 export abstract class ModelProvider {
-  abstract readonly provider: 'claude' | 'codex';
+  abstract readonly provider: 'claude' | 'codex' | 'moonshot';
 
   abstract run(params: {
     prompt: string;

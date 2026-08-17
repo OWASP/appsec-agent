@@ -97,6 +97,9 @@ npx agent-run -r threat_modeler -s ./src -f json -o threat_model_report.json
 # Use OpenAI Codex instead of Claude (opt-in)
 npx agent-run -r threat_modeler -s ./src -f json --provider codex -m gpt-4.1
 
+# Use Moonshot / Kimi instead of Claude (opt-in)
+npx agent-run -r threat_modeler -s ./src -f json --provider moonshot -m kimi-k2.6
+
 # Add deployment context (helps prioritize findings)
 npx agent-run -r code_reviewer -s ./src -c "Production API on AWS, handles PII"
 
@@ -114,7 +117,7 @@ npx agent-run --help
 | [Getting started](docs/getting-started.md) | Install, API keys, first runs, troubleshooting |
 | [Agents](docs/agents.md) | What each role is for and when to use it |
 | [Examples](docs/examples.md) | CLI recipes and JSON input shapes |
-| [Configuration](docs/configuration.md) | Environment variables, `appsec_agent.yaml`, Claude vs Codex |
+| [Configuration](docs/configuration.md) | Environment variables, `appsec_agent.yaml`, Claude vs Codex vs Moonshot |
 | [Web integration](docs/web-integration.md) | Using the library in a server safely |
 | [Development](docs/development.md) | Clone, build, test, architecture |
 
@@ -123,7 +126,7 @@ npx agent-run --help
 ## Features at a glance
 
 - Multiple specialized agents (review, PR scan, threat model, fix, QA, adversarial passes)
-- **Claude** (default) or **Codex** (`--provider codex`) backends
+- **Claude** (default), **Codex** (`--provider codex`), or **Moonshot/Kimi** (`--provider moonshot`) backends
 - Structured JSON outputs with schemas for parent-app integration
 - PR diff mode and automatic chunking for large PRs
 - Optional MCP tools for live findings history, import graphs, and codebase graphs

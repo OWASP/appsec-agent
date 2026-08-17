@@ -18,6 +18,7 @@ module.exports = {
   ],
   moduleNameMapper: {
     '^@openai/codex-sdk$': '<rootDir>/src/__tests__/mocks/codex_sdk.ts',
+    '^openai$': '<rootDir>/src/__tests__/mocks/openai_sdk.ts',
   },
   extensionsToTreatAsEsm: ['.ts'],
   transform: {

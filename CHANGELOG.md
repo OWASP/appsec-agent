@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.8.1] - 2026-08-17
+
+### Fixed — Moonshot kimi-k3 cost rates
+
+- **`estimateMoonshotCostUsd`** — Update `kimi-k3` per-million-token rates from `$1.2 / $5` to `$3 / $15` (input/output) to match current public Kimi pricing.
+
 ## [3.8.0] - 2026-08-17
 
 ### Added — Moonshot (Kimi) model provider

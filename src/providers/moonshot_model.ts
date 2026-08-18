@@ -67,7 +67,7 @@ export function __resetModelListCache(): void {
 /** Approximate per-million-token USD rates (public Kimi pricing; adjust as needed). */
 const MOONSHOT_COST_PER_MILLION: Record<string, { input: number; output: number }> = {
   'kimi-k2.6': { input: 0.6, output: 2.5 },
-  'kimi-k3': { input: 1.2, output: 5 },
+  'kimi-k3': { input: 3, output: 15 },
   'kimi-k2.7-code-highspeed': { input: 0.6, output: 2.5 },
 };
 

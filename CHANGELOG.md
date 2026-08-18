@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.8.2] - 2026-08-18
+
+### Fixed — Moonshot kimi-k3 streaming usage
+
+- **`MoonshotProvider.consumeStream`** — Read token usage from both OpenAI-compatible top-level `chunk.usage` (kimi-k2.6) and Kimi-native per-choice `choices[0].usage` (kimi-k3, where top-level usage is null). Also accept `cached_tokens` directly on the usage object, not only under `prompt_tokens_details`. Without this, kimi-k3 runs reported `$0.00` cost despite real token spend.
+
 ## [3.8.1] - 2026-08-17
 
 ### Fixed — Moonshot kimi-k3 cost rates

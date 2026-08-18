@@ -26,19 +26,24 @@ export interface MockChatDelta {
   }>;
 }
 
+export interface MockChatUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  cached_tokens?: number;
+  prompt_tokens_details?: { cached_tokens?: number };
+}
+
 export interface MockChatChoice {
   message?: MockChatMessage;
   delta?: MockChatDelta;
   finish_reason?: string | null;
+  // Kimi-native per-choice usage layout (e.g. kimi-k3).
+  usage?: MockChatUsage;
 }
 
 export interface MockChatCompletion {
   choices: MockChatChoice[];
-  usage?: {
-    prompt_tokens?: number;
-    completion_tokens?: number;
-    prompt_tokens_details?: { cached_tokens?: number };
-  };
+  usage?: MockChatUsage;
 }
 
 export type MockChatChunk = MockChatCompletion;

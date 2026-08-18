@@ -37,6 +37,30 @@ function textTurn(text: string, prompt = 100, completion = 20): MockChatChunk[] 
   ];
 }
 
+/**
+ * kimi-k3 nests usage per-choice on the final chunk (`choices[0].usage`) and
+ * leaves top-level `chunk.usage` null, unlike kimi-k2.6. See the Kimi streaming
+ * docs. This shape ensures the provider reads usage from both locations.
+ */
+function k3TextTurn(text: string, prompt = 100, completion = 20, cached = 0): MockChatChunk[] {
+  return [
+    { choices: [{ delta: { content: text }, finish_reason: null }] },
+    {
+      choices: [
+        {
+          delta: {},
+          finish_reason: 'stop',
+          usage: {
+            prompt_tokens: prompt,
+            completion_tokens: completion,
+            ...(cached > 0 ? { cached_tokens: cached } : {}),
+          },
+        },
+      ],
+    },
+  ];
+}
+
 function toolCallTurn(
   calls: Array<{ index: number; id: string; name: string; args: string }>,
 ): MockChatChunk[] {
@@ -102,6 +126,21 @@ describe('MoonshotProvider', () => {
     expect(result.usage?.input_tokens).toBe(123);
     expect(result.usage?.output_tokens).toBe(45);
     expect(result.num_turns).toBe(1);
+    expect(result.total_cost_usd).toBeGreaterThan(0);
+  });
+
+  it('captures Kimi-native per-choice usage (kimi-k3 choices[0].usage) into cost', async () => {
+    __setChatResponses([k3TextTurn('k3 answer', 5000, 800, 1200)]);
+    const provider = new MoonshotProvider();
+    const msgs = await collect(
+      provider.run({ prompt: 'hi', roleSpec: baseSpec({ model: 'kimi-k3' }) }),
+    );
+
+    const result = msgs.find((m) => m.type === 'result') as ResultMessage;
+    expect(result.is_error).toBe(false);
+    expect(result.usage?.input_tokens).toBe(5000);
+    expect(result.usage?.output_tokens).toBe(800);
+    expect(result.usage?.cache_read_input_tokens).toBe(1200);
     expect(result.total_cost_usd).toBeGreaterThan(0);
   });
 

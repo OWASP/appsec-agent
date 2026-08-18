@@ -45,6 +45,13 @@ interface AccumulatedToolCall {
   arguments: string;
 }
 
+interface MoonshotUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  cached_tokens?: number;
+  prompt_tokens_details?: { cached_tokens?: number };
+}
+
 interface StreamChunk {
   choices?: Array<{
     delta?: {
@@ -56,12 +63,11 @@ interface StreamChunk {
       }>;
     };
     finish_reason?: string | null;
+    // Kimi-native layout: some models (e.g. kimi-k3) nest usage per-choice on the
+    // final chunk instead of at the top level. See consumeStream for details.
+    usage?: MoonshotUsage;
   }>;
-  usage?: {
-    prompt_tokens?: number;
-    completion_tokens?: number;
-    prompt_tokens_details?: { cached_tokens?: number };
-  };
+  usage?: MoonshotUsage;
 }
 
 interface TurnResult {
@@ -253,10 +259,15 @@ export class MoonshotProvider extends ModelProvider {
       if (choice?.finish_reason) {
         finishReason = choice.finish_reason;
       }
-      if (chunk.usage) {
-        usageTotals.input += chunk.usage.prompt_tokens ?? 0;
-        usageTotals.output += chunk.usage.completion_tokens ?? 0;
-        usageTotals.cacheRead += chunk.usage.prompt_tokens_details?.cached_tokens ?? 0;
+      // Kimi exposes usage in two layouts: OpenAI-compatible top-level `chunk.usage`
+      // (kimi-k2.6) and Kimi-native per-choice `choices[0].usage` (kimi-k3, where
+      // top-level usage is null). Inspect both so cost is captured for every model.
+      const usage = chunk.usage ?? choice?.usage;
+      if (usage) {
+        usageTotals.input += usage.prompt_tokens ?? 0;
+        usageTotals.output += usage.completion_tokens ?? 0;
+        usageTotals.cacheRead +=
+          usage.prompt_tokens_details?.cached_tokens ?? usage.cached_tokens ?? 0;
       }
     }
 

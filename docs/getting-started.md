@@ -14,6 +14,7 @@ This guide walks you through installing AppSec Agent and running your first comm
 | **npm** | Usually installed with Node |
 | **Anthropic API key** | Required for the default Claude provider — [console.anthropic.com](https://console.anthropic.com/) |
 | **Codex API key** (optional) | Only if you use `--provider codex` — see [Configuration](configuration.md) |
+| **DeepInfra API key** (optional) | Only if you use `--provider deepinfra` — HIPAA/SOC 2-certified, open-weight models; see [Configuration](configuration.md) |
 
 > **Claude Code CLI is optional.** This package bundles the Claude Agent SDK binary. You do not need to install `@anthropic-ai/claude-code` separately unless you want the standalone `claude` CLI for manual use.
 
@@ -145,7 +146,7 @@ npx agent-run -r <role> [options]
 | `-o`, `--output_file` | Where to write the report |
 | `-c`, `--context` | Free-text deployment/architecture context |
 | `-m`, `--model` | Model alias: `sonnet`, `opus`, `haiku` (Claude) |
-| `--provider` | `claude` (default) or `codex` |
+| `--provider` | `claude` (default), `codex`, or `deepinfra` |
 | `-l`, `--list_roles` | Print roles and exit |
 | `-v`, `--version` | Print version and exit |
 | `-V`, `--verbose` | More logging |
@@ -200,5 +201,5 @@ Use `pr_reviewer` with `--diff-context`; chunking is enabled by default. See [Ex
 
 - [Agents guide](agents.md) — pick the right role
 - [Examples](examples.md) — copy-paste commands and JSON formats
-- [Configuration](configuration.md) — yaml config and Codex provider
+- [Configuration](configuration.md) — yaml config and Codex/DeepInfra providers
 - [AI Threat Modeler](https://github.com/yangsec888/ai-threat-modeler/) — web UI powered by this package

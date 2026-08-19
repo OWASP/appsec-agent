@@ -1,5 +1,5 @@
 /**
- * E2E wiring: threat_modeler on the Moonshot provider with the openai SDK mock.
+ * E2E wiring: threat_modeler on the DeepInfra provider with the openai SDK mock.
  */
 
 jest.mock('@anthropic-ai/claude-agent-sdk', () => ({
@@ -7,7 +7,7 @@ jest.mock('@anthropic-ai/claude-agent-sdk', () => ({
 }));
 
 import { __reset, __setChatResponses } from '../src/__tests__/mocks/openai_sdk';
-import { __resetModelListCache } from '../src/providers/moonshot_model';
+import { __resetModelListCache } from '../src/providers/deepinfra_model';
 import { AgentActions } from '../src/agent_actions';
 import { ConfigDict } from '../src/utils';
 import { THREAT_MODEL_REPORT_SCHEMA } from '../src/schemas/threat_model_report';
@@ -32,7 +32,7 @@ const validReport = {
   },
 };
 
-describe('threat_modeler Moonshot e2e wiring', () => {
+describe('threat_modeler DeepInfra e2e wiring', () => {
   const mockConfDict: ConfigDict = {
     default: {
       threat_modeler: {
@@ -45,11 +45,11 @@ describe('threat_modeler Moonshot e2e wiring', () => {
   };
 
   const originalProvider = process.env.AGENT_PROVIDER;
-  const originalKey = process.env.MOONSHOT_API_KEY;
+  const originalKey = process.env.DEEPINFRA_API_KEY;
 
   beforeEach(() => {
-    process.env.AGENT_PROVIDER = 'moonshot';
-    process.env.MOONSHOT_API_KEY = 'test-key';
+    process.env.AGENT_PROVIDER = 'deepinfra';
+    process.env.DEEPINFRA_API_KEY = 'test-key';
     __reset();
     __resetModelListCache();
     jest.clearAllMocks();
@@ -58,14 +58,14 @@ describe('threat_modeler Moonshot e2e wiring', () => {
   afterEach(() => {
     if (originalProvider === undefined) delete process.env.AGENT_PROVIDER;
     else process.env.AGENT_PROVIDER = originalProvider;
-    if (originalKey === undefined) delete process.env.MOONSHOT_API_KEY;
-    else process.env.MOONSHOT_API_KEY = originalKey;
+    if (originalKey === undefined) delete process.env.DEEPINFRA_API_KEY;
+    else process.env.DEEPINFRA_API_KEY = originalKey;
   });
 
-  it('returns schema-valid structured JSON via MoonshotProvider', async () => {
+  it('returns schema-valid structured JSON via DeepInfraProvider', async () => {
     __setChatResponses([[
       { choices: [{ delta: { content: JSON.stringify(validReport) }, finish_reason: 'stop' }] },
-      { choices: [{ finish_reason: null }], usage: { prompt_tokens: 200, completion_tokens: 100 } },
+      { choices: [{ finish_reason: null }], usage: { prompt_tokens: 200, completion_tokens: 100, estimated_cost: 0.001 } },
     ]]);
 
     const agentActions = new AgentActions(mockConfDict, 'default', {

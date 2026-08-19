@@ -65,8 +65,12 @@ program
   .option('-m, --model <model>', 'Claude model: family alias (sonnet, opus, haiku), SDK model ID (claude-sonnet-4-6), or version prefix (sonnet-4-6) - default to "opus"', 'opus')
   .option(
     '--provider <provider>',
-    'Model provider: claude (default), codex, or moonshot (opt-in; all roles via RoleSpec)',
+    'Model provider: claude (default), codex, or deepinfra (opt-in; all roles via RoleSpec)',
     'claude',
+  )
+  .option(
+    '--reasoning-effort <level>',
+    'DeepInfra reasoning effort: none, low, medium (default), or high. Overrides DEEPINFRA_REASONING_EFFORT. Only used with --provider deepinfra.',
   )
   .option('--max-turns <n>', 'Max agent turns (tool-use iterations). Overrides per-role default.')
   .option('--no-tools', 'Disable Read/Grep tools for single-turn analysis (use with --diff-context for fastest mode)')
@@ -126,13 +130,23 @@ if (options.anthropicBaseUrl) {
 }
 
 const providerId = (options.provider ?? 'claude').toLowerCase().trim();
-if (providerId !== 'claude' && providerId !== 'codex' && providerId !== 'moonshot') {
-  console.error(`Error: Invalid provider "${options.provider}". Valid values: claude, codex, moonshot`);
+if (providerId !== 'claude' && providerId !== 'codex' && providerId !== 'deepinfra') {
+  console.error(`Error: Invalid provider "${options.provider}". Valid values: claude, codex, deepinfra`);
   process.exit(1);
 }
 process.env.AGENT_PROVIDER = providerId;
 
-// Validate model option: provider-aware (Claude aliases/IDs vs Codex/OpenAI ids vs Moonshot/Kimi ids)
+if (options.reasoningEffort) {
+  const REASONING_EFFORTS = ['none', 'low', 'medium', 'high'];
+  const reasoningEffort = options.reasoningEffort.toLowerCase().trim();
+  if (!REASONING_EFFORTS.includes(reasoningEffort)) {
+    console.error(`Error: Invalid --reasoning-effort "${options.reasoningEffort}". Valid values: ${REASONING_EFFORTS.join(', ')}`);
+    process.exit(1);
+  }
+  process.env.DEEPINFRA_REASONING_EFFORT = reasoningEffort;
+}
+
+// Validate model option: provider-aware (Claude aliases/IDs vs Codex/OpenAI ids vs DeepInfra slugs)
 const FAMILY_ALIASES = ['sonnet', 'opus', 'haiku'];
 const model = options.model.toLowerCase().trim();
 const isClaudeModel =
@@ -140,14 +154,21 @@ const isClaudeModel =
   || model.startsWith('claude-')
   || FAMILY_ALIASES.some(f => model.startsWith(`${f}-`));
 const isCodexModel = model.startsWith('gpt-') || model.startsWith('o');
-const isMoonshotModel = model.startsWith('kimi') || model.startsWith('moonshot-');
+// DeepInfra ids are either a raw `vendor/Model` slug or one of the curated
+// short aliases (kimi-*, deepseek*, glm-*, qwen3-coder, gpt-oss-*); the
+// authoritative allowlist is fetched from /v1/models by the provider.
+const isDeepInfraModel =
+  model.includes('/')
+  || model.startsWith('kimi')
+  || model.startsWith('deepseek')
+  || model.startsWith('glm-')
+  || model.startsWith('qwen3-coder')
+  || model.startsWith('gpt-oss-');
 let isValidModel: boolean;
 if (providerId === 'codex') {
   isValidModel = isCodexModel || isClaudeModel;
-} else if (providerId === 'moonshot') {
-  // Claude aliases are accepted and mapped to the Moonshot default at runtime;
-  // the authoritative allowlist is fetched from /v1/models by the provider.
-  isValidModel = isMoonshotModel || isClaudeModel;
+} else if (providerId === 'deepinfra') {
+  isValidModel = isDeepInfraModel || isClaudeModel;
 } else {
   isValidModel = isClaudeModel;
 }
@@ -155,8 +176,8 @@ if (!isValidModel) {
   let hint: string;
   if (providerId === 'codex') {
     hint = 'Codex/OpenAI id (gpt-*, o*) or Claude alias (sonnet, opus, haiku)';
-  } else if (providerId === 'moonshot') {
-    hint = 'Moonshot/Kimi id (kimi-*, moonshot-*) or Claude alias (sonnet, opus, haiku)';
+  } else if (providerId === 'deepinfra') {
+    hint = 'DeepInfra slug (vendor/Model, e.g. moonshotai/Kimi-K2.6), short alias (kimi-k2.6, deepseek-v3.2, glm-4.7, qwen3-coder, gpt-oss-120b), or Claude alias (sonnet, opus, haiku)';
   } else {
     hint = 'family alias (sonnet, opus, haiku), SDK model ID (claude-sonnet-4-6), or version prefix (sonnet-4-6)';
   }

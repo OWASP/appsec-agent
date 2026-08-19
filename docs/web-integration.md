@@ -104,7 +104,7 @@ const outputPath = validateOutputFilePath('report.json', workingDir);
 
 ## Provider selection
 
-Set `process.env.AGENT_PROVIDER = 'claude' | 'codex'` before creating `AgentActions`, or pass model/provider via `AgentArgs` when your integration supports it.
+Set `process.env.AGENT_PROVIDER = 'claude' | 'codex' | 'deepinfra'` before creating `AgentActions`, or pass model/provider via `AgentArgs` when your integration supports it.
 
 The library calls `resolveProvider().run({ prompt, roleSpec })` internally — same behavior as the CLI.
 

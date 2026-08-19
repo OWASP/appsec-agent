@@ -12,11 +12,12 @@ Environment variables, the yaml config file, and model provider options.
 |----------|----------|-------------|
 | `ANTHROPIC_API_KEY` | Yes (Claude default) | Anthropic API key |
 | `ANTHROPIC_BASE_URL` | No | API endpoint (default: `https://api.anthropic.com`) |
-| `AGENT_PROVIDER` | No | `claude` (default), `codex`, or `moonshot` |
+| `AGENT_PROVIDER` | No | `claude` (default), `codex`, or `deepinfra` |
 | `CODEX_API_KEY` | Yes (if Codex) | OpenAI Codex API key |
 | `CODEX_BASE_URL` | No | Custom Codex API base URL |
-| `MOONSHOT_API_KEY` | Yes (if Moonshot) | Moonshot (Kimi) API key |
-| `MOONSHOT_BASE_URL` | No | Moonshot API base URL (default: `https://api.moonshot.ai/v1`) |
+| `DEEPINFRA_API_KEY` | Yes (if DeepInfra) | DeepInfra API key ([deepinfra.com](https://deepinfra.com)) |
+| `DEEPINFRA_BASE_URL` | No | DeepInfra API base URL (default: `https://api.deepinfra.com/v1/openai`) |
+| `DEEPINFRA_REASONING_EFFORT` | No | `none`, `low`, `medium` (default), or `high` — caps reasoning-model token spend |
 | `SAST_INTERNAL_TOOLS_MCP_URL` | No | MCP server URL (alternative to `--mcp-server-url`) |
 | `SAST_INTERNAL_TOOLS_MCP_BEARER` | No | Bearer token for MCP HTTP auth |
 
@@ -83,21 +84,27 @@ Set globally:
 export AGENT_PROVIDER=codex
 ```
 
-### Moonshot / Kimi (opt-in)
+### DeepInfra (opt-in)
 
-Uses Moonshot's OpenAI-compatible API via the `openai` SDK, driven as a full agent loop (local `Read`/`Grep`/`Write`/`Bash` tools plus MCP), so every role works — not just no-tools ones. Requires `MOONSHOT_API_KEY`.
+Uses [DeepInfra's](https://docs.deepinfra.com/) OpenAI-compatible API via the `openai` SDK, driven as a full agent loop (local `Read`/`Grep`/`Write`/`Bash` tools plus MCP), so every role works — not just no-tools ones. Requires `DEEPINFRA_API_KEY`.
+
+DeepInfra is a [HIPAA- and SOC 2-certified](https://deepinfra.com) inference cloud hosting open-weight models (Kimi, DeepSeek, GLM, Qwen, gpt-oss, and more) behind a single API.
 
 ```bash
-export MOONSHOT_API_KEY="..."
-npx agent-run -r code_reviewer -s ./src --provider moonshot -m kimi-k2.6 -f json
+export DEEPINFRA_API_KEY="..."
+npx agent-run -r code_reviewer -s ./src --provider deepinfra -m kimi-k2.6 -f json
 ```
 
-**Model IDs:** `kimi-*` / `moonshot-*` (e.g. `kimi-k2.6`, `kimi-k3`, `kimi-k2.7-code-highspeed`). Claude aliases map to the default `kimi-k2.6`. The provider verifies the requested id against `GET /v1/models` at runtime and falls back to the default if it is unavailable.
+**Model IDs:** either a short alias (`kimi-k2.6` (default), `kimi-k3`, `kimi-k2.7-code`, `deepseek-v3.2`, `deepseek-v4-pro`, `glm-4.7`, `glm-5`, `qwen3-coder`, `gpt-oss-120b`, `gpt-oss-20b`) or a raw DeepInfra slug (`vendor/Model`, e.g. `zai-org/GLM-5.2`). Claude aliases map to the default `moonshotai/Kimi-K2.6`. The provider verifies the requested id against `GET /v1/models` at runtime (restricted to chat-capable models) and falls back to the default if it is unavailable.
+
+**Reasoning effort:** DeepInfra's reasoning models (e.g. Kimi) reason heavily by default, which can dominate both cost and latency. This provider sends `reasoning_effort` on every request, defaulting to `medium`. Override with `DEEPINFRA_REASONING_EFFORT` or `--reasoning-effort` (`none` / `low` / `medium` / `high`).
+
+**Cost:** reported cost uses DeepInfra's exact per-request `estimated_cost` when present, falling back to live per-model pricing from `GET /v1/models` — no hardcoded price table to keep in sync.
 
 Set globally:
 
 ```bash
-export AGENT_PROVIDER=moonshot
+export AGENT_PROVIDER=deepinfra
 ```
 
 ### MCP on all providers

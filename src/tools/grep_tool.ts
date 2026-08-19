@@ -1,5 +1,5 @@
 /**
- * Grep Tool for the Moonshot agent loop.
+ * Grep Tool for the DeepInfra agent loop.
  *
  * Thin wrapper over ripgrep (`rg`), confined to the working directory with a
  * bounded output size so a broad search cannot blow the context window.

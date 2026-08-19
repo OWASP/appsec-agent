@@ -17,7 +17,7 @@ You can use **AppSec Agent** in three ways:
 ## What you need first
 
 1. **Node.js 18+** — [nodejs.org](https://nodejs.org/)
-2. **An API key** — by default the **Claude** provider uses `ANTHROPIC_API_KEY` ([Anthropic console](https://console.anthropic.com/)). Optional **Codex** (`CODEX_API_KEY`) and **Moonshot/Kimi** (`MOONSHOT_API_KEY`) providers are also supported — see [Model providers](#model-providers) and [Configuration](docs/configuration.md).
+2. **An API key** — by default the **Claude** provider uses `ANTHROPIC_API_KEY` ([Anthropic console](https://console.anthropic.com/)). Optional **Codex** (`CODEX_API_KEY`) and **DeepInfra** (`DEEPINFRA_API_KEY`) providers are also supported — see [Model providers](#model-providers) and [Configuration](docs/configuration.md).
 3. **A terminal** — commands below use `npx`; if you installed globally, drop the `npx` prefix.
 
 ---
@@ -93,17 +93,19 @@ Every role runs on a provider-neutral spec, so you can pick the backend at runti
 |----------|------|---------|----------------|
 | **Claude** (default) | `--provider claude` | `ANTHROPIC_API_KEY` | `sonnet`, `opus`, `haiku`, `claude-sonnet-4-6` |
 | **Codex** (OpenAI) | `--provider codex` | `CODEX_API_KEY` | `gpt-4.1`, `o3` (Claude aliases map automatically) |
-| **Moonshot / Kimi** | `--provider moonshot` | `MOONSHOT_API_KEY` | `kimi-k2.6` (default), `kimi-k3`, `kimi-k2.7-code-highspeed` |
+| **DeepInfra** | `--provider deepinfra` | `DEEPINFRA_API_KEY` | `kimi-k2.6` (default), `kimi-k3`, `deepseek-v3.2`, `glm-4.7`, or any raw `vendor/Model` slug |
+
+**Why DeepInfra?** It's a [HIPAA- and SOC 2-certified](https://deepinfra.com) inference cloud hosting open-weight models (Kimi, DeepSeek, GLM, Qwen, gpt-oss). For a security tool that reads customer source code, running against a compliance-certified backend matters as much as the model quality.
 
 ```bash
 # Pick a provider + model per run
-npx agent-run -r code_reviewer -s ./src --provider moonshot -m kimi-k2.6
+npx agent-run -r code_reviewer -s ./src --provider deepinfra -m kimi-k2.6
 
 # Or set it globally
-export AGENT_PROVIDER=moonshot
+export AGENT_PROVIDER=deepinfra
 ```
 
-Base URLs are configurable via `ANTHROPIC_BASE_URL` / `CODEX_BASE_URL` / `MOONSHOT_BASE_URL`. Full details: **[Configuration — Model providers](docs/configuration.md#model-providers)**
+Base URLs are configurable via `ANTHROPIC_BASE_URL` / `CODEX_BASE_URL` / `DEEPINFRA_BASE_URL`. Full details: **[Configuration — Model providers](docs/configuration.md#model-providers)**
 
 ---
 
@@ -119,8 +121,8 @@ npx agent-run -r threat_modeler -s ./src -f json -o threat_model_report.json
 # Use OpenAI Codex instead of Claude (opt-in)
 npx agent-run -r threat_modeler -s ./src -f json --provider codex -m gpt-4.1
 
-# Use Moonshot / Kimi instead of Claude (opt-in)
-npx agent-run -r threat_modeler -s ./src -f json --provider moonshot -m kimi-k2.6
+# Use DeepInfra instead of Claude (opt-in)
+npx agent-run -r threat_modeler -s ./src -f json --provider deepinfra -m kimi-k2.6
 
 # Add deployment context (helps prioritize findings)
 npx agent-run -r code_reviewer -s ./src -c "Production API on AWS, handles PII"
@@ -139,7 +141,7 @@ npx agent-run --help
 | [Getting started](docs/getting-started.md) | Install, API keys, first runs, troubleshooting |
 | [Agents](docs/agents.md) | What each role is for and when to use it |
 | [Examples](docs/examples.md) | CLI recipes and JSON input shapes |
-| [Configuration](docs/configuration.md) | Environment variables, `appsec_agent.yaml`, Claude vs Codex vs Moonshot |
+| [Configuration](docs/configuration.md) | Environment variables, `appsec_agent.yaml`, Claude vs Codex vs DeepInfra |
 | [Web integration](docs/web-integration.md) | Using the library in a server safely |
 | [Development](docs/development.md) | Clone, build, test, architecture |
 
@@ -148,7 +150,7 @@ npx agent-run --help
 ## Features at a glance
 
 - Multiple specialized agents (review, PR scan, threat model, fix, QA, adversarial passes)
-- **Claude** (default), **Codex** (`--provider codex`), or **Moonshot/Kimi** (`--provider moonshot`) backends
+- **Claude** (default), **Codex** (`--provider codex`), or **DeepInfra** (`--provider deepinfra`; HIPAA/SOC 2-certified, open-weight models) backends
 - Structured JSON outputs with schemas for parent-app integration
 - PR diff mode and automatic chunking for large PRs
 - Optional MCP tools for live findings history, import graphs, and codebase graphs

@@ -1,7 +1,7 @@
 /**
- * MCP bridge for the Moonshot provider.
+ * MCP bridge for the DeepInfra provider.
  *
- * Moonshot's chat-completions API has no built-in remote-MCP client, so this
+ * DeepInfra's chat-completions API has no built-in remote-MCP client, so this
  * bridge connects to the role's MCP server over Streamable HTTP, lists its
  * tools, and exposes them to the model as OpenAI functions under the exact
  * `mcp__<name>__<tool>` ids the rest of the codebase assumes (see
@@ -13,7 +13,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { RoleMcpConfig } from './role_spec';
-import type { OpenAiToolDefinition } from './moonshot_tools';
+import type { OpenAiToolDefinition } from './deepinfra_tools';
 
 /** OpenAI function names must be <=64 chars and match this pattern. */
 const OPENAI_FUNCTION_NAME_MAX = 64;
@@ -49,7 +49,7 @@ export async function connectMcpBridge(mcp: RoleMcpConfig): Promise<McpBridge> {
   const transport = new StreamableHTTPClientTransport(new URL(mcp.url), {
     requestInit: Object.keys(headers).length > 0 ? { headers } : undefined,
   });
-  const client = new Client({ name: 'appsec-agent-moonshot', version: '1.0.0' });
+  const client = new Client({ name: 'appsec-agent-deepinfra', version: '1.0.0' });
 
   await client.connect(transport);
 

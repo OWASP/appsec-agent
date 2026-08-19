@@ -28,7 +28,7 @@ describe('Read tool', () => {
   let workDir: string;
 
   beforeEach(() => {
-    workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'moonshot-read-'));
+    workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deepinfra-read-'));
   });
 
   afterEach(() => {
@@ -62,7 +62,7 @@ describe('Write tool', () => {
   let workDir: string;
 
   beforeEach(() => {
-    workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'moonshot-write-'));
+    workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deepinfra-write-'));
   });
 
   afterEach(() => {

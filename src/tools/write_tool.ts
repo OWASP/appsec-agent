@@ -1,5 +1,5 @@
 /**
- * Write Tool for the Moonshot agent loop.
+ * Write Tool for the DeepInfra agent loop.
  *
  * Creates or overwrites a file confined to the working directory. Only declared
  * when a role has the `write` capability, so declaration is the access gate.

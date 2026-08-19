@@ -1,5 +1,5 @@
 /**
- * Tests for the Moonshot MCP bridge: exact mcp__<name>__<tool> naming, the
+ * Tests for the DeepInfra MCP bridge: exact mcp__<name>__<tool> naming, the
  * 64-char function-name guard, and tools/call proxying.
  */
 
@@ -22,7 +22,7 @@ jest.mock('@modelcontextprotocol/sdk/client/streamableHttp.js', () => ({
 }));
 
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { connectMcpBridge, mcpToolFunctionName } from '../providers/moonshot_mcp_bridge';
+import { connectMcpBridge, mcpToolFunctionName } from '../providers/deepinfra_mcp_bridge';
 import type { RoleMcpConfig } from '../providers/role_spec';
 
 function mcpConfig(overrides: Partial<RoleMcpConfig> = {}): RoleMcpConfig {

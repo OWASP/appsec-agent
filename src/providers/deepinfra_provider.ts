@@ -1,7 +1,10 @@
 /**
- * Moonshot (Kimi) provider: an OpenAI-compatible chat-completions client driven
- * as an agent loop (local Read/Grep/Write/Bash tools + optional MCP bridge),
+ * DeepInfra provider: an OpenAI-compatible chat-completions client driven as
+ * an agent loop (local Read/Grep/Write/Bash tools + optional MCP bridge),
  * normalizing everything to the shared `QueryMessage` shape.
+ *
+ * DeepInfra (https://deepinfra.com) is a HIPAA- and SOC 2-certified inference
+ * cloud hosting open-weight models (Kimi, DeepSeek, GLM, Qwen, gpt-oss, ...).
  *
  * Author: Sam Li
  */
@@ -11,32 +14,34 @@ import { ModelProvider } from './types';
 import type { QueryMessage, ResultMessage } from './query_message';
 import type { RoleSpec } from './role_spec';
 import {
-  DEFAULT_MOONSHOT_MODEL,
-  estimateMoonshotCostUsd,
-  listMoonshotModels,
-  resolveMoonshotModel,
-} from './moonshot_model';
+  DEFAULT_DEEPINFRA_MODEL,
+  estimateCostFromPricing,
+  listDeepInfraModels,
+  resolveDeepInfraModel,
+} from './deepinfra_model';
 import {
-  buildMoonshotMessages,
-  resolveMoonshotToolNames,
-  roleSpecToMoonshotClientOptions,
-  type MoonshotChatMessage,
-} from './moonshot_role_spec';
-import { buildLocalTools, type OpenAiToolDefinition } from './moonshot_tools';
-import { connectMcpBridge, type McpBridge } from './moonshot_mcp_bridge';
+  buildDeepInfraMessages,
+  resolveDeepInfraToolNames,
+  roleSpecToDeepInfraClientOptions,
+  type DeepInfraChatMessage,
+  type ReasoningEffort,
+} from './deepinfra_role_spec';
+import { buildLocalTools, type OpenAiToolDefinition } from './deepinfra_tools';
+import { connectMcpBridge, type McpBridge } from './deepinfra_mcp_bridge';
 import { parseAndValidateStructuredOutput } from './structured_output';
 
-type MoonshotClientFactory = () => OpenAI;
+type DeepInfraClientFactory = () => { client: OpenAI; reasoningEffort: ReasoningEffort };
 type McpBridgeFactory = (mcp: NonNullable<RoleSpec['mcp']>) => Promise<McpBridge>;
 
-function defaultMoonshotClientFactory(): OpenAI {
-  const opts = roleSpecToMoonshotClientOptions();
-  return new OpenAI({
+function defaultDeepInfraClientFactory(): { client: OpenAI; reasoningEffort: ReasoningEffort } {
+  const opts = roleSpecToDeepInfraClientOptions();
+  const client = new OpenAI({
     apiKey: opts.apiKey,
     baseURL: opts.baseURL,
     timeout: opts.timeout,
     maxRetries: opts.maxRetries,
   });
+  return { client, reasoningEffort: opts.reasoningEffort };
 }
 
 interface AccumulatedToolCall {
@@ -45,11 +50,12 @@ interface AccumulatedToolCall {
   arguments: string;
 }
 
-interface MoonshotUsage {
+interface DeepInfraUsage {
   prompt_tokens?: number;
   completion_tokens?: number;
   cached_tokens?: number;
-  prompt_tokens_details?: { cached_tokens?: number };
+  estimated_cost?: number;
+  prompt_tokens_details?: { cached_tokens?: number; cache_write_tokens?: number | null };
 }
 
 interface StreamChunk {
@@ -63,17 +69,25 @@ interface StreamChunk {
       }>;
     };
     finish_reason?: string | null;
-    // Kimi-native layout: some models (e.g. kimi-k3) nest usage per-choice on the
-    // final chunk instead of at the top level. See consumeStream for details.
-    usage?: MoonshotUsage;
+    // Some OpenAI-compatible backends nest usage per-choice on the final
+    // chunk instead of at the top level; consumeStream checks both.
+    usage?: DeepInfraUsage;
   }>;
-  usage?: MoonshotUsage;
+  usage?: DeepInfraUsage;
 }
 
 interface TurnResult {
   text: string;
   toolCalls: AccumulatedToolCall[];
   finishReason: string | null;
+}
+
+interface UsageTotals {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheCreation: number;
+  costUsd: number;
 }
 
 function parseToolArguments(raw: string): Record<string, unknown> {
@@ -86,11 +100,11 @@ function parseToolArguments(raw: string): Record<string, unknown> {
   }
 }
 
-export class MoonshotProvider extends ModelProvider {
-  readonly provider = 'moonshot' as const;
+export class DeepInfraProvider extends ModelProvider {
+  readonly provider = 'deepinfra' as const;
 
   constructor(
-    private readonly clientFactory: MoonshotClientFactory = defaultMoonshotClientFactory,
+    private readonly clientFactory: DeepInfraClientFactory = defaultDeepInfraClientFactory,
     private readonly mcpBridgeFactory: McpBridgeFactory = connectMcpBridge,
   ) {
     super();
@@ -101,10 +115,10 @@ export class MoonshotProvider extends ModelProvider {
     let bridge: McpBridge | null = null;
 
     try {
-      const client = this.clientFactory();
+      const { client, reasoningEffort } = this.clientFactory();
       const model = await this.resolveModel(client, roleSpec.model);
 
-      const toolNames = resolveMoonshotToolNames(roleSpec);
+      const toolNames = resolveDeepInfraToolNames(roleSpec);
       const { definitions: localDefs, handlers } = buildLocalTools(
         toolNames,
         roleSpec.workingDirectory ?? process.cwd(),
@@ -116,13 +130,14 @@ export class MoonshotProvider extends ModelProvider {
         toolDefs = [...toolDefs, ...bridge.tools];
       }
 
-      const messages = buildMoonshotMessages(roleSpec, prompt) as MoonshotChatMessage[];
+      const messages = buildDeepInfraMessages(roleSpec, prompt) as DeepInfraChatMessage[];
       const maxTurns = Math.max(1, roleSpec.maxTurns || 1);
 
       let assistantText = '';
       let turnsUsed = 0;
       let hitMaxTurns = false;
-      const usageTotals = { input: 0, output: 0, cacheRead: 0 };
+      let lastFinishReason: string | null = null;
+      const usageTotals: UsageTotals = { input: 0, output: 0, cacheRead: 0, cacheCreation: 0, costUsd: 0 };
 
       for (let turn = 0; turn < maxTurns; turn++) {
         turnsUsed = turn + 1;
@@ -140,10 +155,12 @@ export class MoonshotProvider extends ModelProvider {
           tool_choice: toolDefs.length > 0 ? 'auto' : undefined,
           stream: true,
           stream_options: { include_usage: true },
+          reasoning_effort: reasoningEffort as never,
           ...(forceJsonMode ? { response_format: { type: 'json_object' } } : {}),
         })) as AsyncIterable<StreamChunk>;
 
         const turnResult = yield* this.consumeStream(stream, usageTotals);
+        lastFinishReason = turnResult.finishReason;
 
         if (turnResult.toolCalls.length === 0) {
           assistantText = turnResult.text;
@@ -165,7 +182,7 @@ export class MoonshotProvider extends ModelProvider {
             type: 'function',
             function: { name: tc.name, arguments: tc.arguments },
           })),
-        } as unknown as MoonshotChatMessage);
+        } as unknown as DeepInfraChatMessage);
 
         for (const tc of turnResult.toolCalls) {
           yield { type: 'tool_progress', tool_name: tc.name } as unknown as QueryMessage;
@@ -174,7 +191,7 @@ export class MoonshotProvider extends ModelProvider {
             role: 'tool',
             tool_call_id: tc.id,
             content: output,
-          } as unknown as MoonshotChatMessage);
+          } as unknown as DeepInfraChatMessage);
         }
 
         if (turn === maxTurns - 1) {
@@ -182,13 +199,20 @@ export class MoonshotProvider extends ModelProvider {
         }
       }
 
+      if (usageTotals.costUsd === 0 && (usageTotals.input > 0 || usageTotals.output > 0)) {
+        usageTotals.costUsd = await this.estimateFallbackCostUsd(client, model, {
+          input_tokens: usageTotals.input,
+          output_tokens: usageTotals.output,
+        });
+      }
+
       yield this.buildResult({
-        model,
         assistantText,
         outputSchema: roleSpec.outputSchema,
         usageTotals,
         turnsUsed,
         hitMaxTurns,
+        finishReason: lastFinishReason,
       });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
@@ -209,27 +233,48 @@ export class MoonshotProvider extends ModelProvider {
   }
 
   private async resolveModel(client: OpenAI, requested?: string): Promise<string> {
-    const resolved = resolveMoonshotModel(requested);
+    const resolved = resolveDeepInfraModel(requested);
     try {
-      const available = await listMoonshotModels(
-        client as unknown as { models: { list(): Promise<{ data: Array<{ id: string }> }> } },
+      const info = await listDeepInfraModels(
+        client as unknown as Parameters<typeof listDeepInfraModels>[0],
       );
-      if (available.length > 0 && !available.includes(resolved)) {
-        console.warn(
-          `⚠️  Model "${resolved}" not found in Moonshot's available models; ` +
-            `falling back to "${DEFAULT_MOONSHOT_MODEL}".`,
-        );
-        return available.includes(DEFAULT_MOONSHOT_MODEL) ? DEFAULT_MOONSHOT_MODEL : available[0];
+      if (info.ids.length === 0) {
+        return resolved;
       }
+      const byLower = new Map(info.ids.map((id) => [id.toLowerCase(), id] as const));
+      const match = byLower.get(resolved.toLowerCase());
+      if (match) {
+        return match;
+      }
+      console.warn(
+        `⚠️  Model "${resolved}" not found in DeepInfra's chat models; ` +
+          `falling back to "${DEFAULT_DEEPINFRA_MODEL}".`,
+      );
+      return byLower.get(DEFAULT_DEEPINFRA_MODEL.toLowerCase()) ?? info.ids[0];
     } catch {
       // Fail-open: never block a run on model-list detection.
+      return resolved;
     }
-    return resolved;
+  }
+
+  private async estimateFallbackCostUsd(
+    client: OpenAI,
+    model: string,
+    usage: { input_tokens: number; output_tokens: number },
+  ): Promise<number> {
+    try {
+      const info = await listDeepInfraModels(
+        client as unknown as Parameters<typeof listDeepInfraModels>[0],
+      );
+      return estimateCostFromPricing(info.pricingById.get(model), usage);
+    } catch {
+      return 0;
+    }
   }
 
   private async *consumeStream(
     stream: AsyncIterable<StreamChunk>,
-    usageTotals: { input: number; output: number; cacheRead: number },
+    usageTotals: UsageTotals,
   ): AsyncGenerator<QueryMessage, TurnResult> {
     let text = '';
     let finishReason: string | null = null;
@@ -259,15 +304,19 @@ export class MoonshotProvider extends ModelProvider {
       if (choice?.finish_reason) {
         finishReason = choice.finish_reason;
       }
-      // Kimi exposes usage in two layouts: OpenAI-compatible top-level `chunk.usage`
-      // (kimi-k2.6) and Kimi-native per-choice `choices[0].usage` (kimi-k3, where
-      // top-level usage is null). Inspect both so cost is captured for every model.
+      // Usage arrives on a final chunk; some backends nest it per-choice
+      // instead of at the top level (top-level usage null in that case), so
+      // check both.
       const usage = chunk.usage ?? choice?.usage;
       if (usage) {
         usageTotals.input += usage.prompt_tokens ?? 0;
         usageTotals.output += usage.completion_tokens ?? 0;
         usageTotals.cacheRead +=
           usage.prompt_tokens_details?.cached_tokens ?? usage.cached_tokens ?? 0;
+        usageTotals.cacheCreation += usage.prompt_tokens_details?.cache_write_tokens ?? 0;
+        // DeepInfra reports exact per-request cost; prefer it over the
+        // token-rate estimate computed after the loop.
+        usageTotals.costUsd += usage.estimated_cost ?? 0;
       }
     }
 
@@ -305,14 +354,14 @@ export class MoonshotProvider extends ModelProvider {
   }
 
   private buildResult(input: {
-    model: string;
     assistantText: string;
     outputSchema?: Record<string, unknown>;
-    usageTotals: { input: number; output: number; cacheRead: number };
+    usageTotals: UsageTotals;
     turnsUsed: number;
     hitMaxTurns: boolean;
+    finishReason: string | null;
   }): ResultMessage {
-    const { model, assistantText, outputSchema, usageTotals, turnsUsed, hitMaxTurns } = input;
+    const { assistantText, outputSchema, usageTotals, turnsUsed, hitMaxTurns, finishReason } = input;
 
     const result: ResultMessage = {
       type: 'result',
@@ -328,12 +377,11 @@ export class MoonshotProvider extends ModelProvider {
       if (usageTotals.cacheRead > 0) {
         result.usage.cache_read_input_tokens = usageTotals.cacheRead;
       }
-      const cost = estimateMoonshotCostUsd(model, {
-        input_tokens: usageTotals.input,
-        output_tokens: usageTotals.output,
-      });
-      if (cost > 0) {
-        result.total_cost_usd = cost;
+      if (usageTotals.cacheCreation > 0) {
+        result.usage.cache_creation_input_tokens = usageTotals.cacheCreation;
+      }
+      if (usageTotals.costUsd > 0) {
+        result.total_cost_usd = usageTotals.costUsd;
       }
     }
 
@@ -341,6 +389,14 @@ export class MoonshotProvider extends ModelProvider {
       result.is_error = true;
       result.subtype = 'error_max_turns';
       result.error_message = `Reached max turns (${turnsUsed}) before completing.`;
+      return result;
+    }
+
+    if (finishReason === 'length') {
+      result.is_error = true;
+      result.error_message =
+        `Model response was truncated (finish_reason: "length") after ${turnsUsed} turn(s). ` +
+        'The output may be incomplete; consider raising max output tokens or simplifying the request.';
       return result;
     }
 
@@ -359,4 +415,4 @@ export class MoonshotProvider extends ModelProvider {
   }
 }
 
-export const defaultMoonshotProvider = new MoonshotProvider();
+export const defaultDeepInfraProvider = new DeepInfraProvider();

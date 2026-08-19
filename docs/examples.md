@@ -376,6 +376,31 @@ See [Configuration — Model providers](configuration.md#model-providers).
 
 ---
 
+## DeepInfra provider examples
+
+DeepInfra is a HIPAA/SOC 2-certified inference cloud for open-weight models (Kimi, DeepSeek, GLM, Qwen, gpt-oss).
+
+```bash
+export DEEPINFRA_API_KEY="..."
+export AGENT_PROVIDER=deepinfra   # optional if you pass --provider each time
+
+npx agent-run -r threat_modeler -s ./src -f json --provider deepinfra -m kimi-k2.6
+
+npx agent-run -r pr_reviewer --diff-context pr-diff.json -s ./repo \
+  --provider deepinfra -m deepseek-v3.2 -f json
+
+npx agent-run -r pr_adversary --adversarial-context candidates.json -s ./repo \
+  --provider deepinfra -m glm-4.7 -f json -o filtered.json
+
+# Raw DeepInfra slugs and reasoning-effort override also work
+npx agent-run -r code_reviewer -s ./src --provider deepinfra \
+  -m moonshotai/Kimi-K2.6 --reasoning-effort low -f json
+```
+
+See [Configuration — Model providers](configuration.md#model-providers).
+
+---
+
 ## MCP server
 
 ```bash

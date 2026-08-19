@@ -10,8 +10,8 @@ jest.mock('../providers/codex_provider', () => ({
   defaultCodexProvider: { provider: 'codex' },
 }));
 
-jest.mock('../providers/moonshot_provider', () => ({
-  defaultMoonshotProvider: { provider: 'moonshot' },
+jest.mock('../providers/deepinfra_provider', () => ({
+  defaultDeepInfraProvider: { provider: 'deepinfra' },
 }));
 
 import { defaultClaudeProvider } from '../providers/claude_provider';
@@ -37,8 +37,8 @@ describe('resolve_provider', () => {
       expect(normalizeProviderId('codex')).toBe('codex');
     });
 
-    it('accepts moonshot', () => {
-      expect(normalizeProviderId('moonshot')).toBe('moonshot');
+    it('accepts deepinfra', () => {
+      expect(normalizeProviderId('deepinfra')).toBe('deepinfra');
     });
 
     it('rejects unknown providers', () => {
@@ -57,9 +57,9 @@ describe('resolve_provider', () => {
       expect(resolveProvider().provider).toBe('codex');
     });
 
-    it('returns MoonshotProvider when AGENT_PROVIDER is moonshot', () => {
-      process.env.AGENT_PROVIDER = 'moonshot';
-      expect(resolveProvider().provider).toBe('moonshot');
+    it('returns DeepInfraProvider when AGENT_PROVIDER is deepinfra', () => {
+      process.env.AGENT_PROVIDER = 'deepinfra';
+      expect(resolveProvider().provider).toBe('deepinfra');
     });
   });
 });

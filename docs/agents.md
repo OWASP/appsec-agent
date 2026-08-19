@@ -184,6 +184,6 @@ All roles support:
 
 - **Claude** (default) — `ANTHROPIC_API_KEY`, `-m sonnet|opus|haiku`
 - **Codex** (opt-in) — `--provider codex`, `CODEX_API_KEY`, `-m gpt-*` or `o*`
-- **Moonshot/Kimi** (opt-in) — `--provider moonshot`, `MOONSHOT_API_KEY`, `-m kimi-*`
+- **DeepInfra** (opt-in) — `--provider deepinfra`, `DEEPINFRA_API_KEY`, `-m kimi-*` / `vendor/Model` (HIPAA/SOC 2-certified, open-weight models)
 
 Details: [Configuration — Model providers](configuration.md#model-providers)

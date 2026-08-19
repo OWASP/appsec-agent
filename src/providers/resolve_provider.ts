@@ -7,9 +7,9 @@
 import { ModelProvider } from './types';
 import { defaultClaudeProvider } from './claude_provider';
 
-export type ProviderId = 'claude' | 'codex' | 'moonshot';
+export type ProviderId = 'claude' | 'codex' | 'deepinfra';
 
-const VALID_PROVIDERS: ProviderId[] = ['claude', 'codex', 'moonshot'];
+const VALID_PROVIDERS: ProviderId[] = ['claude', 'codex', 'deepinfra'];
 
 export function normalizeProviderId(raw: string | undefined): ProviderId {
   const id = (raw ?? 'claude').toLowerCase().trim();
@@ -29,11 +29,11 @@ export function resolveProvider(): ModelProvider {
     const { defaultCodexProvider } = require('./codex_provider') as typeof import('./codex_provider');
     return defaultCodexProvider;
   }
-  if (id === 'moonshot') {
+  if (id === 'deepinfra') {
     // Lazy-load so Claude-only test runs do not pull in the openai / MCP SDKs.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { defaultMoonshotProvider } = require('./moonshot_provider') as typeof import('./moonshot_provider');
-    return defaultMoonshotProvider;
+    const { defaultDeepInfraProvider } = require('./deepinfra_provider') as typeof import('./deepinfra_provider');
+    return defaultDeepInfraProvider;
   }
   return defaultClaudeProvider;
 }

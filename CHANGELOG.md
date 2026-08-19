@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-08-19
+
+### Changed — Moonshot provider reworked into DeepInfra (BREAKING)
+
+- **`--provider moonshot` / `AGENT_PROVIDER=moonshot` is gone.** The third model provider now talks to [DeepInfra](https://docs.deepinfra.com/) — a HIPAA- and SOC 2-certified inference cloud hosting open-weight models (Kimi, DeepSeek, GLM, Qwen, gpt-oss) behind an OpenAI-compatible API — instead of Moonshot's own API directly. DeepInfra hosts the exact Kimi models this provider already targeted (`moonshotai/Kimi-K2.6`, `Kimi-K3`, `Kimi-K2.7-Code`), so the agent loop, local tool executors, MCP bridge, and structured-output validation carry over unchanged; only credentials, model ids, and cost accounting changed.
+  - **Migration:** `export DEEPINFRA_API_KEY="..."` (get one at [deepinfra.com](https://deepinfra.com)) and use `--provider deepinfra` / `AGENT_PROVIDER=deepinfra` in place of `moonshot`. `-m kimi-k2.6` still works as a short alias; raw DeepInfra slugs (`vendor/Model`, e.g. `moonshotai/Kimi-K2.6`) are also accepted, alongside new aliases for `deepseek-v3.2`, `glm-4.7`, `qwen3-coder`, `gpt-oss-120b`, and more.
+  - `MOONSHOT_API_KEY` / `MOONSHOT_BASE_URL` are replaced by `DEEPINFRA_API_KEY` / `DEEPINFRA_BASE_URL` (default `https://api.deepinfra.com/v1/openai`).
+  - No exported TypeScript API changed — `src/index.ts` never exported provider types, so this break is confined to CLI flags and environment variables. Parent apps (e.g. `ai-threat-modeler`) that set `AGENT_PROVIDER=moonshot` must update to `deepinfra`; the old value now fails provider validation at startup.
+  - Renamed modules: `src/providers/moonshot_*.ts` → `deepinfra_*.ts` (`MoonshotProvider` → `DeepInfraProvider`, etc.).
+
+### Added — Reasoning-effort control and exact cost reporting
+
+- **`DEEPINFRA_REASONING_EFFORT` / `--reasoning-effort`** (`none` / `low` / `medium` / `high`, default `medium`), sent on every request. Left unset, DeepInfra's reasoning models (e.g. Kimi-K2.6) reason heavily by default — measured at over 1000 completion tokens and ~24s for a one-sentence prompt, versus ~100 tokens at `medium` — which otherwise silently dominates cost and latency on multi-turn roles.
+- **Exact cost instead of an estimate.** `total_cost_usd` now sums DeepInfra's own per-request `usage.estimated_cost` across turns, replacing the hand-maintained Moonshot price table (which needed two corrective releases: 3.8.1, 3.8.2). When a response omits it, cost falls back to live per-model pricing cached from `GET /v1/models` — no price table to keep in sync. Reported costs will shift slightly since DeepInfra's own Kimi pricing differs from Moonshot's direct pricing.
+- **`cache_creation_input_tokens`** is now populated from DeepInfra's `prompt_tokens_details.cache_write_tokens` (previously declared in `ResultMessage` but never filled in on this path).
+- **Truncation surfaced explicitly.** A response ending with `finish_reason: "length"` now yields a clear "Model response was truncated" error instead of reaching structured-output validation as a confusing schema failure.
+- **Model-list validation excludes non-chat models.** `GET /v1/models` also returns image/embedding/TTS models; the allowlist now filters to `metadata.tags` containing `chat` so those never "validate" a text role only to fail at request time.
+- **`maxRetries` raised from 2 to 5.** DeepInfra returns transient `engine_overloaded` errors as HTTP 429 under load against shared open-weight capacity; a multi-turn role can issue dozens of requests per run.
+
 ## [3.8.2] - 2026-08-18
 
 ### Fixed — Moonshot kimi-k3 streaming usage

@@ -1,5 +1,5 @@
 /**
- * Read Tool for the Moonshot agent loop.
+ * Read Tool for the DeepInfra agent loop.
  *
  * Returns the contents of a file confined to the working directory. The
  * Claude/Codex SDKs sandbox their own filesystem access; this hand-rolled loop

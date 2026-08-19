@@ -1,6 +1,6 @@
 /**
- * Assemble OpenAI function tool definitions + local executors for the Moonshot
- * agent loop from a resolved list of tool names.
+ * Assemble OpenAI function tool definitions + local executors for the
+ * DeepInfra agent loop from a resolved list of tool names.
  *
  * Author: Sam Li
  */

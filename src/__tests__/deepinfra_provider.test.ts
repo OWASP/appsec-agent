@@ -199,6 +199,31 @@ describe('DeepInfraProvider', () => {
     expect(__getCreateCalls()[0].reasoning_effort).toBe('none');
   });
 
+  it('sends an explicit max_tokens budget so large reports are not clipped', async () => {
+    // Model with a large context window (>= the default budget) -> full budget.
+    __setModelList([{ id: 'moonshotai/Kimi-K2.6', tags: ['chat'], contextLength: 262144 }]);
+    __setChatResponses([textTurn('hi')]);
+    const provider = new DeepInfraProvider();
+    await collect(provider.run({ prompt: 'hi', roleSpec: baseSpec() }));
+    expect(__getCreateCalls()[0].max_tokens).toBe(64000);
+  });
+
+  it('clamps max_tokens to the model context window when it is smaller than the budget', async () => {
+    __setModelList([{ id: 'moonshotai/Kimi-K2.6', tags: ['chat'], contextLength: 8192 }]);
+    __setChatResponses([textTurn('hi')]);
+    const provider = new DeepInfraProvider();
+    await collect(provider.run({ prompt: 'hi', roleSpec: baseSpec() }));
+    expect(__getCreateCalls()[0].max_tokens).toBe(8192);
+  });
+
+  it('falls back to the flat max_tokens budget when the context window is unknown', async () => {
+    // Default mock entries carry no context_length, so detection yields none.
+    __setChatResponses([textTurn('hi')]);
+    const provider = new DeepInfraProvider();
+    await collect(provider.run({ prompt: 'hi', roleSpec: baseSpec() }));
+    expect(__getCreateCalls()[0].max_tokens).toBe(64000);
+  });
+
   it('surfaces a truncated response (finish_reason: length) as an error', async () => {
     __setChatResponses([[
       { choices: [{ delta: { content: 'partial...' }, finish_reason: null }] },

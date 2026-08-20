@@ -4,8 +4,10 @@
 
 import {
   DEFAULT_DEEPINFRA_MODEL,
+  DEEPINFRA_MAX_OUTPUT_TOKENS,
   estimateCostFromPricing,
   listDeepInfraModels,
+  resolveDeepInfraMaxOutputTokens,
   resolveDeepInfraModel,
   __resetModelListCache,
 } from '../providers/deepinfra_model';
@@ -60,6 +62,24 @@ describe('listDeepInfraModels', () => {
     expect(info.pricingById.get('moonshotai/Kimi-K2.6')).toEqual({ input_tokens: 0.75, output_tokens: 3.5 });
   });
 
+  it('records context window from metadata.max_tokens or metadata.context_length', async () => {
+    const client = {
+      models: {
+        list: jest.fn().mockResolvedValue({
+          data: [
+            { id: 'moonshotai/Kimi-K2.6', metadata: { tags: ['chat'], max_tokens: 262144 } },
+            { id: 'moonshotai/Kimi-K3', metadata: { tags: ['chat'], context_length: 8192 } },
+            { id: 'zai-org/GLM-4.7', metadata: { tags: ['chat'] } },
+          ],
+        }),
+      },
+    };
+    const info = await listDeepInfraModels(client);
+    expect(info.contextLengthById.get('moonshotai/Kimi-K2.6')).toBe(262144);
+    expect(info.contextLengthById.get('moonshotai/Kimi-K3')).toBe(8192);
+    expect(info.contextLengthById.has('zai-org/GLM-4.7')).toBe(false);
+  });
+
   it('excludes non-chat models (image, embedding, etc.) from the allowlist', async () => {
     const client = {
       models: {
@@ -88,6 +108,22 @@ describe('listDeepInfraModels', () => {
     const info = await listDeepInfraModels(client);
     expect(info.ids).toEqual([]);
     expect(info.pricingById.size).toBe(0);
+    expect(info.contextLengthById.size).toBe(0);
+  });
+});
+
+describe('resolveDeepInfraMaxOutputTokens', () => {
+  it('returns the default budget when the context window is unknown', () => {
+    expect(resolveDeepInfraMaxOutputTokens()).toBe(DEEPINFRA_MAX_OUTPUT_TOKENS);
+    expect(resolveDeepInfraMaxOutputTokens(0)).toBe(DEEPINFRA_MAX_OUTPUT_TOKENS);
+  });
+
+  it('returns the default budget when the context window is larger', () => {
+    expect(resolveDeepInfraMaxOutputTokens(262144)).toBe(DEEPINFRA_MAX_OUTPUT_TOKENS);
+  });
+
+  it('clamps to a smaller context window', () => {
+    expect(resolveDeepInfraMaxOutputTokens(8192)).toBe(8192);
   });
 });
 

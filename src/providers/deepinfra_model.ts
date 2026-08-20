@@ -76,6 +76,13 @@ interface ModelListEntry {
   metadata?: {
     tags?: string[];
     pricing?: ModelPricing;
+    /**
+     * DeepInfra reports the model's total context window here (input + output).
+     * The `/v1/openai/models` payload uses `max_tokens` for this and mirrors it
+     * in `context_length`; there is no separate max-output field.
+     */
+    max_tokens?: number;
+    context_length?: number;
   };
 }
 
@@ -88,6 +95,37 @@ export interface DeepInfraModelInfo {
   ids: string[];
   /** Per-million-token pricing by canonical id, from `metadata.pricing`. */
   pricingById: Map<string, ModelPricing>;
+  /** Total context window (input + output) by canonical id, from metadata. */
+  contextLengthById: Map<string, number>;
+}
+
+/**
+ * Generous default cap on completion tokens for a single DeepInfra request.
+ *
+ * DeepInfra applies a conservative default max-output limit when a request
+ * omits `max_tokens` — small enough (~32-36K on some models) to clip a large
+ * structured report mid-JSON, which then surfaces as `finish_reason: "length"`
+ * and a dropped result. Large structured roles (threat_modeler, security
+ * review) can legitimately need well over 32K completion tokens, so we send an
+ * explicit budget with comfortable headroom, clamped to the model's context
+ * window by `resolveDeepInfraMaxOutputTokens` so we never over-request.
+ */
+export const DEEPINFRA_MAX_OUTPUT_TOKENS = 64000;
+
+/**
+ * Resolve the `max_tokens` (completion budget) to request for a model.
+ *
+ * Returns {@link DEEPINFRA_MAX_OUTPUT_TOKENS}, clamped so it never exceeds the
+ * model's total context window (a request for more completion tokens than the
+ * whole window is always invalid). When the context length is unknown
+ * (model-list detection failed), fall back to the flat budget — the offered
+ * models all carry >=200K windows, so this is safe in practice.
+ */
+export function resolveDeepInfraMaxOutputTokens(contextLength?: number): number {
+  if (contextLength && contextLength > 0) {
+    return Math.min(DEEPINFRA_MAX_OUTPUT_TOKENS, contextLength);
+  }
+  return DEEPINFRA_MAX_OUTPUT_TOKENS;
 }
 
 let modelInfoPromise: Promise<DeepInfraModelInfo> | null = null;
@@ -110,16 +148,21 @@ export async function listDeepInfraModels(client: ModelListClient): Promise<Deep
         const res = await client.models.list();
         const chatModels = res.data.filter((m) => (m.metadata?.tags ?? []).includes('chat'));
         const pricingById = new Map<string, ModelPricing>();
+        const contextLengthById = new Map<string, number>();
         for (const m of chatModels) {
           if (m.metadata?.pricing) {
             pricingById.set(m.id, m.metadata.pricing);
           }
+          const contextLength = m.metadata?.context_length ?? m.metadata?.max_tokens;
+          if (typeof contextLength === 'number' && contextLength > 0) {
+            contextLengthById.set(m.id, contextLength);
+          }
         }
-        return { ids: chatModels.map((m) => m.id), pricingById };
+        return { ids: chatModels.map((m) => m.id), pricingById, contextLengthById };
       } catch {
         // Fail-open: caller treats an empty list as "cannot verify".
         modelInfoPromise = null;
-        return { ids: [], pricingById: new Map() };
+        return { ids: [], pricingById: new Map(), contextLengthById: new Map() };
       }
     })();
   }

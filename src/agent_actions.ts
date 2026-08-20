@@ -430,6 +430,16 @@ export class AgentActions {
             const resultAny = resultMsg as any;
             if (resultAny.structured_output) {
               structuredJson = JSON.stringify(resultAny.structured_output, null, 2);
+            } else if (resultAny.is_error) {
+              // Surface the reason a structured report was not produced (e.g.
+              // truncation via finish_reason:"length", schema-validation
+              // failure, or max-turns) instead of returning empty output and
+              // letting the caller report a generic "no report generated".
+              const reason =
+                resultAny.error_message ||
+                (Array.isArray(resultAny.errors) ? resultAny.errors.join('; ') : '') ||
+                'unknown error';
+              console.error(`❌ Threat modeler did not produce a structured report: ${reason}`);
             }
             const usage = (resultAny.usage ?? resultAny.message?.usage) as
               | { input_tokens?: number; output_tokens?: number }

@@ -17,6 +17,7 @@ import {
   DEFAULT_DEEPINFRA_MODEL,
   estimateCostFromPricing,
   listDeepInfraModels,
+  resolveDeepInfraMaxOutputTokens,
   resolveDeepInfraModel,
 } from './deepinfra_model';
 import {
@@ -117,6 +118,7 @@ export class DeepInfraProvider extends ModelProvider {
     try {
       const { client, reasoningEffort } = this.clientFactory();
       const model = await this.resolveModel(client, roleSpec.model);
+      const maxOutputTokens = await this.resolveMaxOutputTokens(client, model);
 
       const toolNames = resolveDeepInfraToolNames(roleSpec);
       const { definitions: localDefs, handlers } = buildLocalTools(
@@ -156,6 +158,7 @@ export class DeepInfraProvider extends ModelProvider {
           stream: true,
           stream_options: { include_usage: true },
           reasoning_effort: reasoningEffort as never,
+          max_tokens: maxOutputTokens,
           ...(forceJsonMode ? { response_format: { type: 'json_object' } } : {}),
         })) as AsyncIterable<StreamChunk>;
 
@@ -254,6 +257,24 @@ export class DeepInfraProvider extends ModelProvider {
     } catch {
       // Fail-open: never block a run on model-list detection.
       return resolved;
+    }
+  }
+
+  /**
+   * Resolve the completion-token budget (`max_tokens`) to send for `model`.
+   * Uses the model's context window (from the cached `/v1/models` metadata) to
+   * clamp a generous default so large structured reports are not clipped at
+   * DeepInfra's conservative implicit limit, while never over-requesting.
+   * Fails open to the flat default when model-list detection is unavailable.
+   */
+  private async resolveMaxOutputTokens(client: OpenAI, model: string): Promise<number> {
+    try {
+      const info = await listDeepInfraModels(
+        client as unknown as Parameters<typeof listDeepInfraModels>[0],
+      );
+      return resolveDeepInfraMaxOutputTokens(info.contextLengthById.get(model));
+    } catch {
+      return resolveDeepInfraMaxOutputTokens();
     }
   }
 

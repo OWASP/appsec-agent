@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.1] - 2026-08-20
+
+### Fixed — DeepInfra large structured reports truncated at the implicit output cap
+
+- **`DeepInfraProvider` now sends an explicit `max_tokens` budget.** DeepInfra applies a conservative default completion cap (~32-36K tokens on some models) when a request omits `max_tokens`. A large structured report — notably `threat_modeler` on a real repo, ~35K completion tokens — sits right at that ceiling, so a run needing slightly more (reasoning models vary run-to-run) was clipped mid-JSON. That surfaced as `finish_reason: "length"`, which the provider turns into an error, so the structured output was dropped and the run finished with a billed cost but no report. The provider now requests `DEEPINFRA_MAX_OUTPUT_TOKENS` (64000) completion tokens, clamped to the model's context window (from `/v1/models` metadata) so it never over-requests. Fails open to the flat budget when model-list detection is unavailable.
+- **The `threat_modeler` action no longer swallows a dropped result silently.** When the model returns an error result (truncation, schema-validation failure, or max-turns) with no `structured_output`, the reason is now printed to stderr instead of returning empty output and letting the caller report a generic "no report generated".
+
 ## [4.0.0] - 2026-08-19
 
 ### Changed — Moonshot provider reworked into DeepInfra (BREAKING)

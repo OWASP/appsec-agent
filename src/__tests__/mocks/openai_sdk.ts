@@ -63,6 +63,8 @@ export interface MockModelEntry {
   id: string;
   tags?: string[];
   pricing?: MockModelPricing;
+  /** Total context window (input + output); DeepInfra reports it as max_tokens. */
+  contextLength?: number;
 }
 
 const DEFAULT_MODEL_ENTRIES: MockModelEntry[] = [
@@ -156,8 +158,22 @@ export default class OpenAI {
   };
 
   models = {
-    list: async (): Promise<{ data: Array<{ id: string; metadata: { tags?: string[]; pricing?: MockModelPricing } }> }> => ({
-      data: modelEntries.map((m) => ({ id: m.id, metadata: { tags: m.tags, pricing: m.pricing } })),
+    list: async (): Promise<{
+      data: Array<{
+        id: string;
+        metadata: { tags?: string[]; pricing?: MockModelPricing; max_tokens?: number; context_length?: number };
+      }>;
+    }> => ({
+      data: modelEntries.map((m) => ({
+        id: m.id,
+        metadata: {
+          tags: m.tags,
+          pricing: m.pricing,
+          ...(m.contextLength !== undefined
+            ? { max_tokens: m.contextLength, context_length: m.contextLength }
+            : {}),
+        },
+      })),
     }),
   };
 }

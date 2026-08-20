@@ -1,6 +1,6 @@
 {
   "name": "appsec-agent",
-  "version": "4.0.1",
+  "version": "4.0.2",
   "description": "TypeScript package for AppSec AI Agent management",
   "author": "Sam Li",
   "date": "August 20 2026",

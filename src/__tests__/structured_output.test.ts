@@ -26,6 +26,23 @@ describe('structured_output', () => {
       expect(value).toEqual({ a: 1 });
     });
 
+    it('extracts a fenced block that follows prose (open-weight model pattern)', () => {
+      // DeepSeek/GLM often prepend commentary before the fenced report; a
+      // whole-string fence match misses this and a brace slice is defeated by a
+      // stray "{" in the prose.
+      const text =
+        "I've verified the source. Consider the set {a, b}.\n\n```json\n{\"threat_model_report\":{\"ok\":true}}\n```";
+      const value = extractJsonFromAssistantText(text);
+      expect(value).toEqual({ threat_model_report: { ok: true } });
+    });
+
+    it('prefers the largest fenced JSON block when several fences are present', () => {
+      const text =
+        'Example snippet:\n```json\n{"x":1}\n```\nFinal report:\n```json\n{"threat_model_report":{"a":1,"b":2}}\n```';
+      const value = extractJsonFromAssistantText(text);
+      expect(value).toEqual({ threat_model_report: { a: 1, b: 2 } });
+    });
+
     it('returns null for invalid JSON', () => {
       expect(extractJsonFromAssistantText('not json')).toBeNull();
     });
@@ -59,9 +76,21 @@ describe('structured_output', () => {
       }
     });
 
-    it('fails closed on malformed JSON', () => {
+    it('fails closed on malformed JSON and surfaces a text prefix', () => {
       const result = parseAndValidateStructuredOutput('oops', THREAT_MODEL_REPORT_SCHEMA);
-      expect(result).toEqual({ ok: false, errors: ['assistant text is not valid JSON'] });
+      expect(result).toEqual({
+        ok: false,
+        errors: ['assistant text is not valid JSON (starts with: "oops")'],
+      });
+    });
+
+    it('parses a schema-valid report wrapped in a fence after prose', () => {
+      const text =
+        'Reconciled findings against the code.\n\n```json\n' +
+        JSON.stringify({ threat_model_report: { metadata: {}, findings: [] } }) +
+        '\n```';
+      const result = parseAndValidateStructuredOutput(text, THREAT_MODEL_REPORT_SCHEMA);
+      expect(result.ok).toBe(true);
     });
   });
 });

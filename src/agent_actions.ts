@@ -1063,8 +1063,21 @@ export class AgentActions {
           } else if (message.type === 'result') {
             if (cursor) cursor.stop();
             const resultMsg = message as SDKResultMessage;
-            if ((resultMsg as any).structured_output) {
-              structuredJson = JSON.stringify((resultMsg as any).structured_output, null, 2);
+            const resultAny = resultMsg as any;
+            if (resultAny.structured_output) {
+              structuredJson = JSON.stringify(resultAny.structured_output, null, 2);
+            } else if (resultAny.is_error) {
+              // Surface the reason the adversarial pass produced no filtered
+              // report (e.g. max-turns exhaustion via subtype "error_max_turns",
+              // truncation via finish_reason:"length", or schema-validation
+              // failure) instead of returning empty output and letting the caller
+              // silently fall back to the first-pass report.
+              const reason =
+                resultAny.error_message ||
+                (Array.isArray(resultAny.errors) ? resultAny.errors.join('; ') : '') ||
+                resultAny.subtype ||
+                'unknown error';
+              console.error(`❌ Threat adversary did not produce a filtered report: ${reason}`);
             }
             if (resultMsg.total_cost_usd && resultMsg.total_cost_usd > 0) {
               console.log(`\nCost: $${resultMsg.total_cost_usd.toFixed(4)}`);

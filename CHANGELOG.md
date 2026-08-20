@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.2] - 2026-08-20
+
+### Fixed — DeepInfra structured reports intermittently dropped when the model wraps JSON in a fence after prose
+
+- **`extractJsonFromAssistantText` now finds a fenced JSON block anywhere in the assistant text.** Open-weight models (DeepSeek, GLM, …) intermittently prepend commentary and wrap the report in a ```` ```json ```` block — e.g. `"I've verified the source. … \n\`\`\`json\n{…}\n\`\`\`"`. The old parser only stripped a fence when it spanned the *entire* message, then fell back to a first-`{`…last-`}` slice that a stray `{` in the prose defeats, so the whole report was discarded as "not valid JSON". Reproduced on `threat_adversary` with `deepseek-ai/DeepSeek-V4-Flash` (~2 of 5 runs), where it silently dropped a valid 15-threat report and fell back to the first-pass output. The extractor now collects every fenced block (largest first, since the structured report is the big one), then falls back to the raw text and a brace slice — so prose-before-fence and multi-fence responses parse correctly. Applies to both the DeepInfra and Codex providers and every structured role.
+- **The `threat_adversary` action no longer swallows a dropped result silently** (matching the `threat_modeler` fix from 4.0.1). When the adversarial pass returns an error result with no `structured_output` (schema/JSON-parse failure, truncation, or max-turns), the reason is printed to stderr instead of returning empty output and letting the caller silently fall back to the first-pass report.
+- **Malformed-JSON errors now include a text prefix** (`assistant text is not valid JSON (starts with: "…")`) so a parse failure is immediately distinguishable from truncation or a schema mismatch. An optional `APPSEC_DUMP_INVALID_JSON` directory env var dumps the full unparseable text for offline inspection (no-op by default).
+
 ## [4.0.1] - 2026-08-20
 
 ### Fixed — DeepInfra large structured reports truncated at the implicit output cap
